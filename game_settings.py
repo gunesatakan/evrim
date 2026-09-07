@@ -503,9 +503,16 @@ DEFAULT_SETTINGS = {
     # yaricapindan (55) bile kucuk; hucre kendinden oteyi koklayamiyordu.
     # Olculdu: 0.08 / 4.0 ile menzil 200 px ve gradyan duzgun
     # (20px=2.91, 50px=0.91, 100px=0.16, 150px=0.03).
-    "SCENT_EVAP_RATE": 0.08,
+    # Bulut genisligi L = sqrt(D/k). 0.08'de L = 35 px; koku yalnizca
+    # yamanin dibinde ise yariyordu. 0.012 ile L = 91 px - bulut cok daha
+    # uzaga uzanir ve yamalar yine de birbirine karismaz.
+    "SCENT_EVAP_RATE": 0.012,
     "SCENT_DIFF_RATE": 4.0,
-    "SCENT_MAX": 100.0,
+    # Tavan BAGLAYICI OLMAMALI. 100 iken alan genis bir bolgede tavana
+    # yapisip egimi tamamen duzlestiriyordu: buharlasmayi dusurup kokuyu
+    # uzaga yaymak, tirmanilabilir alani %19'dan %13'e, daha da dusurunce
+    # %0.1'e indiriyordu. Doygunluk gradyani oldurur.
+    "SCENT_MAX": 5000.0,
     "FOOD_SCENT_EMISSION": 5.0,   # besin yarıçapı başına birim/sn
     # Izgara çözünürlüğü. Koku hücre başına saklandığı için, hücre ne kadar
     # büyükse kaynak gerçek konumundan o kadar kayık görünür (yarım hücreye
@@ -559,8 +566,19 @@ DEFAULT_SETTINGS = {
     "RENK_SIGMA": 0.05,
 
     # Run-and-Tumble chemotaxis
-    "TUMBLE_GAIN_POSITIVE": 5.0,
-    "TUMBLE_GAIN_NEGATIVE": 2.0,
+    # KEMOTAKTIK KAZANC: alicidan gelen kucuk bir fark, kosu suresine ne
+    # kadar buyuk bir degisim olarak gecer.
+    #
+    # 5 iken hucre kendi koku alanini KULLANAMIYORDU. Olculdu: ayni alanda
+    # tirmanilabilir bolge kazanc 5'te %1.9, kazanc 15'te %62.4, kazanc
+    # 40'ta %85.9. Yani darbogaz ne besin yogunlugu ne koku menziliydi -
+    # sinyalin YUKSELTILMESIYDI.
+    #
+    # Yuksek kazanc biyolojik olarak da dogrusu: E. coli'nin kemotaksi
+    # agi, binlerce alicinin isbirlikci kumeler halinde dizilmesiyle
+    # sinyali ~35 kat yukseltir. 5 gercekci degildi, dusuktu.
+    "TUMBLE_GAIN_POSITIVE": 20.0,
+    "TUMBLE_GAIN_NEGATIVE": 8.0,
     "TUMBLE_RATE_MIN": 0.05,
     "TUMBLE_RATE_MAX": 10.0,
     "BASE_TUMBLE_RATE": 1.0,
