@@ -326,8 +326,10 @@ class Organism(Entity):
         self.lineage = LineageSignature()
         # Av yedikce biriken, zamanla temizlenen metabolik sizinti
         self.kairomone = 0.0
-        self.attack_targets = set()   # tablonun 'saldır' dediği hedefler
-        self.current_response = 'ignore'
+        self.attack_targets = set()   # ATAK_ESIGI'ni asan hedefler
+        # Genel surusun buyuklugu ve isareti (-1..+1). Uc spektrumun
+        # bileskesinden gelir; sifir = hicbir yone cekilmiyor.
+        self.current_response = 0.0
         # --- BAGLANMA ---
         self.bound_target = None    # tuttugum hucre (saldirgan tarafi)
         # Molekul fizigi hucrenin GORELI cercevesinde calisir: hucre
