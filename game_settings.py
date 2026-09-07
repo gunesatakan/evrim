@@ -12,7 +12,7 @@ DEFAULT_SETTINGS = {
     # donusuyor; 2.0'da orani %8'e duser, hareket ve uzun menzilli algi
     # anlam kazanir.
     "ARENA_OLCEK": 2.0,
-    "FOOD_COUNT": 360,
+    "FOOD_COUNT": 120,
     "KAOTROPI_COUNT": 8,
     # --- AVLANMA (Optropi -> Notropi) ---
     # Optropiler notropileri yem olarak gorur. Notropiler de koku yayar,
@@ -108,7 +108,7 @@ DEFAULT_SETTINGS = {
     "DIGESTION_TIME": 10.0,
     "RIBOSOME_TIME": 10.0,
     # Depo = vakuol alani (30) x bu carpan = 500 birim
-    "VACUOLE_ENERGY_MULTI": 16.666666666666668,
+    "VACUOLE_ENERGY_MULTI": 50.0,
     "ENERGY_REGEN_BASE": 1.0,
     # --- ENERJI EKONOMISI ---
     # Enerjinin TEK kaynağı sindirilen besindir. Bir besinin sindirimi
@@ -135,7 +135,7 @@ DEFAULT_SETTINGS = {
     # organ tasiyabilir hem de ~25 saniyede bolunur. Besin TUKETIM hizi
     # degismez (yine 10 saniyede bir besin), yalnizca bir besinin kalorisi
     # artar; ekosistemin besin akisi ve kitlik dengesi bozulmaz.
-    "FOOD_ENERGY": 90.0,
+    "FOOD_ENERGY": 270.0,
     # Yeni bir hücre inşa etmenin bedeli. Bölünme ancak bu enerji varsa
     # gerçekleşir; kalan enerji iki yavruya eşit bölünür.
     # BEDEL BUYUKLUKLE OLCEKLENIR: bolunmek tum hucreyi (govde + organlar)
@@ -422,7 +422,7 @@ DEFAULT_SETTINGS = {
     # enerji/sn arz ile kalan 1364, yani saniyede ~8 bolunme - kusak ~25 sn.
     # Bolluk secilimi zayiflatmaz: nufus tavani zaten saniyede en dusuk
     # enerjili 8 hucreyi eliyor, yani secilim baskisi tavandan geliyor.
-    "FOOD_SPAWN_RATE": 22.0,
+    "FOOD_SPAWN_RATE": 7.33,
     # --- BESIN YAMALI DOGAR ---
     #
     # Besin haritaya duzgun dagildiginda koku alaninin gradyani duzlesir
@@ -449,7 +449,22 @@ DEFAULT_SETTINGS = {
     # 150 ile rastgele carpisma araligi ~8-10 saniyeye cikar, yani
     # sindirim hiziyla ayni mertebeye. Artik besin bulmak da darbogaz:
     # daha iyi koklayan, sindirim kapasitesini dolduran kazanir.
-    "FOOD_MAX": 360,
+    # BESIN SEYREK AMA ZENGIN.
+    #
+    # Olculdu: kemoreseptor populasyondan siliniyordu (1.00 -> 0.02) ama
+    # kulak tutunuyordu (0.00 -> 0.79). Sebep, besin bulmanin BECERI
+    # gerektirmemesiydi: 360 besin varken yaricapi 22 olan bir hucre
+    # yalnizca suzulerek her 7.7 saniyede bir besine carpiyor, oysa
+    # sindirim 10 saniye suruyor. Yani burun hicbir zaman darbogazi
+    # acmiyordu; bedelini oduyor, karsiligini alamiyordu.
+    #
+    # Cozum besini AZALTMAK ama ayni oranda ZENGINLESTIRMEK: toplam enerji
+    # akisi degismez (7.33/sn x 270 = 22/sn x 90), degisen tek sey lokmanin
+    # seyrek ve degerli olmasi. Carpisma araligi 7.7 -> 23 saniyeye cikar,
+    # yani sindirimin iki katindan uzun: artik besin BULMAK darbogaz.
+    # Depo da ayni oranda buyur ki hucre ogunler arasinda dayanabilsin
+    # (1500 enerji, bakim 2.2/sn ile ~11 dakika).
+    "FOOD_MAX": 120,
     # NOT: Bu dört anahtar eskiden yalnızca settings.json'da vardı. save_all()
     # sadece DEFAULT_SETTINGS'te bulunanları yazdığı için, launcher'dan yapılan
     # ilk kayıtta dosyadan siliniyor ve sonraki açılışta program çöküyordu.
