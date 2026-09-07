@@ -76,10 +76,16 @@ class BehaviorGenome:
     # bir kutudan otekine SICRAMA oldugu icin secilim kucuk iyilestirmeleri
     # biriktiremiyordu.
     #
-    # 'light' ayrik kaliyor cunku renk tonu SIRALI bir buyukluk degil:
-    # kirmizi maviden "daha buyuk" degildir, tonlar bir cember uzerinde
-    # durur. Orada kutu dogru temsildir.
-    STIMULI = ('light', 'kairomone')
+    # 'light' de spektrum oldu - ama CEMBERSEL bir spektrum. Renk tonu
+    # sirali degildir (kirmizi maviden "daha buyuk" degildir) ama SUREKLIDIR
+    # ve kapalidir: 0 ile 100 ayni yerdir. Bu yuzden kesme noktalari bir
+    # cember uzerinde durur ve son bant ilk banda komsudur. Sabit alti kutu
+    # yerine kesme noktalarinin kendisi gen olunca populasyon renk cemberini
+    # ONEMLI OLDUGU YERDEN boler.
+    #
+    # Tabloda yalnizca kairomon kaldi: kutulari SIRALI ve azalan bir
+    # sizinti olcegi, ama ayri bir eksene gerek yok - alti kutu yeter.
+    STIMULI = ('kairomone',)
 
     # --- KOKU SPEKTRUMU ---
     # Hucre koku eksenini kendi KESME NOKTALARIYLA boler ve her banda
@@ -99,6 +105,10 @@ class BehaviorGenome:
     # onemsiz bir kipirdanmadir.
     SES_CUTS = 4
     SES_BANDS = 5
+
+    # --- RENK SPEKTRUMU (cembersel) ---
+    # Kesme sayisi = bant sayisi: cemberde n kesme n dilim yapar.
+    RENK_CUTS = 4
     HUE_BINS = 6      # renk tonu kutusu
     LEVEL_BINS = 3    # zayıf / orta / güçlü
 
@@ -126,6 +136,22 @@ class BehaviorGenome:
         """0-100 SES (goreli boyut) eksenindeki bir konuma verilen tepki."""
         return self.ses_bands[bisect.bisect_right(self.ses_cuts, x)]
 
+    def renk_tepkisi(self, x):
+        """0-100 RENK CEMBERINDEKI bir tona verilen tepki.
+
+        Cembersel: 0 ile 100 ayni yerdir, bu yuzden son kesmenin
+        otesindeki ton ilk banda dusher (modulo).
+        """
+        i = bisect.bisect_right(self.renk_cuts, x) % len(self.renk_bands)
+        return self.renk_bands[i]
+
+    @staticmethod
+    def renk_ekseni(color):
+        """RGB rengi 0-100 ton eksenine cevir (cembersel)."""
+        r, g, b = (max(0.0, min(1.0, c / 255.0)) for c in color[:3])
+        h, _s, _v = colorsys.rgb_to_hsv(r, g, b)
+        return h * 100.0
+
     @staticmethod
     def aciliyet(sinyal, ref=None):
         """Duyulan sinyal ne kadar ACIL? 0..1.
@@ -152,7 +178,8 @@ class BehaviorGenome:
 
     def __init__(self, table=None, kin_response=None,
                  scent_cuts=None, scent_bands=None, sosyal_oncelik=None,
-                 ses_cuts=None, ses_bands=None):
+                 ses_cuts=None, ses_bands=None,
+                 renk_cuts=None, renk_bands=None):
         # {(tip, sınıf, seviye): -1..1}
         self.table = dict(table) if table else {}
         # Akraba tanindiginda ne yapilacagi. Soy imzasi "X sinifina ne
@@ -189,15 +216,15 @@ class BehaviorGenome:
         self.ses_bands = (list(ses_bands) if ses_bands is not None
                           else [self._rastgele_tepki()
                                 for _ in range(self.SES_BANDS)])
+        # Renk spektrumu: cember uzerinde kesme noktalari + bant tepkileri.
+        self.renk_cuts = (sorted(renk_cuts) if renk_cuts is not None
+                          else sorted(_rnd.uniform(0.0, 100.0)
+                                      for _ in range(self.RENK_CUTS)))
+        self.renk_bands = (list(renk_bands) if renk_bands is not None
+                           else [self._rastgele_tepki()
+                                 for _ in range(self.RENK_CUTS)])
 
     # ---------- kodlama ----------
-
-    @staticmethod
-    def hue_bin(color):
-        """RGB rengi ayrık ton kutusuna çevir (0-5)."""
-        r, g, b = (max(0.0, min(1.0, c / 255.0)) for c in color[:3])
-        h, _s, _v = colorsys.rgb_to_hsv(r, g, b)
-        return int(h * BehaviorGenome.HUE_BINS) % BehaviorGenome.HUE_BINS
 
     # KAIROMON: avcinin AV YEDIGINI ele veren metabolik sizinti.
     #
@@ -253,7 +280,9 @@ class BehaviorGenome:
                    [cls._rastgele_tepki(rng) for _ in range(cls.SPECTRUM_BANDS)],
                    rng.random(),
                    sorted(rng.uniform(0.0, 100.0) for _ in range(cls.SES_CUTS)),
-                   [cls._rastgele_tepki(rng) for _ in range(cls.SES_BANDS)])
+                   [cls._rastgele_tepki(rng) for _ in range(cls.SES_BANDS)],
+                   sorted(rng.uniform(0.0, 100.0) for _ in range(cls.RENK_CUTS)),
+                   [cls._rastgele_tepki(rng) for _ in range(cls.RENK_CUTS)])
 
     def respond(self, stim, cls_idx, level):
         return self.table.get((stim, cls_idx, level), 0.0)
@@ -319,6 +348,18 @@ class BehaviorGenome:
         for i in range(len(self.ses_bands)):
             if rng.random() < rate:
                 self.ses_bands[i] = kaydir(self.ses_bands[i])
+                changes += 1
+        # Renk cemberi de ayni bicimde kayar.
+        renk_moved = []
+        for c in self.renk_cuts:
+            if rng.random() < rate:
+                c = (c + rng.gauss(0.0, cut_sigma)) % 100.0
+                changes += 1
+            renk_moved.append(c)
+        self.renk_cuts = sorted(renk_moved)
+        for i in range(len(self.renk_bands)):
+            if rng.random() < rate:
+                self.renk_bands[i] = kaydir(self.renk_bands[i])
                 changes += 1
         # Sosyal oncelik de sureli bir gen.
         if rng.random() < rate:

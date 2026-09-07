@@ -88,6 +88,47 @@ def spektrum_ozeti(o):
     return top / (2 * n), kar / (2 * n), zayif / n, guclu / n
 
 
+def ses_ozeti(o):
+    """SES ekseninin sekli: (ortalama, kararlilik, kucuge, iriye)."""
+    b = getattr(o, 'behavior', None)
+    if b is None:
+        return 0.0, 0.0, 0.0, 0.0
+    top = kar = kucuk = iri = 0.0
+    n = 0
+    x = 0.0
+    while x < 50.0:
+        r1 = b.ses_tepkisi(x)
+        r2 = b.ses_tepkisi(100.0 - x)
+        kucuk += r1
+        iri += r2
+        top += r1 + r2
+        kar += abs(r1) + abs(r2)
+        n += 1
+        x += 0.5
+    if not n:
+        return 0.0, 0.0, 0.0, 0.0
+    return top / (2 * n), kar / (2 * n), kucuk / n, iri / n
+
+
+def renk_ozeti(o):
+    """RENK cemberinin sekli: (ortalama, kararlilik)."""
+    b = getattr(o, 'behavior', None)
+    if b is None:
+        return 0.0, 0.0
+    top = kar = 0.0
+    n = 0
+    x = 0.0
+    while x < 100.0:
+        r = b.renk_tepkisi(x)
+        top += r
+        kar += abs(r)
+        n += 1
+        x += 1.0
+    if not n:
+        return 0.0, 0.0
+    return top / n, kar / n
+
+
 def kairomon_tepkisi(o):
     """Yakinda avlanmis birine verilen tepki eksi temiz birine verilen.
 
@@ -174,6 +215,11 @@ def olc(d):
     kararlilik = _ort(x[1] for x in ozet)
     zayif = _ort(x[2] for x in ozet)
     guclu = _ort(x[3] for x in ozet)
+    sozet = [ses_ozeti(o) for o in h]
+    ses_kararlilik = _ort(x[1] for x in sozet)
+    ses_ayrim = _ort(x[2] - x[3] for x in sozet)   # kucuge - iriye
+    rozet = [renk_ozeti(o) for o in h]
+    renk_kararlilik = _ort(x[1] for x in rozet)
     silah_dagilim = {}
     for o in h:
         for x in o.organs:
@@ -202,6 +248,14 @@ def olc(d):
         "gucluye_tepki": round(guclu, 4),
         "ayrim": round(zayif - guclu, 4),
         "kairomon_tepkisi": round(_ort(kairomon_tepkisi(o) for o in h), 4),
+        # uc spektrumun kendi kararliliklari (rastgele genomda ~0.50)
+        "ses_kararlilik": round(ses_kararlilik, 4),
+        "ses_ayrim": round(ses_ayrim, 4),
+        "renk_kararlilik": round(renk_kararlilik, 4),
+        # anlik surus: uc kanalin BILESKESI
+        "surus_ort": round(_ort(abs(getattr(o, 'current_response', 0.0))
+                                for o in h), 4),
+        "motor_efor": round(_ort(getattr(o, 'motor_efor', 0.0) for o in h), 4),
         "sosyal_ort": round(_ort(
             getattr(getattr(o, 'behavior', None), 'sosyal_oncelik', 0.0)
             for o in h), 3),

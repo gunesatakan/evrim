@@ -247,8 +247,6 @@ class Organism(Entity):
     koku_gradyani = None
     #: Motor eforu (0..1). Davranis spektrumunun buyuklugu belirler.
     motor_efor = 1.0
-    #: Sesin yonunu ne kadar sasirdigimiz (derece). Kapsama belirler.
-    hedef_yon_hatasi = 0.0
     #: Gercek hareket yonu (koku bulutunun surüklenme yonu icin).
     hareket_yonu = None
 
@@ -1058,68 +1056,90 @@ class Organism(Entity):
     # ---------------- DAVRANIŞ ----------------
 
     def perceive_and_decide(self, others):
-        """Görülen hücreler için davranış tablosuna danış.
+        """Butun uyaranlari VEKTOREL olarak topla.
 
-        Işık uyaranı: hedefin RENK TONU sınıfı, yakınlığı da seviyesi olur
-        (yakın/büyük = güçlü uyaran). Tablo her (renk, seviye) ikilisi için
-        -1..+1 arasi bir sayi verir: isaret yonu (uzerine / uzaga),
-        buyukluk ise harcanacak motor eforunu belirler.
+        UC AYRI SPEKTRUM, TEK BIR SURUS.
 
-        EN GUCLU TEPKIYI uyandiran hedefe gore karar doner:
-            (tepki, hedef) veya (None, None)
+        Hucrenin uc bagimsiz duyu ekseni var ve ucu de kendi kesme
+        noktalariyla, kendi bantlariyla evrimlesir:
+
+            KOKU  - hedefin koku puani BENIMKINE oranla (kim o?)
+            SES   - hedefin boyutu BENIMKINE oranla (ne buyuklukte bir sey
+                    kipirdaniyor?), siddeti aciliyeti olcekler
+            RENK  - ton cemberi uzerinde (nasil gorunuyor?)
+
+        Uclu birbirinden BAGIMSIZDIR: ayni hedef icin koku "yaklas", ses
+        "uzaklas" diyebilir. Bu bir celiski degil, bilgidir.
+
+        Once EN GUCLU tek uyaran seciliyor ve yalnizca onun yonune
+        gidiliyordu. Bu, oteki kanallarin tasidigi her seyi cope atmak
+        demekti: sagdan gelen besin kokusu ile asagidan gelen avci sesi
+        arasinda hucre yalnizca birini "duyuyor", otekini hic hesaba
+        katmiyordu.
+
+        Artik her uyaran bir VEKTOR uretir:
+
+            katki = (kaynaga dogru birim vektor) x tepki
+
+        Tepki pozitifse vektor kaynaga dogru, negatifse tersine bakar;
+        buyuklugu ne kadar kararli olundugunu soyler. Hepsi toplanir ve
+        hucre BILESKENIN yonune gider. Sagdan "yaklas 0.6", asagidan
+        "uzaklas 0.8" varsa hucre saga da yukari da degil, ikisinin
+        sentezine gider - ve toplam buyukluk motor eforunu belirler.
+
+        Karsit iki uyaran birbirini goturebilir; o zaman hucre kipirdamaz.
+        Iki tehdit arasinda kalan bir hucrenin donup kalmasi da gercek bir
+        davranistir.
+
+        Doner: (surus_vektoru, en_guclu_tepki)
         """
         self.attack_targets = set()
+        bos = (None, 0.0)
         if not others or not game_settings.BEHAVIOR_ENABLED:
             self.current_response = 0.0
-            return None, None
+            return bos
 
         # Menzil 0 ise o kanal KAPALIDIR. `max(1.0, ...)` yazmak, organsiz
-        # bir hucreye 1 px'lik bir duyu birakiyordu; temas halindeki iki
-        # hucre birbirini "duyuyor" sayiliyordu.
+        # bir hucreye 1 px'lik bir duyu birakiyordu.
         vrange = self.vision_range
-        hrange = self.sound_radius
         srange = self.smell_range
-        if vrange <= 0.0 and hrange <= 0.0 and srange <= 0.0:
-            self.current_response = 0.0
-            return None, None
-        my_scent = self.scent_value      # döngü içinde değişmez, bir kez
         kulak = next((o.logic for o in self.organs
                       if isinstance(o, Mechanoreceptor)), None)
-        best = None          # (seviye, -mesafe) -> hedef, tepki
+        if vrange <= 0.0 and kulak is None and srange <= 0.0:
+            self.current_response = 0.0
+            return bos
+
+        my_scent = self.scent_value      # döngü içinde değişmez, bir kez
+        atak = game_settings.ATAK_ESIGI
+        surus = pygame.math.Vector2(0.0, 0.0)
+        en_guclu = 0.0
+        yaklas_top = 0.0
+        kac_top = 0.0
+
+        def _kat(yon, tepki):
+            """Bir uyaranin surus vektorune katkisi."""
+            nonlocal surus, en_guclu, yaklas_top, kac_top
+            if abs(tepki) < 0.02 or yon.length_squared() <= 1e-12:
+                return
+            surus += yon.normalize() * tepki
+            if abs(tepki) > en_guclu:
+                en_guclu = abs(tepki)
+            if tepki > 0:
+                yaklas_top += tepki
+            else:
+                kac_top -= tepki
+
         for t in others:
             if t is self or t.dead:
                 continue
-            d = self.pos.distance_to(t.pos)
+            fark = t.pos - self.pos
+            d = fark.length()
 
-            # Bir hedef hem GÖRÜLEBİLİR hem DUYULABİLİR. İkisi ayrı uyaran
-            # tipidir ve tabloda ayrı satırları vardır; en güçlü olan kazanır.
-            atak = game_settings.ATAK_ESIGI
-            stimuli = []
-            if vrange > 0.0 and d <= vrange + t.radius and self.can_see(t):
-                stimuli.append(('light',
-                                BehaviorGenome.hue_bin(t.color),
-                                BehaviorGenome.level_bin(max(0.0, vrange - d), vrange)))
+            # ---------------- SES ----------------
+            # Kendi kendine yuzen bir cisim kuvvet-serbesttir; uzak alani
+            # stresslet'tir ve mesafenin KARESIYLE soner. Duran hucre hic
+            # sinyal uretmez.
             if kulak is not None:
-                # SES = ORGANA CARPAN BASINC DALGASI.
-                #
-                # Kendi kendine yuzen bir cisim kuvvet-serbesttir; uzak
-                # alani stresslet'tir ve mesafenin KARESIYLE soner:
-                #     sinyal(r) = (yaricap x hiz) / r^2
-                # Duran hucre hic sinyal uretmez. Duyulmasi, sinyalin
-                # organin ESIGINI asmasina baglidir.
-                #
-                # TEPKI DE SUREKLI BIR SPEKTRUMDAN OKUNUR - koku gibi.
-                # Once boyut alti ayrik kutuya, siddet uc seviyeye
-                # bolunuyordu; kucuk bir genetik degisim hucreyi bir anda
-                # bambaska davranan biri yapiyordu ve mutasyon kutudan
-                # kutuya SICRADIGI icin secilim kucuk iyilestirmeleri
-                # biriktiremiyordu.
-                #
-                # Eksen GORELI BOYUT: ayni bozulma, kucuk bir hucre icin
-                # devasa bir tehdit, iri bir hucre icin onemsiz bir
-                # kipirdanmadir. Sinyalin siddeti ise tepkinin YONUNU
-                # degil BUYUKLUGUNU olcekler - yani "ne" bilgisi
-                # spektrumdan, "ne kadar" bilgisi dalganin siddetinden.
                 _gur = MechanoreceptorLogic.gurultu(t)
                 _sinyal = kulak.duyulan_sinyal(_gur, max(1.0, d - t.radius))
                 if _sinyal >= 1.0:
@@ -1128,82 +1148,75 @@ class Organism(Entity):
                           * BehaviorGenome.aciliyet(_sinyal))
                     if _r >= atak:
                         self.attack_targets.add(id(t))
-                    key = (abs(_r), -d)
-                    if best is None or key > best[0]:
-                        best = (key, t, _r, 'sound')
-            # KOKU KAYNAGI HEDEFIN KONUMUNDA DEGIL, ARKASINDADIR.
-            #
-            # Hizli yuzen bir cisim kendi koku bulutunu geride birakir
-            # (Peclet: tasinim difuzyonu asar). Sonucu su: uzerine gelen
-            # hizli bir hucreyi burunla GEC fark edersin, arkandan gideni
-            # cok daha UZAKTAN koklarsin.
-            #
-            # Mekanoreseptoru gerekli kilan sey tam olarak budur - hizla
-            # yaklasan cisim buruna SESSIZ, kulaga GURULTULUDUR. Iki duyu
-            # boylece birbirinin kopyasi olmaktan cikar.
-            _kaynak = t.koku_kaynagi()
-            d_koku = self.pos.distance_to(_kaynak)
+                    # SESIN YONU KAPSAMAYA BAGLI: kac noktadan dinledigin
+                    # menzili degil YONU belirler. Kapsamasi dusuk hucre
+                    # "bir sey var" bilir ama nereden geldigini bilmez ve
+                    # ters yone kacabilir.
+                    _yon = pygame.math.Vector2(fark)
+                    _hata = kulak.yon_hatasi()
+                    if _hata > 0.0 and _yon.length_squared() > 1e-12:
+                        _yon = _yon.rotate(max(-180.0, min(
+                            180.0, random.gauss(0.0, _hata))))
+                    _kat(_yon, _r)
 
-            scent_x = None
-            if srange > 0.0 and d_koku <= srange + t.radius:
-                # KOKU: koni yok, menzil en uzun. Ayrık sınıf DEĞİL, sürekli
-                # eksen - ve hedefin puanı BENİM puanıma oranla okunur.
-                # Böylece küçük genetik değişim küçük konum kayması yapar,
-                # davranış ancak bir sınıra yakınsa döner: ani yabancı yok.
-                scent_x = BehaviorGenome.relative_position(t.scent_value,
-                                                           my_scent)
+            # ---------------- KOKU ----------------
+            # Kaynak hedefin konumunda DEGIL, arkasindadir: hizli yuzen bir
+            # cisim kendi bulutunu geride birakir (Peclet). Uzerine gelen
+            # hizli bir hucreyi burunla gec fark edersin.
+            if srange > 0.0:
+                _kaynak = t.koku_kaynagi()
+                _kfark = _kaynak - self.pos
+                d_koku = _kfark.length()
+                _erim = srange + t.radius
+                if d_koku <= _erim:
+                    # Uzaktan gelen zayif bir koku hafif bir yonelim,
+                    # dibindeki guclu bir koku tam tepki uretir.
+                    _guc = max(0.0, 1.0 - d_koku / max(1.0, _erim))
+                    kin = self.is_kin(t)
+                    # Akrabanin ozel sinyali spektrumun onune gecer:
+                    # "iri biri" degil, "benden biri".
+                    _x = BehaviorGenome.relative_position(t.scent_value,
+                                                          my_scent)
+                    _r = (self.behavior.kin_response if kin
+                          else self.behavior.spectrum_response(_x)) * _guc
+                    if _r >= atak:
+                        self.attack_targets.add(id(t))
+                    _kat(_kfark, _r)
 
-            if srange > 0.0 and t.kairomone > 0.0 and d_koku <= srange + t.radius:
-                # KAIROMON: sınıf, hedefin ne kadar YAKINDA avlandığı.
-                # Yüzey kimyası zırhı ele verir, kairomon ise davranışı:
-                # "bu hücre az önce birini yedi" bilgisini taşıyan tek kanal.
-                stimuli.append(('kairomone',
-                                BehaviorGenome.kairomone_bin(t.kairomone),
-                                BehaviorGenome.level_bin(
-                                    max(0.0, srange - d_koku), srange)))
+                    # KAIROMON: "bu hucre az once birini yedi". Tehlike
+                    # bilgisini tasiyan tek kanal; ayri bir eksen degil,
+                    # ayri bir uyaran.
+                    if t.kairomone > 0.0:
+                        _rk = self.behavior.respond(
+                            'kairomone',
+                            BehaviorGenome.kairomone_bin(t.kairomone),
+                            BehaviorGenome.level_bin(
+                                max(0.0, _erim - d_koku), _erim)) * _guc
+                        if _rk >= atak:
+                            self.attack_targets.add(id(t))
+                        _kat(_kfark, _rk)
 
-            kin = self.is_kin(t)
-            if scent_x is not None:
-                # Akrabanın özel sinyali, spektrumdan okunan genel
-                # izlenimin önüne geçer: "iri biri" değil, "benden biri".
-                resp = (self.behavior.kin_response if kin
-                        else self.behavior.spectrum_response(scent_x))
-                if resp >= atak:
+            # ---------------- RENK ----------------
+            if vrange > 0.0 and d <= vrange + t.radius and self.can_see(t):
+                _erim = vrange + t.radius
+                _guc = max(0.0, 1.0 - d / max(1.0, _erim))
+                _r = self.behavior.renk_tepkisi(
+                    BehaviorGenome.renk_ekseni(t.color)) * _guc
+                if _r >= atak:
                     self.attack_targets.add(id(t))
-                # KAZANAN, EN GUCLU TEPKIYI UYANDIRAN HEDEFTIR.
-                #
-                # Once "uyaran siddeti" siralaniyordu: hangi hedef daha
-                # yakinsa o kazaniyordu, tepkinin ne oldugundan bagimsiz.
-                # Oysa artik tepkinin kendisi bir buyukluk - hucre neye
-                # daha cok tepki veriyorsa onunla ilgilenir. Yakinlik
-                # yalnizca esitlik bozar.
-                key = (abs(resp), -d)
-                if best is None or key > best[0]:
-                    best = (key, t, resp, 'scent')
+                _kat(fark, _r)
 
-            for stim, cls_idx, level in stimuli:
-                resp = self.behavior.respond(stim, cls_idx, level)
-                if resp >= atak:
-                    self.attack_targets.add(id(t))
-                key = (abs(resp), -d)
-                if best is None or key > best[0]:
-                    best = (key, t, resp, stim)
-
-        if best is None:
+        if surus.length_squared() <= 1e-9:
             self.current_response = 0.0
-            return None, None
-        _k, target, resp, kanal = best
-        self.current_response = resp
-        # SESIN YONU KAPSAMAYA BAGLI.
-        #
-        # Kazanan uyaran ses ise hucre "bir sey var" bilir ama nereden
-        # geldigini ancak kapsamasi kadar bilir. Kapsamasi dusuk olan ters
-        # yone kacabilir; yuksek olan dogrudan uzaklasir. Kulagin ikinci
-        # gelisim ekseninin karsiligi budur.
-        self.hedef_yon_hatasi = (kulak.yon_hatasi()
-                                 if (kanal == 'sound' and kulak is not None)
-                                 else 0.0)
-        return resp, target
+            return bos
+
+        # Genel surus: yonu bileske, buyuklugu kararlilik (tavanli).
+        kararlilik = min(1.0, surus.length())
+        # Isaret, hangi egilimin agir bastigini soyler - iskelet "kaciyor
+        # mu" diye buna bakar (kacmak beslenmenin onune gecer).
+        self.current_response = (kararlilik if yaklas_top >= kac_top
+                                 else -kararlilik)
+        return surus, en_guclu
 
     # ---------------- BAĞLANMA ----------------
 
@@ -2406,21 +2419,13 @@ class Organism(Entity):
             _g = {id(x): x for x in kaotropis}
             _g.update({id(x): x for x in prey})
             seen_pool = list(_g.values())
-        resp, target = self.perceive_and_decide(seen_pool)
-        if target is not None and abs(resp) > 0.05:
-            v = target.pos - self.pos
-            if v.length() > 0:
-                v = v.normalize()
-                # ISARET YON, BUYUKLUK EFOR.
-                # Pozitif = uzerine git, negatif = uzaklas. Ortadaki
-                # degerler ilgisiz surukleniste: hafifce yaklasma ya da
-                # hafifce uzaklasma, az motor enerjisiyle.
-                behave_dir = v if resp > 0 else -v
-                _hata = getattr(self, 'hedef_yon_hatasi', 0.0)
-                if _hata > 0.0:
-                    behave_dir = behave_dir.rotate(
-                        max(-180.0, min(180.0, random.gauss(0.0, _hata))))
-                behave_resp = resp
+        surus, _en_guclu = self.perceive_and_decide(seen_pool)
+        if surus is not None and surus.length() > 0.05:
+            # BILESKE YON. Uc kanalin katkilari zaten toplanmis durumda:
+            # sagdan "yaklas", asagidan "uzaklas" varsa hucre ikisinin
+            # sentezine gider. Buyukluk motor eforunu belirler.
+            behave_dir = surus.normalize()
+            behave_resp = self.current_response
 
         # AV TESPİTİ - görüş alanındaki en yakın av
         prey_dir = None
