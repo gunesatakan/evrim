@@ -42,8 +42,7 @@ def _bir_tohum(arg):
         if not izlek:
             return
         with open("%s.t%d.jsonl" % (izlek, tohum), "a", encoding="utf-8") as f:
-            f.write(json.dumps(satir, ensure_ascii=False) + "
-")
+            f.write(json.dumps(satir, ensure_ascii=False) + "\n")
 
     d = Dunya(tohum=tohum)
     kayit = [dict(olc(d), tohum=tohum)]
