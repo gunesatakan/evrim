@@ -9,6 +9,11 @@ class VacuoleLogic:
     def capacity(self):
         return self.area * game_settings.VACUOLE_ENERGY_MULTI
 
+    @property
+    def base_energy_cost(self):
+        """Depoyu dolu tutmanin (osmotik dengenin) bedeli."""
+        return self.area * game_settings.COST_VACUOLE
+
     def grow(self):
         self.size += game_settings.GROW_MAX_ENERGY
         self.area = game_settings.VACUOLE_AREA * self.size

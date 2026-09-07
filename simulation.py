@@ -1,15 +1,13 @@
 import pygame
-import random
 import math
 import game_settings
 from entities.entity import WIDTH, HEIGHT, FPS, BLACK
-from entities.kaotropi import Kaotropi
 from entities.optropi import Optropi
 from entities.notropi import Notropi
-from entities.food import Food
-from entities.trail import TrailManager
 from organs.peripheral.flagella.flagella import Flagella
 from organs.peripheral.cilia.cilia import Cilia
+from organs.receptors.Chemoreceptor.chemoreceptor import Chemoreceptor
+from systems.world import Dunya
 
 # ─── DİAGNOSTİK LOGLAMA ───
 DIAG_LOG_PATH = "motor_diagnostic.log"
@@ -127,6 +125,464 @@ def log_diagnostics(f, optropis, elapsed):
                 f"calc_turn_rate={calc_turn:.3f} rad/s  calcium={boost:.2f}\n")
         f.write(f"└──────────────────────────────────────────────\n")
 
+# ─── RUNTIME INSPECTOR ───
+
+class RuntimeInspector:
+    """Right-side panel showing selected organism's brain/sensory state."""
+
+    PANEL_W = 300
+    BG_ALPHA = 200
+
+    # Colour palette
+    COL_BG        = (15, 15, 25)
+    COL_HEADER    = (0, 220, 220)
+    COL_LABEL     = (160, 160, 170)
+    COL_VALUE     = (255, 255, 255)
+    COL_BAR_BG    = (40, 40, 50)
+    COL_BAR_OK    = (80, 220, 80)
+    COL_BAR_LOW   = (220, 60, 60)
+    COL_DIVIDER   = (60, 60, 80)
+    COL_HIGHLIGHT = (255, 200, 50)
+
+    # Gene type → colour for genome strip
+    GENE_COLORS = {
+        'flagella':         (100, 180, 255),
+        'cilia':            (180, 100, 255),
+        'chemoreceptor':    (100, 255, 100),
+        'vision_angle':     (255, 255, 100),
+        'vision_range':     (255, 200, 100),
+        'sound_radius':     (255, 150, 150),
+        'body_size':        (200, 200, 200),
+        'digestion_speed':  (200, 150, 100),
+        'ribosome_speed':   (150, 200, 255),
+        'max_energy':       (255, 100, 255),
+        'move_regen':       (100, 255, 200),
+        'memory_length':    (200, 200, 150),
+    }
+
+    STATE_COLORS = {
+        "THREATENED": (255, 60, 60),
+        "HUNGRY":     (255, 200, 50),
+        "FULL":       (80, 220, 80),
+        "IDLE":       (160, 160, 170),
+    }
+
+    def __init__(self):
+        self.selected = None
+        # LABORATUVAR GORUNUMU: secili hucrenin buyutulmus kesiti.
+        # Dunyayi 30 kat buyutmek yerine (cizim yuzeyi 3.46 GB'a cikiyordu)
+        # yalnizca SECILEN hucre lab olceginde ayrica cizilir.
+        self.lab_hucre = None
+        self.lab_kaynak = None
+        self.lab_acik = True
+        self.show_heatmap = True   # koku alanı varsayılan olarak görünür (H ile kapanır)
+        self.panel_x = WIDTH - self.PANEL_W
+
+        # Fonts (pygame must be init'd before this)
+        # Zaman olcegi: simulasyon dt'si bununla carpilir. Cizim ve girdi
+        # gercek zamanda kalir, yalnizca SIMULE EDILEN sure yavaslar/hizlanir.
+        self.time_scale = 1.0
+        self.paused = False
+        self._fnt_h  = pygame.font.Font(None, 22)
+        self._fnt_l  = pygame.font.Font(None, 18)
+        self._fnt_v  = pygame.font.Font(None, 20)
+        self._fnt_s  = pygame.font.Font(None, 16)
+
+    # ── events ──────────────────────────────────────────────
+
+    def handle_event(self, event, organisms):
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            # Olcekli tam ekranda tiklama pencere koordinatinda gelir;
+            # dunya koordinatina cevrilmezse secim goruntudeki yere denk
+            # gelmez. Cevrimi main() olay dongusu yapip event'e yazar.
+            mx, my = getattr(event, 'dunya_pos', event.pos)
+            # Ignore clicks on panel area when panel is open
+            if mx >= self.panel_x and self.selected is not None:
+                return
+            best, best_d = None, float('inf')
+            for o in organisms:
+                d = math.hypot(o.pos.x - mx, o.pos.y - my)
+                if d < o.radius + 15 and d < best_d:
+                    best, best_d = o, d
+            self.selected = best
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_h:
+                self.show_heatmap = not self.show_heatmap
+            elif event.key == pygame.K_ESCAPE:
+                self.selected = None
+            elif event.key == pygame.K_SPACE:
+                self.paused = not self.paused
+            elif event.key == pygame.K_l:
+                self.lab_acik = not self.lab_acik
+            elif event.key in self.SPEED_KEYS:
+                self.time_scale = self.SPEED_KEYS[event.key]
+            elif event.key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_KP_PLUS):
+                self._step_speed(+1)
+            elif event.key in (pygame.K_MINUS, pygame.K_KP_MINUS):
+                self._step_speed(-1)
+
+    SPEEDS = (0.25, 0.5, 1.0, 2.0, 4.0)
+    SPEED_KEYS = {pygame.K_1: 0.25, pygame.K_2: 0.5, pygame.K_3: 1.0,
+                  pygame.K_4: 2.0, pygame.K_5: 4.0}
+
+    def _step_speed(self, direction):
+        """Bir kademe hizlandir/yavaslat."""
+        try:
+            i = self.SPEEDS.index(self.time_scale)
+        except ValueError:
+            i = 2
+        self.time_scale = self.SPEEDS[max(0, min(len(self.SPEEDS) - 1, i + direction))]
+
+    def _draw_speed(self, screen):
+        """Sol ustte hiz durumu ve tus yardimi."""
+        if self.paused:
+            txt, col = "DURAKLADI", (255, 180, 80)
+        else:
+            txt = f"{self.time_scale:g}x".replace("0.25x", "0.25x")
+            col = (120, 220, 160) if self.time_scale <= 1.0 else (240, 200, 120)
+        lbl = self._fnt_h.render(txt, True, col)
+        screen.blit(lbl, (12, 10))
+        keys = self._fnt_s.render("1..5 = 0.25x/0.5x/1x/2x/4x   +/- kademe   BOSLUK = duraklat",
+                                  True, (100, 100, 120))
+        screen.blit(keys, (12, 34))
+
+    def validate(self, alive_list):
+        """Drop selection if organism died."""
+        if self.selected and self.selected not in alive_list:
+            self.selected = None
+
+    # ── main draw entry ─────────────────────────────────────
+
+    def _draw_lab(self, screen, o):
+        """Seçili hücrenin laboratuvar ölçeğinde kesiti."""
+        try:
+            import lab as _lab
+        except Exception:
+            return
+        # Organ dizilimi degistiyse yeniden kur (evrimle organ kazanabilir)
+        # Onbellek imzasi KATMAN VARLIGINI da tasimali: katman
+        # eklenip cikarilinca organ SAYISI degismiyor, dolayisiyla
+        # buyutulmus kesit eski zarfi gostermeye devam ediyordu.
+        _zar = getattr(getattr(o, 'membrane', None), 'logic', None)
+        _kat = tuple(bool(getattr(_zar, v, True)) for v in
+                     ('var_mucus', 'var_capsule', 'var_slayer', 'var_wall'))
+        imza = (id(o), len(getattr(o, 'organs', [])), _kat)
+        alan_w = self.panel_x
+        merkez = (alan_w * 0.5, HEIGHT * 0.5)
+        if self.lab_hucre is None or self.lab_kaynak != imza:
+            self.lab_kaynak = imza
+            # Cekirdek yaricapi gorunur alana sigacak sekilde secilir
+            cek = max(40.0, min(110.0, (min(alan_w, HEIGHT) * 0.5 - 30) * 0.36))
+            self.lab_hucre = _lab.LabCell.from_organism(o, merkez, cek)
+        c = self.lab_hucre
+        c.center = pygame.math.Vector2(merkez)
+        c.home = pygame.math.Vector2(merkez)
+        perde = pygame.Surface((alan_w, HEIGHT), pygame.SRCALPHA)
+        perde.fill((8, 10, 18, 246))
+        screen.blit(perde, (0, 0))
+        c.draw(screen, self._fnt_v, self._fnt_s)
+        kimlik = (getattr(o, 'display_name', None) or getattr(o, 'name', None)
+                  or f'{o.__class__.__name__} #{getattr(o, "index", 0)}')
+        b = self._fnt_h.render(f'{kimlik} - buyutulmus kesit', True, (200, 220, 245))
+        screen.blit(b, (16, 12))
+        alt = self._fnt_s.render(
+            'L = kesiti kapat   |   BOSLUK = duraklat   |   ESC = secimi birak',
+            True, (120, 130, 155))
+        screen.blit(alt, (16, HEIGHT - 22))
+
+    def draw(self, screen, scent_env, elapsed, dt):
+        # 1) Selection ring
+        if self.selected:
+            self._draw_selection_ring(screen, elapsed)
+
+        # Hiz gostergesi - secim olsun olmasin her zaman gorunur
+        self._draw_speed(screen)
+
+        # 2) If nothing selected, just show a hint
+        if not self.selected:
+            hint = self._fnt_s.render(
+                "Click organism to inspect  |  H = Heatmap", True, (100, 100, 120))
+            screen.blit(hint, (WIDTH - hint.get_width() - 10, HEIGHT - 20))
+            return
+
+        o = self.selected
+
+        # 2.5) BUYUTULMUS KESIT
+        if self.lab_acik:
+            self._draw_lab(screen, o)
+
+        # 3) Semi-transparent panel background
+        panel = pygame.Surface((self.PANEL_W, HEIGHT), pygame.SRCALPHA)
+        panel.fill((*self.COL_BG, self.BG_ALPHA))
+        screen.blit(panel, (self.panel_x, 0))
+        pygame.draw.line(screen, self.COL_DIVIDER,
+                         (self.panel_x, 0), (self.panel_x, HEIGHT), 1)
+
+        px = self.panel_x + 12          # left padding
+        pw = self.PANEL_W - 24          # usable width
+        y = 10
+
+        # ── IDENTITY & VITALS ──────────────────────────────
+        y = self._header(screen, "IDENTITY & VITALS", y, px, pw)
+
+        type_name = ("Optropi" if isinstance(o, Optropi)
+                     else "Notropi" if isinstance(o, Notropi)
+                     else "Organism")
+        y = self._kv(screen, "ID", f"{type_name} #{o.index}", y, px,
+                     vc=o.color)
+
+        # Behavioral state
+        bstate = self._safe_attr(o, 'cytoskeleton.logic.behavioral_state.current_state', '?')
+        y = self._kv(screen, "State", bstate, y, px,
+                     vc=self.STATE_COLORS.get(bstate, self.COL_VALUE))
+
+        # Energy bar
+        e_ratio = o.energy / o.max_energy if o.max_energy > 0 else 0
+        bar_c = self.COL_BAR_OK if e_ratio > 0.3 else self.COL_BAR_LOW
+        y = self._bar(screen, "Energy", e_ratio,
+                      f"{o.energy:.1f} / {o.max_energy:.1f}",
+                      y, px, pw, bar_c)
+
+        y = self._kv(screen, "Speed", f"{o.speed:.1f} px/s", y, px)
+        if o.shutdown:
+            y = self._kv(screen, "Shutdown", "YES", y, px,
+                         vc=(255, 60, 60))
+        y += 6
+
+        # ── SENSORY ECOLOGY ────────────────────────────────
+        y = self._header(screen, "SENSORY ECOLOGY (Weber-Fechner)", y, px, pw)
+
+        raw_I = scent_env.get_concentration(o.pos.x, o.pos.y)
+
+        # Best (lowest) threshold across chemoreceptors
+        threshold, chemo_n = 0.0, 0
+        for organ in o.organs:
+            if isinstance(organ, Chemoreceptor):
+                chemo_n += 1
+                s = organ.logic.scent_sensitivity
+                if threshold == 0.0 or s < threshold:
+                    threshold = s
+
+        perception = o.current_scent_intensity
+
+        y = self._kv(screen, "Raw Intensity (I)", f"{raw_I:.4f}", y, px)
+        y = self._kv(screen, "Threshold (I_th)",
+                     f"{threshold:.4f}" if chemo_n else "N/A", y, px)
+        perc_c = (80, 255, 80) if perception > 0 else self.COL_LABEL
+        y = self._kv(screen, "Perception (S)", f"{perception:.4f}", y, px,
+                     vc=perc_c)
+        y = self._kv(screen, "Receptors", str(chemo_n), y, px)
+        y += 6
+
+        # ── CHEMOTAXIS ─────────────────────────────────────
+        y = self._header(screen, "CHEMOTAXIS (Run-and-Tumble)", y, px, pw)
+
+        dt_logic = self._safe_obj(o, 'cytoskeleton.logic')
+
+        if dt_logic:
+            tumble_r   = dt_logic.tumble_rate
+            delta      = dt_logic.last_delta
+            base_tr    = dt_logic.base_tumble_rate
+
+            # Derive display mode
+            if bstate == "THREATENED":
+                mode, mode_c = "ESCAPE", (255, 60, 60)
+            elif perception > 0:
+                if tumble_r < base_tr:
+                    mode, mode_c = "RUN", (80, 255, 80)
+                else:
+                    mode, mode_c = "TUMBLE", (255, 200, 50)
+            else:
+                mode, mode_c = "LEVY FLIGHT", (140, 140, 200)
+
+            y = self._kv(screen, "Mode", mode, y, px, vc=mode_c)
+
+            # Delta colour: green if positive, red if negative
+            d_c = ((80, 255, 80) if delta > 0.0001
+                   else (255, 100, 100) if delta < -0.0001
+                   else self.COL_LABEL)
+            d_sign = "+" if delta > 0 else ""
+            y = self._kv(screen, "Memory (Delta)",
+                         f"{d_sign}{delta:.4f}", y, px, vc=d_c)
+
+            # Tumble probability this frame
+            frame_dt = max(dt, 1.0 / 60.0)
+            t_prob = (1.0 - math.exp(-tumble_r * frame_dt)) * 100.0
+            p_c = ((255, 100, 100) if t_prob > 50
+                   else (255, 200, 50) if t_prob > 20
+                   else (80, 255, 80))
+            y = self._kv(screen, "Tumble Prob", f"{t_prob:.1f}%", y, px,
+                         vc=p_c)
+            y = self._kv(screen, "Tumble Rate", f"{tumble_r:.3f}", y, px)
+
+            if mode == "LEVY FLIGHT":
+                rem = max(0, dt_logic.levy_run_duration - dt_logic.levy_timer)
+                y = self._kv(screen, "Levy Run",
+                             f"{dt_logic.levy_timer:.1f} / "
+                             f"{dt_logic.levy_run_duration:.1f}s", y, px)
+        else:
+            y = self._kv(screen, "Mode", "N/A", y, px)
+        y += 6
+
+        # ── GENETICS ───────────────────────────────────────
+        # Bölünme modunda genom sıralı bir plan değil, ağırlıklı bir
+        # torbadır; "Next Upgrade" diye bir kavram yoktur. Sıralı moda ait
+        # alanları burada göstermek yanıltıcı olur (hepsi sequence[0]'ı
+        # gösterip sabit kalır), o yüzden panel moda göre değişir.
+        division = getattr(game_settings, 'DIVISION_MODE', False)
+        y = self._header(
+            screen,
+            "GENETICS (Random Draw)" if division else "GENETICS (Build Order)",
+            y, px, pw)
+
+        genome = getattr(o, 'genome', None)
+        if genome and genome.sequence:
+            seq = genome.sequence
+            seq_len = len(seq)
+            cur_idx = genome.current_index
+            cycle   = genome.cycle_count
+
+            if division:
+                y = self._kv(screen, "Genes", str(seq_len), y, px)
+                y = self._kv(screen, "Draw", "random from pool", y, px,
+                             vc=self.COL_HIGHLIGHT)
+                # Torbadaki ağırlıklar: bir gen kaç kez geçiyorsa çekilme
+                # şansı o kadar yüksek. Asıl bilgi bu.
+                counts = {}
+                for gtype, _gi in seq:
+                    counts[gtype] = counts.get(gtype, 0) + 1
+                top = sorted(counts.items(), key=lambda kv: -kv[1])[:3]
+                for gtype, n in top:
+                    y = self._kv(screen, f"  {gtype}",
+                                 f"{n}  ({100.0 * n / seq_len:.0f}%)", y, px,
+                                 vc=self.GENE_COLORS.get(gtype, self.COL_VALUE))
+            else:
+                y = self._kv(screen, "Genome Step",
+                             f"{cur_idx} / {seq_len}", y, px)
+                y = self._kv(screen, "Cycle Count", str(cycle), y, px)
+
+                # Next upgrade
+                if cur_idx < seq_len:
+                    ntype, nidx = seq[cur_idx]
+                    y = self._kv(screen, "Next Upgrade",
+                                 f"{ntype} [{nidx}]", y, px,
+                                 vc=self.COL_HIGHLIGHT)
+
+            # Genome strip visualisation
+            y += 4
+            strip_h = 14
+            gene_w = max(4, min(12, pw // max(seq_len, 1)))
+            for i, (gtype, _gidx) in enumerate(seq):
+                gx = px + i * gene_w
+                if gx + gene_w > self.panel_x + self.PANEL_W - 12:
+                    break
+                color = self.GENE_COLORS.get(gtype, (80, 80, 80))
+                # İmleç yalnızca sıralı modda anlamlı; bölünme modunda
+                # sıradaki gen diye bir şey yok.
+                if i == cur_idx and not division:
+                    pygame.draw.rect(screen, (255, 255, 255),
+                                     (gx, y, gene_w, strip_h), 1)
+                pygame.draw.rect(screen, color,
+                                 (gx + 1, y + 1, gene_w - 2, strip_h - 2))
+            y += strip_h + 4
+
+            # Compact legend (2-column)
+            seen = []
+            seen_set = set()
+            for gtype, _ in seq:
+                if gtype not in seen_set:
+                    seen_set.add(gtype)
+                    seen.append(gtype)
+            col_w = pw // 2
+            for li, ltype in enumerate(seen):
+                lx = px + (li % 2) * col_w
+                ly = y + (li // 2) * 14
+                lcolor = self.GENE_COLORS.get(ltype, (80, 80, 80))
+                pygame.draw.rect(screen, lcolor, (lx, ly + 2, 8, 8))
+                lbl = self._fnt_s.render(ltype, True, self.COL_LABEL)
+                screen.blit(lbl, (lx + 12, ly))
+            if seen:
+                y += ((len(seen) + 1) // 2) * 14
+        else:
+            y = self._kv(screen, "Genome", "Not initialized", y, px,
+                         vc=self.COL_LABEL)
+
+        # Bottom hint
+        hint = self._fnt_s.render("ESC = Deselect   H = Heatmap",
+                                  True, (80, 80, 100))
+        screen.blit(hint, (self.panel_x + 12, HEIGHT - 22))
+
+    # ── drawing helpers ─────────────────────────────────────
+
+    def _draw_selection_ring(self, screen, elapsed):
+        o = self.selected
+        pulse = math.sin(elapsed * 4.0) * 0.5 + 0.5      # 0..1
+        ring_r = int(o.radius + 8 + pulse * 4)
+        alpha  = int(140 + pulse * 115)
+        size   = ring_r * 2 + 4
+        surf   = pygame.Surface((size, size), pygame.SRCALPHA)
+        pygame.draw.circle(surf, (255, 255, 255, alpha),
+                           (ring_r + 2, ring_r + 2), ring_r, 2)
+        screen.blit(surf,
+                    (int(o.pos.x) - ring_r - 2,
+                     int(o.pos.y) - ring_r - 2))
+
+    def _header(self, screen, text, y, px, pw):
+        pygame.draw.line(screen, self.COL_DIVIDER,
+                         (px, y), (px + pw, y), 1)
+        y += 4
+        surf = self._fnt_h.render(text, True, self.COL_HEADER)
+        screen.blit(surf, (px, y))
+        return y + surf.get_height() + 4
+
+    def _kv(self, screen, key, value, y, px, vc=None):
+        if vc is None:
+            vc = self.COL_VALUE
+        ks = self._fnt_l.render(f"{key}:", True, self.COL_LABEL)
+        vs = self._fnt_v.render(str(value), True, vc)
+        screen.blit(ks, (px, y))
+        screen.blit(vs, (px + ks.get_width() + 6, y))
+        return y + max(ks.get_height(), vs.get_height()) + 2
+
+    def _bar(self, screen, label, ratio, text, y, px, pw, color):
+        ls = self._fnt_l.render(f"{label}:", True, self.COL_LABEL)
+        screen.blit(ls, (px, y))
+        y += ls.get_height() + 2
+        bar_h = 14
+        pygame.draw.rect(screen, self.COL_BAR_BG, (px, y, pw, bar_h))
+        fill_w = int(pw * max(0.0, min(1.0, ratio)))
+        if fill_w > 0:
+            pygame.draw.rect(screen, color, (px, y, fill_w, bar_h))
+        pygame.draw.rect(screen, self.COL_DIVIDER, (px, y, pw, bar_h), 1)
+        ts = self._fnt_s.render(text, True, self.COL_VALUE)
+        screen.blit(ts, (px + (pw - ts.get_width()) // 2, y + 1))
+        return y + bar_h + 4
+
+    # ── safe attribute access ───────────────────────────────
+
+    @staticmethod
+    def _safe_attr(obj, dotpath, default='?'):
+        """Safely traverse a.b.c style attribute chain."""
+        try:
+            cur = obj
+            for part in dotpath.split('.'):
+                cur = getattr(cur, part)
+            return cur
+        except AttributeError:
+            return default
+
+    @staticmethod
+    def _safe_obj(obj, dotpath):
+        """Like _safe_attr but returns None on failure (for object refs)."""
+        try:
+            cur = obj
+            for part in dotpath.split('.'):
+                cur = getattr(cur, part)
+            return cur
+        except AttributeError:
+            return None
+
+
 def main(food_count=None, kaotropi_count=None):
     # Ayarlardan al (parametre verilmemişse)
     if food_count is None:
@@ -134,43 +590,60 @@ def main(food_count=None, kaotropi_count=None):
     if kaotropi_count is None:
         kaotropi_count = game_settings.KAOTROPI_COUNT
     pygame.init()
-    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    # TAM EKRAN: dunya WIDTH x HEIGHT olarak KALIR, yalnizca goruntu
+    # ekrana olceklenir. Dunyayi buyutmek yogunlugu dusurup ekosistem
+    # dengesini bozuyordu.
+    tam_ekran = True
+    window = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+    screen = pygame.Surface((WIDTH, HEIGHT))
+
+    def _fit():
+        w, h = window.get_size()
+        k = min(w / WIDTH, h / HEIGHT)
+        return k, ((w - WIDTH * k) * 0.5, (h - HEIGHT * k) * 0.5)
+
+    olcek, kayma = _fit()
+
+    # KAMERA: fare tekerlegi yakinlastirir. Yakinlastirma yeni bir temsil
+    # URETMEZ - dunya zaten gercek gozenek geometrisiyle cizilmis durumda,
+    # kamera yalnizca daha buyuk cizdirir (lab.hucreyi_ciz'e olcek gecer).
+    # Tuvali buyutup ustunu olceklemek detay KAZANDIRMAZDI: 1200x800'e
+    # cizilmis 1 px'lik delik buyutulunce bulaniklasir, acilmaz.
+    kamera = {"z": 1.0, "cx": WIDTH * 0.5, "cy": HEIGHT * 0.5}
+    # x1 = kucultulmus dunya gorunumu, x4 = zarfin gercek boyutu,
+    # x64 = laboratuvar yakinligi (gozenekler tek tek okunur).
+    ZOOM_MIN, ZOOM_MAX = 1.0, 64.0
+
+    def dunya_konumu(p):
+        """Ekran (tuval) noktasi -> dunya noktasi."""
+        z = kamera["z"]
+        return ((p[0] - WIDTH * 0.5) / z + kamera["cx"],
+                (p[1] - HEIGHT * 0.5) / z + kamera["cy"])
+
+    def tuval_konumu(p):
+        """Dunya noktasi -> tuval noktasi."""
+        z = kamera["z"]
+        return ((p[0] - kamera["cx"]) * z + WIDTH * 0.5,
+                (p[1] - kamera["cy"]) * z + HEIGHT * 0.5)
+
+    def ekran_konumu(p):
+        # Yuvarlanir: kesirli birakinca sinirlarda isabet kaciyor.
+        return (round((p[0] - kayma[0]) / olcek),
+                round((p[1] - kayma[1]) / olcek))
     pygame.display.set_caption("Evolution Simulation")
     clock = pygame.time.Clock()
     
-    trail_manager = TrailManager()
-
-    # Colors for 5 Optropis
-    # First one is removed Smart, shifting others
-    OPTROPI_COLORS = [
-        (255, 0, 255),    # Magenta
-        (255, 255, 0),    # Yellow
-        (0, 255, 0),      # Lime Green
-        (255, 165, 0)     # Orange
-    ]
-
-    # Create Entities
-    kaotropis = [Kaotropi(i, random.randint(50, WIDTH-50), random.randint(50, HEIGHT-50)) for i in range(kaotropi_count)]
-    
-    optropis = []
-    
-    # 2. Standard Optropis
-    for i in range(4): # 4 Standart Optropi
-        x = random.randint(50, WIDTH-50)
-        y = random.randint(50, HEIGHT-50)
-        optropis.append(Optropi(i, x, y, OPTROPI_COLORS[i]))
-
-    optropis[0].log_enabled = True # İlk Standart Optropi loglansın
-
-    # 3. Notropis (6 adet)
-    for i in range(6):
-        x = random.randint(50, WIDTH-50)
-        y = random.randint(50, HEIGHT-50)
-        # Indexi optropi sayısına ekleyerek verelim ki karışmasın
-        notropi = Notropi(len(optropis), x, y)
-        optropis.append(notropi)
-
-    foods = Food.spawn(food_count)
+    # DUNYA: butun ekosistem mantigi systems/world.py'de. Burasi yalnizca
+    # onu cizer ve olaylari isler.
+    dunya = Dunya(food_count=food_count, kaotropi_count=kaotropi_count)
+    trail_manager = dunya.trail_manager
+    scent_env = dunya.scent_env
+    kaotropis = dunya.kaotropis
+    optropis = dunya.optropis
+    foods = dunya.foods
+    if optropis:
+        optropis[0].log_enabled = True
+    inspector = RuntimeInspector()
 
     # Diagnostik loglama
     diag_file = open(DIAG_LOG_PATH, "w", encoding="utf-8")
@@ -181,70 +654,72 @@ def main(food_count=None, kaotropi_count=None):
 
     running = True
     while running:
-        dt = clock.tick(FPS) / 1000.0 # Delta time in seconds
+        real_dt = clock.tick(FPS) / 1000.0    # gercek gecen sure (cizim icin)
+        # Simulasyon zamani olceklenir. Duraklatildiginda dt=0: dunya donar
+        # ama hicbir sey ilerlemez, yine de tiklayip inceleyebilirsin.
+        dt = 0.0 if inspector.paused else real_dt * inspector.time_scale
         elapsed_time += dt
 
         for event in pygame.event.get():
+            if hasattr(event, 'pos'):
+                event.dunya_pos = ekran_konumu(event.pos)
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_F11:
+                tam_ekran = not tam_ekran
+                window = pygame.display.set_mode(
+                    (0, 0) if tam_ekran else (WIDTH, HEIGHT),
+                    pygame.FULLSCREEN if tam_ekran else 0)
+                olcek, kayma = _fit()
+            elif event.type == pygame.MOUSEWHEEL:
+                # Imlecin gosterdigi DUNYA noktasi sabit kalsin: once o
+                # noktayi bul, zoom'u degistir, sonra merkezi geri hesapla.
+                _m = ekran_konumu(pygame.mouse.get_pos())
+                _hedef = dunya_konumu(_m)
+                _z = kamera["z"] * (1.15 ** event.y)
+                kamera["z"] = max(ZOOM_MIN, min(ZOOM_MAX, _z))
+                if kamera["z"] <= ZOOM_MIN + 1e-6:
+                    kamera["cx"], kamera["cy"] = WIDTH * 0.5, HEIGHT * 0.5
+                else:
+                    kamera["cx"] = _hedef[0] - (_m[0] - WIDTH * 0.5) / kamera["z"]
+                    kamera["cy"] = _hedef[1] - (_m[1] - HEIGHT * 0.5) / kamera["z"]
+                continue
             if event.type == pygame.QUIT:
                 running = False
+            inspector.handle_event(event, optropis)
 
-        # Update Trails
-        trail_manager.update(dt)
-
-        # Update
-        for k in kaotropis:
-            k.move(dt)
-            # Kaotropiler iz bırakır
-            if random.random() < 0.3: # Her karede değil, bazen bırak ki performans düşmesin
-                trail_manager.add_point(k.pos.x, k.pos.y, k.uid, k.direction, k.radius)
-        
-        # Update Optropis and check collisions
-        active_optropis = []
-        for o in optropis:
-            # Optropiler iz bırakır
-            if random.random() < 0.3:
-                trail_manager.add_point(o.pos.x, o.pos.y, o.uid, o.direction, o.radius)
-
-            # Tehdit listesini belirle
-            threats = list(kaotropis)
-            if isinstance(o, Notropi):
-                # Notropiler için diğer tüm Optropiler (Smart, Notropi, Std) de tehdittir
-                threats.extend([other for other in optropis if other != o])
-            
-            # Tehdit UID'lerini topla (Trail filtreleme için)
-            threat_uids = {t.uid for t in threats}
-            
-            # Trail Manager ve Threat UID'leri update'e gönderiyoruz
-            o.update(dt, threats, foods, trail_manager, threat_uids)
-
-            # Check if Optropi eats a food
-            eaten = None
-            for f in foods:
-                if o.pos.distance_to(f.pos) < o.radius + f.radius:
-                    if o.consume_food(f):
-                        eaten = f
-                        break
-            if eaten:
-                foods.remove(eaten)
-            
-            # Check for collision with any Kaotropi
-            collided = False
-            for k in kaotropis:
-                if o.check_collision(k):
-                    collided = True
-                    break
-            
-            if not collided:
-                active_optropis.append(o)
-        
-        optropis = active_optropis
+        # ---------------- DUNYA BIR ADIM ----------------
+        # Ekosistemin butunu systems/world.py'de. Buradaki tek is onu
+        # ilerletmek; besin dogusu, koku, avlanma, bolunme, eleme - hepsi
+        # olcum kosusuyla BIREBIR ayni koddan geciyor.
+        dunya.adim(dt)
+        kaotropis = dunya.kaotropis
+        optropis = dunya.optropis
+        foods = dunya.foods
 
         # Draw
         screen.fill(BLACK)
         
-        # 0. Trails (En arkada)
-        trail_manager.draw(screen)
-        
+        # 0. Trails + koku isi haritasi.
+        #
+        # Bunlar DUNYA koordinatlarinda ciziliyor; kamera yakinlasinca
+        # besinler ve hucreler donusuyor ama bunlar yerinde kaliyordu -
+        # koku bulutu besinden kopuyordu. Yakinlastirilmis karede ikisi de
+        # once dunya olceginde bir tuvale cizilip kameraya gore
+        # olceklenir: konumlari artik besinle AYNI donusumden geciyor.
+        if kamera["z"] <= 1.0 + 1e-6:
+            trail_manager.draw(screen)
+            if inspector.show_heatmap:
+                scent_env.draw_debug(screen)
+        else:
+            _dz = kamera["z"]
+            _kat = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+            trail_manager.draw(_kat)
+            if inspector.show_heatmap:
+                scent_env.draw_debug(_kat)
+            _bk = pygame.transform.smoothscale(
+                _kat, (int(WIDTH * _dz), int(HEIGHT * _dz)))
+            screen.blit(_bk, (WIDTH * 0.5 - kamera["cx"] * _dz,
+                              HEIGHT * 0.5 - kamera["cy"] * _dz))
+
         # 1. Memory lines (Background)
         # Memory is now drawn inside o.draw(), but since it's the bottom layer,
         # we don't need a separate loop here if o.draw() handles order correctly.
@@ -253,18 +728,57 @@ def main(food_count=None, kaotropi_count=None):
         # No, memory lines should be below EVERYTHING else.
         # Let's keep o.draw() as the single point of entry.
         
-        # 4. Foods
-        for f in foods:
-            f.draw(screen)
+        _z = kamera["z"]
+        if _z <= 1.0 + 1e-6:
+            # Yakinlastirma yokken dunya kendi koordinatlarinda cizilir;
+            # hucreler GORUNUM_OLCEGI ile kucultulur (Organism.draw).
+            for f in foods:
+                f.draw(screen)
 
-        # 5. Kaotropis (Mid-ground)
-        for k in kaotropis:
-            k.draw(screen)
-            
-        # 6. Optropis (Foreground)
-        for o in optropis:
-            o.draw(screen)
+            for k in kaotropis:
+                k.draw(screen)
 
+            for o in optropis:
+                o.draw(screen)
+        else:
+            # KAMERA GORUNUMU: ayni geometri, buyuk olcekte cizilir.
+            # Gorunmeyen sey cizilmez - yakinlasinca kare basina is artmaz.
+            _gorunum = getattr(game_settings, 'GORUNUM_OLCEGI', 1.0)
+            _yari = (WIDTH * 0.5 / _z, HEIGHT * 0.5 / _z)
+            for f in foods:
+                if (abs(f.pos.x - kamera["cx"]) > _yari[0] + f.radius or
+                        abs(f.pos.y - kamera["cy"]) > _yari[1] + f.radius):
+                    continue
+                _p = tuval_konumu(f.pos)
+                pygame.draw.circle(screen, getattr(f, 'color', (120, 220, 140)),
+                                   (int(_p[0]), int(_p[1])),
+                                   max(1, int(f.radius * _z * _gorunum)))
+            import lab as _kam_lab
+            for o in list(kaotropis) + list(optropis):
+                _r = getattr(o, 'radius', 10) * 3.0
+                if (abs(o.pos.x - kamera["cx"]) > _yari[0] + _r or
+                        abs(o.pos.y - kamera["cy"]) > _yari[1] + _r):
+                    continue
+                # try/except YOK: hatayi yutmak, kamera yolunu sessizce
+                # eski cizime dusurup "yakinlasinca gozenek gorunmuyor"
+                # diye anlasilmaz bir sonuc uretirdi.
+                # Kamera olcegi GORUNUM ile carpilir: x1'de dunyadaki
+                # boyut, x4'te zarfin gercek (kucultulmemis) boyutu.
+                _ok = _z * _gorunum
+                _mrk = tuval_konumu(o.pos)
+                _kam_lab.hucreyi_ciz(screen, o, _mrk, _ok)
+                o.molekulleri_ciz(screen, _mrk, _ok)
+            _f = pygame.font.SysFont("consolas", 16)
+            screen.blit(_f.render("ZOOM x%.1f  (tekerlek)" % _z, True,
+                                  (150, 170, 200)), (14, HEIGHT - 26))
+
+        # 7. Inspector panel (topmost layer)
+        inspector.validate(optropis)
+        inspector.draw(screen, scent_env, elapsed_time, dt)
+
+        window.fill((0, 0, 0))
+        window.blit(pygame.transform.smoothscale(
+            screen, (int(WIDTH * olcek), int(HEIGHT * olcek))), kayma)
         pygame.display.flip()
 
         # Diagnostik loglama (her DIAG_INTERVAL saniyede bir)
@@ -293,7 +807,7 @@ def main(food_count=None, kaotropi_count=None):
         print(f"  Hafiza Boyutu : {o.max_memory_length:.1f} px")
         print(f"  Donus Hizi    : {o.max_turn_rate:.2f} rad/sn")
         print(f"  Max Enerji    : {o.max_energy:.2f}")
-        print(f"  Hareket Dolum : {o.move_regen:.2f} birim/sn")
+        print(f"  ETC Verimi    : x{o.etc_efficiency:.2f} (besin basina enerji carpani)")
         print(f"  Shutdown      : {'Evet' if o.shutdown else 'Hayir'}")
         print(f"  Organeller    : {o.get_organ_stats()}")
     print("\n============================")

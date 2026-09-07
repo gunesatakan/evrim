@@ -2,7 +2,24 @@ import pygame
 import random
 
 # Constants
-WIDTH, HEIGHT = 1200, 800
+# DUNYA boyutu sabittir ve tam ekranda DEGISMEZ.
+#
+# Once masaustu cozunurlugunden turetmeyi denedim; 2560x1440'ta dunya alani
+# 4 KATINA cikiyor ve ayni besin/kaotropi sayisiyla yogunluk dorde bolunuyor
+# - yani "tam ekran yap" istegi sessizce ekosistem dengesini bozuyordu.
+# Bunun yerine simulation.py tam ekranda GORUNTUYU olcekler; dunya aynidir.
+def _world_scale():
+    try:
+        import game_settings
+        return float(getattr(game_settings, 'WORLD_SCALE', 1.0))
+    except Exception:
+        return 1.0
+
+
+# Dunya da ayni oranda buyur ki YOGUNLUK degismesin: ayni besin ve
+# kaotropi sayisi ayni birim alana dusmeye devam etsin.
+_WS = _world_scale()
+WIDTH, HEIGHT = int(1200 * _WS), int(800 * _WS)
 FPS = 60
 SCALE = 10  # 1 unit = 10 pixels
 

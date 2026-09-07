@@ -92,7 +92,7 @@ class FlagellaLogic:
 
     @property
     def base_energy_cost(self):
-        return self.length * 0.03
+        return self.length * game_settings.COST_FLAGELLA
 
     def update_stats(self, delta_length=0):
         self.length += delta_length

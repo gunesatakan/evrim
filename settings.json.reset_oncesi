@@ -131,8 +131,8 @@
         "SEPARATION_STRENGTH": 0.5,
         "CYTOSKELETON_AREA": 10.0,
         "FOOD_AREA": 100.0,
-        "FOOD_SPAWN_RATE": 7.0,
-        "FOOD_MAX": 500,
+        "FOOD_SPAWN_RATE": 3.0,
+        "FOOD_MAX": 400,
         "RIBOSOME_AREA": 20.0,
         "VACUOLE_AREA": 30.0,
         "CILIA_TURN_MULTI": 0.05,
@@ -157,7 +157,7 @@
         "SCENT_HEATMAP_INTERVAL": 0.05,
         "SCENT_SENSITIVITY_BASE": 0.3,
         "DIVISION_MODE": true,
-        "DIVISION_MAX_POPULATION": 200,
+        "DIVISION_MAX_POPULATION": 0,
         "TUMBLE_GAIN_POSITIVE": 5.0,
         "TUMBLE_GAIN_NEGATIVE": 2.0,
         "TUMBLE_RATE_MIN": 0.05,
@@ -166,10 +166,7 @@
         "CHEMO_SAMPLE_INTERVAL": 0.5,
         "LEVY_ALPHA": 1.5,
         "LEVY_MIN_STEP": 0.5,
-        "LEVY_MAX_DURATION": 10.0,
-        "ORGAN_GAIN_RATE": 0.02,
-        "ORGAN_LOSS_RATE": 0.02,
-        "TRAIL_RATE": 6.0
+        "LEVY_MAX_DURATION": 10.0
     },
     "entities": {
         "optropi_0": {
@@ -186,6 +183,12 @@
             "vacuole_area": 30.0,
             "organs": [
                 {
+                    "type": "Photoreceptor",
+                    "angle": 0.24497866312686414,
+                    "range": 15,
+                    "angle_val": 0.3
+                },
+                {
                     "type": "Membrane",
                     "angle": 0,
                     "integrity": 100.0,
@@ -197,15 +200,145 @@
                     "slip": 0.0,
                     "mucus": 0.0,
                     "slayer": 0.0,
-                    "var_mucus": false,
-                    "var_capsule": false,
-                    "var_slayer": false,
-                    "var_wall": false
+                    "var_mucus": true,
+                    "var_capsule": true,
+                    "var_slayer": true,
+                    "var_wall": true,
+                    "kalinlik": {
+                        "mucus": 7.0,
+                        "capsule": 5.0,
+                        "slayer": 2.0,
+                        "wall": 6.0,
+                        "outer": 1.5
+                    }
                 },
                 {
                     "type": "Cytoplasm",
                     "angle": 0,
                     "size": 2.0
+                },
+                {
+                    "type": "Vacuole",
+                    "angle": 0,
+                    "size": 1.0
+                },
+                {
+                    "type": "Vacuole",
+                    "angle": 0,
+                    "size": 1.0
+                },
+                {
+                    "type": "Vacuole",
+                    "angle": 0,
+                    "size": 1.0
+                },
+                {
+                    "type": "Vacuole",
+                    "angle": 0,
+                    "size": 1.0
+                },
+                {
+                    "type": "Vacuole",
+                    "angle": 0,
+                    "size": 1.0
+                },
+                {
+                    "type": "Vacuole",
+                    "angle": 0,
+                    "size": 1.0
+                },
+                {
+                    "type": "Vacuole",
+                    "angle": 0,
+                    "size": 1.0
+                },
+                {
+                    "type": "Harpoon",
+                    "angle": 0.6981317007977318,
+                    "carrier": 3,
+                    "payload": 6,
+                    "marker": 0,
+                    "power": 1.0
+                },
+                {
+                    "type": "Harpoon",
+                    "angle": 0.8726646259971648,
+                    "carrier": 3,
+                    "payload": 6,
+                    "marker": 0,
+                    "power": 1.0
+                },
+                {
+                    "type": "Harpoon",
+                    "angle": 1.0471975511965976,
+                    "carrier": 3,
+                    "payload": 6,
+                    "marker": 0,
+                    "power": 1.0
+                },
+                {
+                    "type": "Phagocytosis",
+                    "angle": 1.2217304763960306,
+                    "carrier": 2,
+                    "payload": 3,
+                    "marker": 0,
+                    "power": 1.0
+                },
+                {
+                    "type": "Lysin",
+                    "angle": 0.5235987755982988,
+                    "carrier": 2,
+                    "payload": 4,
+                    "marker": 0,
+                    "power": 1.0
+                },
+                {
+                    "type": "Toxin",
+                    "angle": 1.5707963267948966,
+                    "carrier": 2,
+                    "payload": 1,
+                    "marker": 0,
+                    "power": 1.0
+                },
+                {
+                    "type": "Nematocyst",
+                    "angle": 1.3962634015954636,
+                    "carrier": 5,
+                    "payload": 6,
+                    "marker": 0,
+                    "power": 1.0
+                },
+                {
+                    "type": "Nematocyst",
+                    "angle": 1.7453292519943295,
+                    "carrier": 5,
+                    "payload": 6,
+                    "marker": 0,
+                    "power": 1.0
+                },
+                {
+                    "type": "Cytoskeleton",
+                    "angle": 0
+                },
+                {
+                    "type": "Cytoskeleton",
+                    "angle": 0
+                },
+                {
+                    "type": "Cytoskeleton",
+                    "angle": 0
+                },
+                {
+                    "type": "Cytoskeleton",
+                    "angle": 0
+                },
+                {
+                    "type": "Cytoskeleton",
+                    "angle": 0
+                },
+                {
+                    "type": "Cytoskeleton",
+                    "angle": 0
                 },
                 {
                     "type": "Cytoskeleton",
@@ -217,8 +350,9 @@
                     "size": 1.0
                 },
                 {
-                    "type": "Ribosome",
-                    "angle": 0
+                    "type": "Vacuole",
+                    "angle": 0,
+                    "size": 1.0
                 },
                 {
                     "type": "Flagella",
@@ -226,9 +360,22 @@
                     "length": 10.0
                 },
                 {
-                    "type": "Chemoreceptor",
-                    "angle": 0.0,
-                    "length": 6.0
+                    "type": "Cilia",
+                    "angle": 1.9198621771937625,
+                    "length": 3.0
+                },
+                {
+                    "type": "Cilia",
+                    "angle": 2.0943951023931953,
+                    "length": 3.0
+                },
+                {
+                    "type": "Nematocyst",
+                    "angle": 2.2689280275926285,
+                    "carrier": 5,
+                    "payload": 6,
+                    "marker": 0,
+                    "power": 1.0
                 }
             ]
         },
@@ -257,10 +404,17 @@
                     "slip": 0.0,
                     "mucus": 0.0,
                     "slayer": 0.0,
-                    "var_mucus": false,
-                    "var_capsule": false,
-                    "var_slayer": false,
-                    "var_wall": false
+                    "var_mucus": true,
+                    "var_capsule": true,
+                    "var_slayer": true,
+                    "var_wall": true,
+                    "kalinlik": {
+                        "mucus": 7.0,
+                        "capsule": 5.0,
+                        "slayer": 2.0,
+                        "wall": 6.0,
+                        "outer": 1.5
+                    }
                 },
                 {
                     "type": "Cytoplasm",
@@ -268,27 +422,9 @@
                     "size": 2.0
                 },
                 {
-                    "type": "Cytoskeleton",
-                    "angle": 0
-                },
-                {
-                    "type": "Vacuole",
-                    "angle": 0,
-                    "size": 1.0
-                },
-                {
-                    "type": "Ribosome",
-                    "angle": 0
-                },
-                {
                     "type": "Flagella",
                     "angle": 3.141592653589793,
                     "length": 10.0
-                },
-                {
-                    "type": "Chemoreceptor",
-                    "angle": 0.0,
-                    "length": 6.0
                 }
             ]
         },
@@ -317,10 +453,17 @@
                     "slip": 0.0,
                     "mucus": 0.0,
                     "slayer": 0.0,
-                    "var_mucus": false,
-                    "var_capsule": false,
-                    "var_slayer": false,
-                    "var_wall": false
+                    "var_mucus": true,
+                    "var_capsule": true,
+                    "var_slayer": true,
+                    "var_wall": true,
+                    "kalinlik": {
+                        "mucus": 7.0,
+                        "capsule": 5.0,
+                        "slayer": 2.0,
+                        "wall": 6.0,
+                        "outer": 1.5
+                    }
                 },
                 {
                     "type": "Cytoplasm",
@@ -328,27 +471,24 @@
                     "size": 2.0
                 },
                 {
-                    "type": "Cytoskeleton",
-                    "angle": 0
+                    "type": "Cilia",
+                    "angle": 1.5707963267948966,
+                    "length": 3.0
+                },
+                {
+                    "type": "Cilia",
+                    "angle": 1.7453292519943295,
+                    "length": 3.0
+                },
+                {
+                    "type": "Cilia",
+                    "angle": 1.9198621771937625,
+                    "length": 3.0
                 },
                 {
                     "type": "Vacuole",
                     "angle": 0,
                     "size": 1.0
-                },
-                {
-                    "type": "Ribosome",
-                    "angle": 0
-                },
-                {
-                    "type": "Flagella",
-                    "angle": 3.141592653589793,
-                    "length": 10.0
-                },
-                {
-                    "type": "Chemoreceptor",
-                    "angle": 0.0,
-                    "length": 6.0
                 }
             ]
         },
@@ -377,38 +517,22 @@
                     "slip": 0.0,
                     "mucus": 0.0,
                     "slayer": 0.0,
-                    "var_mucus": false,
-                    "var_capsule": false,
-                    "var_slayer": false,
-                    "var_wall": false
+                    "var_mucus": true,
+                    "var_capsule": true,
+                    "var_slayer": true,
+                    "var_wall": true,
+                    "kalinlik": {
+                        "mucus": 7.0,
+                        "capsule": 5.0,
+                        "slayer": 2.0,
+                        "wall": 6.0,
+                        "outer": 1.5
+                    }
                 },
                 {
                     "type": "Cytoplasm",
                     "angle": 0,
                     "size": 2.0
-                },
-                {
-                    "type": "Cytoskeleton",
-                    "angle": 0
-                },
-                {
-                    "type": "Vacuole",
-                    "angle": 0,
-                    "size": 1.0
-                },
-                {
-                    "type": "Ribosome",
-                    "angle": 0
-                },
-                {
-                    "type": "Flagella",
-                    "angle": 3.141592653589793,
-                    "length": 10.0
-                },
-                {
-                    "type": "Chemoreceptor",
-                    "angle": 0.0,
-                    "length": 6.0
                 }
             ]
         },
@@ -437,38 +561,22 @@
                     "slip": 0.0,
                     "mucus": 0.0,
                     "slayer": 0.0,
-                    "var_mucus": false,
-                    "var_capsule": false,
-                    "var_slayer": false,
-                    "var_wall": false
+                    "var_mucus": true,
+                    "var_capsule": true,
+                    "var_slayer": true,
+                    "var_wall": true,
+                    "kalinlik": {
+                        "mucus": 7.0,
+                        "capsule": 5.0,
+                        "slayer": 2.0,
+                        "wall": 6.0,
+                        "outer": 1.5
+                    }
                 },
                 {
                     "type": "Cytoplasm",
                     "angle": 0,
                     "size": 2.0
-                },
-                {
-                    "type": "Cytoskeleton",
-                    "angle": 0
-                },
-                {
-                    "type": "Vacuole",
-                    "angle": 0,
-                    "size": 1.0
-                },
-                {
-                    "type": "Ribosome",
-                    "angle": 0
-                },
-                {
-                    "type": "Flagella",
-                    "angle": 3.141592653589793,
-                    "length": 10.0
-                },
-                {
-                    "type": "Chemoreceptor",
-                    "angle": 0.0,
-                    "length": 6.0
                 }
             ]
         },
@@ -497,38 +605,22 @@
                     "slip": 0.0,
                     "mucus": 0.0,
                     "slayer": 0.0,
-                    "var_mucus": false,
-                    "var_capsule": false,
-                    "var_slayer": false,
-                    "var_wall": false
+                    "var_mucus": true,
+                    "var_capsule": true,
+                    "var_slayer": true,
+                    "var_wall": true,
+                    "kalinlik": {
+                        "mucus": 7.0,
+                        "capsule": 5.0,
+                        "slayer": 2.0,
+                        "wall": 6.0,
+                        "outer": 1.5
+                    }
                 },
                 {
                     "type": "Cytoplasm",
                     "angle": 0,
                     "size": 2.0
-                },
-                {
-                    "type": "Cytoskeleton",
-                    "angle": 0
-                },
-                {
-                    "type": "Vacuole",
-                    "angle": 0,
-                    "size": 1.0
-                },
-                {
-                    "type": "Ribosome",
-                    "angle": 0
-                },
-                {
-                    "type": "Flagella",
-                    "angle": 3.141592653589793,
-                    "length": 10.0
-                },
-                {
-                    "type": "Chemoreceptor",
-                    "angle": 0.0,
-                    "length": 6.0
                 }
             ]
         }

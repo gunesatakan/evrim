@@ -188,7 +188,7 @@ class CiliaLogic:
     @property
     def base_energy_cost(self):
         """Enerji maliyeti - cilia daha fazla enerji harcar"""
-        return self.length * 0.05  # Flagella'dan daha yüksek (0.03 vs 0.05)
+        return self.length * game_settings.COST_CILIA
 
     def update_stats(self, delta_length=0):
         self.length += delta_length

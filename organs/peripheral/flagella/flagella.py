@@ -56,7 +56,8 @@ class Flagella(BaseMotorOrgan):
         draw_flagella(screen, parent.pos, parent.direction, parent.radius, color,
                      self.logic.length, parent.shutdown, boost * power,
                      attachment_angle=self.attachment_angle,
-                     thrust_angle=self.logic.current_thrust_angle, show_thrust_vector=False)
+                     thrust_angle=self.logic.current_thrust_angle, show_thrust_vector=False,
+                     olcek=float(getattr(parent, 'ciz_olcegi', 1.0)))
 
     def grow(self):
         self.logic.grow()

@@ -5,65 +5,87 @@ import game_settings
 from entities.entity import Entity, WIDTH, HEIGHT, GREEN
 
 class Food(Entity):
-    def __init__(self, x, y):
-        # Radius'u FOOD_AREA'dan hesapla: area = π * r² → r = √(area / π)
+    #: Besinin hücreye çekilme süresi (sn).
+    #
+    #  Önceden besin, temas anında listeden silinip doğrudan sindirim
+    #  kuyruğuna giriyordu - ekranda "içeri ışınlanıyor" gibi görünen şey
+    #  buydu. Artık zarfa değdiği anda YUTULMA başlar: besin küçülerek
+    #  merkeze çekilir ve ancak oraya varınca kuyruğa girer.
+    YUTULMA_SURESI = 0.9
+    #: Sarmalama bu orana kadar surer; gerisi iceri cekme.
+    KAVRAMA = 0.6
+
+    def __init__(self, x, y, from_corpse=False):
         radius = math.sqrt(game_settings.FOOD_AREA / math.pi)
         super().__init__(x, y, radius, 0, GREEN)
+        # Bu besin bir LEŞTEN mi geldi? Kairomon diyet kaynaklıdır: av
+        # dokusunu sindirmek metabolik artık sızdırır, avı kendin mi
+        # öldürdün yoksa leşini mi buldun fark etmez.
+        self.from_corpse = from_corpse
+        # --- yutulma durumu ---
+        self.yutan = None          # onu çeken hücre
+        self.yutma_t = 0.0         # 0..1 ilerleme
+        self.taban_r = radius
 
-        # Koku sistemi
-        self.scent_radius = radius * 10.5  # Kokunun yayılma mesafesi (%30 azaltıldı)
-        self.max_scent_intensity = 1.0   # Merkezde maksimum yoğunluk
+    # ---------------- yutulma ----------------
 
-    def get_scent_intensity(self, pos):
-        """
-        Verilen pozisyondaki koku yoğunluğunu hesaplar.
-        Merkeze yakın = yüksek, uzaklaştıkça azalır.
+    def yutulmaya_basla(self, hucre):
+        """Hücre besine değdi: SARMALAMA başlasın. Zaten çekiliyorsa hayır."""
+        if self.yutan is not None:
+            return False
+        self.yutan = hucre
+        self.yutma_t = 0.0
+        # Hücre de bunu bilmeli: yalancı ayakları ona doğru uzatacak.
+        try:
+            hucre.yutulan_besin = self
+        except Exception:
+            pass
+        return True
 
-        Returns: 0.0 (koku yok) - 1.0 (maksimum yoğunluk)
-        """
-        dist = self.pos.distance_to(pos)
+    def yutma_guncelle(self, dt):
+        """Çekmeyi ilerlet. Tamamlandıysa True (artık hücrenin içinde)."""
+        if self.yutan is None:
+            return False
+        if getattr(self.yutan, 'dead', False):
+            # Avcı öldü: besin serbest kalır ve eski boyuna döner.
+            try:
+                if getattr(self.yutan, 'yutulan_besin', None) is self:
+                    self.yutan.yutulan_besin = None
+            except Exception:
+                pass
+            self.yutan = None
+            self.yutma_t = 0.0
+            self.radius = self.taban_r
+            return False
+        self.yutma_t = min(1.0, self.yutma_t + dt / self.YUTULMA_SURESI)
+        t = self.yutma_t
+        # FAGOSITOZUN GERCEK SIRASI:
+        #   1) SARMALAMA (t < KAVRAMA): yalancı ayaklar besinin etrafında
+        #      kapanır. Besin bu sırada YERINDE durur - önce sarılır,
+        #      sonra alınır. Eskiden ilk kareden itibaren merkeze doğru
+        #      kayıyordu, bu da "içeri çekiliyor" değil "emiliyor" gibi
+        #      görünüyordu.
+        #   2) İÇERİ ALMA (t > KAVRAMA): kapanan kese sitoplazmaya çekilir.
+        hedef = self.yutan.pos
+        if t <= self.KAVRAMA:
+            self.radius = self.taban_r          # sarılırken küçülmez
+            return False
+        u = (t - self.KAVRAMA) / max(1e-6, 1.0 - self.KAVRAMA)
+        egri = u * u * (3 - 2 * u)
+        self.pos = self.pos + (hedef - self.pos) * min(1.0, egri * 0.5 + dt * 5)
+        # Kese içine girerken hafifçe sıkışır, ama YOK OLMAZ - sitoplazmada
+        # görünmeye devam edecek.
+        self.radius = max(1.5, self.taban_r * (1.0 - 0.35 * egri))
+        return t >= 1.0
 
-        # Koku alanı dışındaysa
-        if dist >= self.scent_radius:
-            return 0.0
-
-        # Besin üzerindeyse maksimum
-        if dist <= self.radius:
-            return self.max_scent_intensity
-
-        # Gradyan: Üstel azalma (daha gerçekçi difüzyon)
-        # intensity = max * e^(-k * distance)
-        ratio = (dist - self.radius) / (self.scent_radius - self.radius)
-        # Daha yumuşak azalma: k=2 (önceki k=3 çok hızlı azalıyordu)
-        intensity = self.max_scent_intensity * math.exp(-2 * ratio)
-
-        return max(0.0, intensity)
+    @property
+    def yutuluyor(self):
+        return self.yutan is not None
 
     def draw(self, screen):
-        # Koku alanını çiz (dıştan içe, yoğunluk artan)
-        scent_color_base = (0, 100, 0)  # Koyu yeşil baz
-        num_rings = 8  # Halka sayısı
-
-        for i in range(num_rings, 0, -1):
-            # Halka yarıçapı (dıştan içe)
-            ring_ratio = i / num_rings
-            ring_radius = self.radius + (self.scent_radius - self.radius) * ring_ratio
-
-            # Bu mesafedeki yoğunluk (formülle eşleşmeli)
-            intensity = math.exp(-2 * ring_ratio)  # 0.14 - 1.0 arası
-
-            # Renk: yoğunlukla orantılı alpha efekti (RGB ile simüle)
-            alpha_sim = int(intensity * 40)  # Maksimum 40 opaklık
-            ring_color = (scent_color_base[0] + alpha_sim,
-                          scent_color_base[1] + alpha_sim,
-                          scent_color_base[2] + alpha_sim)
-
-            pygame.draw.circle(screen, ring_color,
-                             (int(self.pos.x), int(self.pos.y)),
-                             int(ring_radius), 2)  # Sadece çizgi (width=2)
-
-        # Besinin kendisi (üstte)
-        pygame.draw.circle(screen, self.color, (int(self.pos.x), int(self.pos.y)), int(self.radius))
+        pygame.draw.circle(screen, self.color,
+                           (int(self.pos.x), int(self.pos.y)),
+                           max(1, int(self.radius)))
 
     @staticmethod
     def spawn(count):

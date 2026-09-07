@@ -1,6 +1,5 @@
 {
     "settings": {
-        "WORLD_SCALE": 1.0,
         "FOOD_COUNT": 200,
         "KAOTROPI_COUNT": 8,
         "NOTROPI_COUNT": 30,
@@ -8,16 +7,12 @@
         "PREY_NEW_ORGAN_CHANCE": 0.25,
         "PREY_SCENT_EMISSION": 4.0,
         "PREY_VISION_PRIORITY": 1,
-        "THRUST_SCALE": 4.0,
-        "VISION_RANGE_BASE": 15.0,
-        "VISION_ANGLE_BASE": 0.35,
-        "DRAG_REF_RADIUS": 27.6,
+        "THRUST_SCALE": 40.0,
+        "DRAG_REF_RADIUS": 10.0,
         "DRAG_EXPONENT": 1.0,
-        "ROT_DRAG_EXPONENT": 3.0,
-        "ORGAN_DRAG_GAIN": 1.0,
-        "CILIA_SPEED_MULTI": 1.0,
+        "CILIA_SPEED_MULTI": 0.2,
         "FLAGELLA_SPEED_MULTI": 0.5,
-        "DIGESTION_TIME": 10.0,
+        "DIGESTION_TIME": 1.0,
         "RIBOSOME_TIME": 1.0,
         "VACUOLE_ENERGY_MULTI": 16.666666666666668,
         "ENERGY_REGEN_BASE": 1.0,
@@ -46,8 +41,6 @@
         "GROW_EFFLUX": 0.5,
         "GROW_REPAIR": 0.5,
         "GROW_SLIP": 0.5,
-        "GROW_MUCUS": 0.5,
-        "GROW_SLAYER": 0.5,
         "BIND_BREAK_RATE": 1.2,
         "PHAGO_BIND_TIME": 1.2,
         "NEMATOCYST_TETHER_TIME": 2.5,
@@ -56,20 +49,10 @@
         "COST_CAPSULE": 0.2,
         "COST_EFFLUX": 0.1,
         "COST_REPAIR": 0.15,
-        "COST_SLIP": 0.15,
-        "COST_MUCUS": 0.08,
-        "COST_SLAYER": 0.22,
-        "TABAN_COST_MUCUS": 0.1,
-        "TABAN_COST_CAPSULE": 0.14,
-        "TABAN_COST_SLAYER": 0.3,
-        "TABAN_COST_WALL": 0.35,
         "COST_INTEGRITY": 0.002,
         "REPAIR_PER_POINT": 1.5,
         "CAPSULE_SPEED_PENALTY": 0.06,
         "WALL_SPEED_PENALTY": 0.04,
-        "GORUNUM_OLCEGI": 0.25,
-        "MUCUS_SPEED_PENALTY": 0.02,
-        "SLAYER_SPEED_PENALTY": 0.03,
         "STYLET_ARC": 18.0,
         "HARPOON_ARC": 60.0,
         "NEMATOCYST_ARC": 30.0,
@@ -120,9 +103,6 @@
         "SCENT_WEIGHT_MEMBRANE": 0.5,
         "SPECTRUM_MUTATION_SIGMA": 6.0,
         "SCENT_DIVERGENCE_THRESHOLD": 30.0,
-        "KAIROMONE_PER_KILL": 1.0,
-        "KAIROMONE_DECAY": 0.08,
-        "KAIROMONE_MAX": 5.0,
         "SIGNATURE_ALLELES": 64,
         "SIGNATURE_COUPLED_RATIO": 0.7,
         "BEHAVIOR_MUTATION_RATE": 0.04,
@@ -131,8 +111,8 @@
         "SEPARATION_STRENGTH": 0.5,
         "CYTOSKELETON_AREA": 10.0,
         "FOOD_AREA": 100.0,
-        "FOOD_SPAWN_RATE": 7.0,
-        "FOOD_MAX": 500,
+        "FOOD_SPAWN_RATE": 3.0,
+        "FOOD_MAX": 400,
         "RIBOSOME_AREA": 20.0,
         "VACUOLE_AREA": 30.0,
         "CILIA_TURN_MULTI": 0.05,
@@ -149,15 +129,15 @@
         "GROW_SOUND": 2.0,
         "GROW_BODY": 0.01,
         "GROW_MEMORY": 5,
-        "SCENT_EVAP_RATE": 0.08,
-        "SCENT_DIFF_RATE": 4.0,
+        "SCENT_EVAP_RATE": 0.8,
+        "SCENT_DIFF_RATE": 1.0,
         "SCENT_MAX": 100.0,
         "FOOD_SCENT_EMISSION": 5.0,
         "SCENT_CELL_SIZE": 10,
         "SCENT_HEATMAP_INTERVAL": 0.05,
         "SCENT_SENSITIVITY_BASE": 0.3,
         "DIVISION_MODE": true,
-        "DIVISION_MAX_POPULATION": 200,
+        "DIVISION_MAX_POPULATION": 0,
         "TUMBLE_GAIN_POSITIVE": 5.0,
         "TUMBLE_GAIN_NEGATIVE": 2.0,
         "TUMBLE_RATE_MIN": 0.05,
@@ -167,14 +147,17 @@
         "LEVY_ALPHA": 1.5,
         "LEVY_MIN_STEP": 0.5,
         "LEVY_MAX_DURATION": 10.0,
-        "ORGAN_GAIN_RATE": 0.02,
-        "ORGAN_LOSS_RATE": 0.02,
-        "TRAIL_RATE": 6.0
+        "KAIROMONE_PER_KILL": 1.0,
+        "KAIROMONE_DECAY": 0.08,
+        "KAIROMONE_MAX": 5.0,
+        "COST_SLIP": 0.15,
+        "VISION_RANGE_BASE": 15.0,
+        "VISION_ANGLE_BASE": 0.35
     },
     "entities": {
         "optropi_0": {
             "name": "Magenta",
-            "cytoplasm": 2.0,
+            "cytoplasm": 1.0,
             "flagella": 10.0,
             "cilia": 3.0,
             "vision_range": 15.0,
@@ -186,26 +169,14 @@
             "vacuole_area": 30.0,
             "organs": [
                 {
-                    "type": "Membrane",
-                    "angle": 0,
-                    "integrity": 100.0,
-                    "wall": 0.0,
-                    "outer": 0.0,
-                    "capsule": 0.0,
-                    "efflux": 0.0,
-                    "repair": 0.0,
-                    "slip": 0.0,
-                    "mucus": 0.0,
-                    "slayer": 0.0,
-                    "var_mucus": false,
-                    "var_capsule": false,
-                    "var_slayer": false,
-                    "var_wall": false
-                },
-                {
                     "type": "Cytoplasm",
                     "angle": 0,
-                    "size": 2.0
+                    "size": 1.0
+                },
+                {
+                    "type": "Ribosome",
+                    "angle": 0,
+                    "time": 10.0
                 },
                 {
                     "type": "Cytoskeleton",
@@ -217,8 +188,35 @@
                     "size": 1.0
                 },
                 {
-                    "type": "Ribosome",
-                    "angle": 0
+                    "type": "Photoreceptor",
+                    "angle": 0.376909270324821,
+                    "range": 50.0,
+                    "angle_val": 0.3490658503988659
+                },
+                {
+                    "type": "Mechanoreceptor",
+                    "angle": -0.5255837935516102,
+                    "sensitivity": 30.0
+                },
+                {
+                    "type": "Cilia",
+                    "angle": 1.6207547225168393,
+                    "length": 3.0
+                },
+                {
+                    "type": "Cilia",
+                    "angle": -1.7467359522474244,
+                    "length": 3.0
+                },
+                {
+                    "type": "Membrane",
+                    "angle": 0,
+                    "integrity": 100.0,
+                    "wall": 0.0,
+                    "outer": 0.0,
+                    "capsule": 0.0,
+                    "efflux": 0.0,
+                    "repair": 0.0
                 },
                 {
                     "type": "Flagella",
@@ -227,14 +225,14 @@
                 },
                 {
                     "type": "Chemoreceptor",
-                    "angle": 0.0,
-                    "length": 6.0
+                    "angle": 0.01817981507297828,
+                    "length": 5.0
                 }
             ]
         },
         "optropi_1": {
             "name": "Yellow",
-            "cytoplasm": 2.0,
+            "cytoplasm": 1.0,
             "flagella": 30.0,
             "cilia": 5.0,
             "vision_range": 50.0,
@@ -246,26 +244,14 @@
             "vacuole_area": 30.0,
             "organs": [
                 {
-                    "type": "Membrane",
-                    "angle": 0,
-                    "integrity": 100.0,
-                    "wall": 0.0,
-                    "outer": 0.0,
-                    "capsule": 0.0,
-                    "efflux": 0.0,
-                    "repair": 0.0,
-                    "slip": 0.0,
-                    "mucus": 0.0,
-                    "slayer": 0.0,
-                    "var_mucus": false,
-                    "var_capsule": false,
-                    "var_slayer": false,
-                    "var_wall": false
-                },
-                {
                     "type": "Cytoplasm",
                     "angle": 0,
-                    "size": 2.0
+                    "size": 1.0
+                },
+                {
+                    "type": "Ribosome",
+                    "angle": 0,
+                    "time": 10.0
                 },
                 {
                     "type": "Cytoskeleton",
@@ -277,24 +263,70 @@
                     "size": 1.0
                 },
                 {
-                    "type": "Ribosome",
-                    "angle": 0
+                    "type": "Mechanoreceptor",
+                    "angle": -0.6651026864694942,
+                    "sensitivity": 30.0
                 },
                 {
-                    "type": "Flagella",
-                    "angle": 3.141592653589793,
-                    "length": 10.0
+                    "type": "Cilia",
+                    "angle": 0.07937831455957349,
+                    "length": 20.0
+                },
+                {
+                    "type": "Cilia",
+                    "angle": 3.0529367717223557,
+                    "length": 20.0
+                },
+                {
+                    "type": "Cilia",
+                    "angle": -2.999695598985629,
+                    "length": 20.0
+                },
+                {
+                    "type": "Membrane",
+                    "angle": 0,
+                    "integrity": 100.0,
+                    "wall": 0.0,
+                    "outer": 0.0,
+                    "capsule": 0.0,
+                    "efflux": 0.0,
+                    "repair": 0.0
+                },
+                {
+                    "type": "Cilia",
+                    "angle": -0.13381097747459075,
+                    "length": 20.0
                 },
                 {
                     "type": "Chemoreceptor",
-                    "angle": 0.0,
-                    "length": 6.0
+                    "angle": -2.7131064265440155,
+                    "length": 15.0
+                },
+                {
+                    "type": "Cilia",
+                    "angle": 1.5707963267948966,
+                    "length": 20.0
+                },
+                {
+                    "type": "Cilia",
+                    "angle": 1.7453292519943295,
+                    "length": 20.0
+                },
+                {
+                    "type": "Cilia",
+                    "angle": -1.4382447944982226,
+                    "length": 20.0
+                },
+                {
+                    "type": "Cilia",
+                    "angle": -1.6233793884058383,
+                    "length": 20.0
                 }
             ]
         },
         "optropi_2": {
             "name": "Lime Green",
-            "cytoplasm": 2.0,
+            "cytoplasm": 1.0,
             "flagella": 10.0,
             "cilia": 3.0,
             "vision_range": 15.0,
@@ -306,26 +338,14 @@
             "vacuole_area": 30.0,
             "organs": [
                 {
-                    "type": "Membrane",
-                    "angle": 0,
-                    "integrity": 100.0,
-                    "wall": 0.0,
-                    "outer": 0.0,
-                    "capsule": 0.0,
-                    "efflux": 0.0,
-                    "repair": 0.0,
-                    "slip": 0.0,
-                    "mucus": 0.0,
-                    "slayer": 0.0,
-                    "var_mucus": false,
-                    "var_capsule": false,
-                    "var_slayer": false,
-                    "var_wall": false
-                },
-                {
                     "type": "Cytoplasm",
                     "angle": 0,
-                    "size": 2.0
+                    "size": 1.0
+                },
+                {
+                    "type": "Ribosome",
+                    "angle": 0,
+                    "time": 10.0
                 },
                 {
                     "type": "Cytoskeleton",
@@ -337,24 +357,40 @@
                     "size": 1.0
                 },
                 {
-                    "type": "Ribosome",
-                    "angle": 0
+                    "type": "Mechanoreceptor",
+                    "angle": 3.141592653589793,
+                    "sensitivity": 30.0
                 },
                 {
-                    "type": "Flagella",
-                    "angle": 3.141592653589793,
-                    "length": 10.0
+                    "type": "Membrane",
+                    "angle": 0,
+                    "integrity": 100.0,
+                    "wall": 0.0,
+                    "outer": 0.0,
+                    "capsule": 0.0,
+                    "efflux": 0.0,
+                    "repair": 0.0
                 },
                 {
                     "type": "Chemoreceptor",
                     "angle": 0.0,
-                    "length": 6.0
+                    "length": 5.0
+                },
+                {
+                    "type": "Flagella",
+                    "angle": 2.763825995649972,
+                    "length": 7.0
+                },
+                {
+                    "type": "Flagella",
+                    "angle": 3.490658503988659,
+                    "length": 7.0
                 }
             ]
         },
         "optropi_3": {
             "name": "Orange",
-            "cytoplasm": 2.0,
+            "cytoplasm": 1.0,
             "flagella": 3.0,
             "cilia": 10.0,
             "vision_range": 25.0,
@@ -366,26 +402,14 @@
             "vacuole_area": 5.0,
             "organs": [
                 {
-                    "type": "Membrane",
-                    "angle": 0,
-                    "integrity": 100.0,
-                    "wall": 0.0,
-                    "outer": 0.0,
-                    "capsule": 0.0,
-                    "efflux": 0.0,
-                    "repair": 0.0,
-                    "slip": 0.0,
-                    "mucus": 0.0,
-                    "slayer": 0.0,
-                    "var_mucus": false,
-                    "var_capsule": false,
-                    "var_slayer": false,
-                    "var_wall": false
-                },
-                {
                     "type": "Cytoplasm",
                     "angle": 0,
-                    "size": 2.0
+                    "size": 1.0
+                },
+                {
+                    "type": "Ribosome",
+                    "angle": 0,
+                    "time": 10.0
                 },
                 {
                     "type": "Cytoskeleton",
@@ -397,18 +421,67 @@
                     "size": 1.0
                 },
                 {
-                    "type": "Ribosome",
-                    "angle": 0
+                    "type": "Photoreceptor",
+                    "angle": -0.7621465405869854,
+                    "range": 30.0,
+                    "angle_val": 0.08726646259971647
                 },
                 {
-                    "type": "Flagella",
-                    "angle": 3.141592653589793,
+                    "type": "Mechanoreceptor",
+                    "angle": 0.36120375549368167,
+                    "sensitivity": 20.0
+                },
+                {
+                    "type": "Mechanoreceptor",
+                    "angle": -0.3759609538713056,
+                    "sensitivity": 20.0
+                },
+                {
+                    "type": "Cilia",
+                    "angle": -2.289626326416521,
                     "length": 10.0
                 },
                 {
                     "type": "Chemoreceptor",
+                    "angle": 3.141592653589793,
+                    "length": 5.0
+                },
+                {
+                    "type": "Membrane",
+                    "angle": 0,
+                    "integrity": 100.0,
+                    "wall": 0.0,
+                    "outer": 0.0,
+                    "capsule": 0.0,
+                    "efflux": 0.0,
+                    "repair": 0.0
+                },
+                {
+                    "type": "Photoreceptor",
+                    "angle": 0.7345944593392266,
+                    "range": 30.0,
+                    "angle_val": 0.08726646259971647
+                },
+                {
+                    "type": "Photoreceptor",
                     "angle": 0.0,
-                    "length": 6.0
+                    "range": 30.0,
+                    "angle_val": 0.08726646259971647
+                },
+                {
+                    "type": "Flagella",
+                    "angle": -1.5707963267948966,
+                    "length": 20.0
+                },
+                {
+                    "type": "Flagella",
+                    "angle": 1.5707963267948966,
+                    "length": 20.0
+                },
+                {
+                    "type": "Cilia",
+                    "angle": 2.2178435200152196,
+                    "length": 10.0
                 }
             ]
         },
@@ -426,26 +499,14 @@
             "vacuole_area": 40.0,
             "organs": [
                 {
-                    "type": "Membrane",
-                    "angle": 0,
-                    "integrity": 100.0,
-                    "wall": 0.0,
-                    "outer": 0.0,
-                    "capsule": 0.0,
-                    "efflux": 0.0,
-                    "repair": 0.0,
-                    "slip": 0.0,
-                    "mucus": 0.0,
-                    "slayer": 0.0,
-                    "var_mucus": false,
-                    "var_capsule": false,
-                    "var_slayer": false,
-                    "var_wall": false
-                },
-                {
                     "type": "Cytoplasm",
                     "angle": 0,
-                    "size": 2.0
+                    "size": 3.0
+                },
+                {
+                    "type": "Ribosome",
+                    "angle": 0,
+                    "time": 10.0
                 },
                 {
                     "type": "Cytoskeleton",
@@ -457,24 +518,65 @@
                     "size": 1.0
                 },
                 {
-                    "type": "Ribosome",
-                    "angle": 0
+                    "type": "Mechanoreceptor",
+                    "angle": 0.7853981633974483,
+                    "sensitivity": 40.0
+                },
+                {
+                    "type": "Mechanoreceptor",
+                    "angle": -0.7853981633974483,
+                    "sensitivity": 40.0
                 },
                 {
                     "type": "Flagella",
                     "angle": 3.141592653589793,
-                    "length": 10.0
+                    "length": 15.0
+                },
+                {
+                    "type": "Cilia",
+                    "angle": 1.2217304763960306,
+                    "length": 2.0
+                },
+                {
+                    "type": "Cilia",
+                    "angle": -1.2217304763960306,
+                    "length": 2.0
                 },
                 {
                     "type": "Chemoreceptor",
-                    "angle": 0.0,
-                    "length": 6.0
+                    "angle": 2.443460952792061,
+                    "length": 5.0
+                },
+                {
+                    "type": "Chemoreceptor",
+                    "angle": -2.443460952792061,
+                    "length": 5.0
+                },
+                {
+                    "type": "Stylet",
+                    "angle": 0.4363323129985824,
+                    "power": 2.0
+                },
+                {
+                    "type": "Membrane",
+                    "angle": 0,
+                    "integrity": 100.0,
+                    "wall": 0.0,
+                    "outer": 0.0,
+                    "capsule": 0.0,
+                    "efflux": 0.0,
+                    "repair": 0.0
+                },
+                {
+                    "type": "Stylet",
+                    "angle": 0.01986493625116497,
+                    "power": 1.0
                 }
             ]
         },
         "notropi": {
             "name": "Hunter",
-            "cytoplasm": 2.0,
+            "cytoplasm": 0.85,
             "flagella": 5.0,
             "cilia": 1.0,
             "vision_range": 15.0,
@@ -486,26 +588,14 @@
             "vacuole_area": 20.0,
             "organs": [
                 {
-                    "type": "Membrane",
-                    "angle": 0,
-                    "integrity": 100.0,
-                    "wall": 0.0,
-                    "outer": 0.0,
-                    "capsule": 0.0,
-                    "efflux": 0.0,
-                    "repair": 0.0,
-                    "slip": 0.0,
-                    "mucus": 0.0,
-                    "slayer": 0.0,
-                    "var_mucus": false,
-                    "var_capsule": false,
-                    "var_slayer": false,
-                    "var_wall": false
-                },
-                {
                     "type": "Cytoplasm",
                     "angle": 0,
-                    "size": 2.0
+                    "size": 0.85
+                },
+                {
+                    "type": "Ribosome",
+                    "angle": 0,
+                    "time": 10.0
                 },
                 {
                     "type": "Cytoskeleton",
@@ -514,21 +604,68 @@
                 {
                     "type": "Vacuole",
                     "angle": 0,
-                    "size": 1.0
+                    "size": 0.5
                 },
                 {
-                    "type": "Ribosome",
-                    "angle": 0
+                    "type": "Photoreceptor",
+                    "angle": 0,
+                    "range": 15.0,
+                    "angle_val": 0.17453292519943295
+                },
+                {
+                    "type": "Mechanoreceptor",
+                    "angle": 0.7853981633974483,
+                    "sensitivity": 10.0
+                },
+                {
+                    "type": "Mechanoreceptor",
+                    "angle": -0.7853981633974483,
+                    "sensitivity": 10.0
                 },
                 {
                     "type": "Flagella",
                     "angle": 3.141592653589793,
-                    "length": 10.0
+                    "length": 5.0
+                },
+                {
+                    "type": "Cilia",
+                    "angle": 1.0471975511965976,
+                    "length": 1.0
+                },
+                {
+                    "type": "Cilia",
+                    "angle": 2.0943951023931953,
+                    "length": 1.0
+                },
+                {
+                    "type": "Cilia",
+                    "angle": -1.0471975511965976,
+                    "length": 1.0
+                },
+                {
+                    "type": "Cilia",
+                    "angle": -2.0943951023931953,
+                    "length": 1.0
                 },
                 {
                     "type": "Chemoreceptor",
-                    "angle": 0.0,
-                    "length": 6.0
+                    "angle": 2.356194490192345,
+                    "length": 5.0
+                },
+                {
+                    "type": "Chemoreceptor",
+                    "angle": -2.356194490192345,
+                    "length": 5.0
+                },
+                {
+                    "type": "Membrane",
+                    "angle": 0,
+                    "integrity": 100.0,
+                    "wall": 0.0,
+                    "outer": 0.0,
+                    "capsule": 0.0,
+                    "efflux": 0.0,
+                    "repair": 0.0
                 }
             ]
         }

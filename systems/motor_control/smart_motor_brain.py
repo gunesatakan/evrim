@@ -194,6 +194,10 @@ class SmartMotorBrain:
         - Güç proportional: büyük açıda hızlı dön, küçülünce yavaşla (overshoot önleme)
         """
         self.current_mode = f"TURN {'LEFT' if turn_direction > 0 else 'RIGHT'}"
+        # Talep SAKLANIR: eskiden yerel degiskendi ve her kare atiliyordu,
+        # bu yuzden cizim tarafi "ne kadar donmek istiyoruz" bilgisine
+        # hic ulasamiyordu.
+        self.turn_demand = turn_direction
 
         optimal_front = getattr(organism, 'optimal_front_angle', 0.0)
 
@@ -205,28 +209,15 @@ class SmartMotorBrain:
 
         for organ in organism.organs:
             if isinstance(organ, Flagella):
-                # ── İleri deflection (reaction → optimal_front) ──
-                forward_needed = self._normalize_angle(
-                    organ.attachment_angle + math.pi - optimal_front)
-                forward_defl = max(-1.0, min(1.0,
-                    forward_needed / organ.logic.max_deflection))
-
-                # ── Tork deflection (thrust → a - turn_dir*π/2) ──
-                # Perpendicular itme → maksimum tork
-                # Tork = -sin(θ - a), pozitif tork için sin < 0 gerekir
-                # turn_direction=+1 (LEFT): θ = a - π/2 → sin(-π/2) = -1 → tork = +mag*r ✓
-                # turn_direction=-1 (RIGHT): θ = a + π/2 → sin(+π/2) = +1 → tork = -mag*r ✓
-                torque_thrust = organ.attachment_angle - turn_direction * math.pi / 2
-                torque_needed = self._normalize_angle(
-                    organ.logic.base_thrust_angle - torque_thrust)
-                torque_defl = max(-1.0, min(1.0,
-                    torque_needed / organ.logic.max_deflection))
-
-                # Karışım: küçük açıda ileri ağırlıklı, büyük açıda tork ağırlıklı
-                blended_defl = forward_defl * (1.0 - torque_blend) + \
-                               torque_defl * torque_blend
-                blended_defl = max(-1.0, min(1.0, blended_defl))
-                organ.logic.set_deflection(blended_defl)
+                # HER KAMCI KENDI HESABINI YAPAR, ISARET ORTAKTIR.
+                #
+                # Eski kod iki terimi karistiriyordu; ama tork terimi
+                # cebirsel olarak her kamci icin AYNI +-1.0'a sadelesiyordu
+                # (baglanma acisi sadelesir, 90/45 = 2 doyar). Yani buyuk
+                # aci = herkese ayni sabit poz, kucuk aci = herkes kendi
+                # yonune, torkler birbirini iptal.
+                organ.logic.set_deflection(self._kamci_sapmasi(
+                    organ, optimal_front, turn_direction * torque_blend))
 
                 # Güç: tork üretmek için kuvvet lazım, düşürme
                 organ.logic.set_power(max(0.4, 1.0 - torque_blend * 0.3))
@@ -287,7 +278,10 @@ class SmartMotorBrain:
         for organ in organism.organs:
             if isinstance(organ, Flagella):
                 # Flagella'yı hedefe yönlendir (deflection yapabilir)
-                self._set_flagella_for_direction(organ, target_local)
+                organ.logic.set_deflection(self._kamci_sapmasi(
+                    organ, target_local,
+                    turn_direction * min(1.0, angle_magnitude /
+                                         self.turn_threshold) * 0.45))
                 organ.logic.set_power(0.9)  # Neredeyse tam güç
             elif isinstance(organ, Cilia):
                 # Cilia: optimal_front yönüne katkı sağlayan teğet yön
@@ -354,6 +348,37 @@ class SmartMotorBrain:
             best_direction = tangent_minus
 
         cilia.logic.set_base_direction(best_direction)
+
+    def _kamci_sapmasi(self, flagella, target_angle, donus_talebi=0.0):
+        """Bir kamcinin KENDI sapmasi: hedefe it, ama torku bozma.
+
+        Her kamci kendi baglanma acisindan yola cikarak hedefe en cok
+        katki veren sapmayi bulur (bu zaten vardi). EKSIK OLAN sey su:
+        tork = R * F * sin(sapma) - yani torkun ISARETI dogrudan sapmanin
+        isaretidir ve baglanma acisi bu ifadede SADELESIR. Dolayisiyla
+        farkli noktalardaki kamcilar "hedefe bak" dedigi icin zit isaretli
+        sapmalar secebiliyor ve birbirlerinin torkunu iptal ediyorlardi.
+
+        Olculdu: 180/90/300 derecede uc kamci, tam sapmada +63.6 / -63.6 /
+        -5.6 tork uretiyordu - ikisi tam gucte birbirini kilitliyordu.
+
+        Cozum: donus talebi varken sapma o isaretin YARI ARALIGINA
+        kisitlanir. Kamci yine kendi hesabini yapar (hangi buyukluk
+        hedefe en cok katki verir), ama hicbiri donusun tersine tork
+        uretemez. Talep yoksa (duz gidis) eski davranis aynen kalir.
+        """
+        attachment = flagella.attachment_angle
+        max_deflection = flagella.logic.max_deflection
+        gerekli = self._normalize_angle(attachment + math.pi - target_angle)
+        d = max(-1.0, min(1.0, gerekli / max_deflection))
+        if donus_talebi:
+            s = 1.0 if donus_talebi > 0 else -1.0
+            # Kendi cozumunu koru ama yalnizca dogru yarim duzlemde;
+            # talep buyudukce doyuma dogru cekilir.
+            d = max(0.0, d * s) * s
+            d = d * (1.0 - abs(donus_talebi)) + s * abs(donus_talebi)
+            d = max(-1.0, min(1.0, d))
+        return d
 
     def _set_flagella_for_direction(self, flagella, target_angle):
         """

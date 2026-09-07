@@ -8,6 +8,11 @@ class RibosomeLogic:
         self.production_timer = 0.0
         self.queue = []
 
+    @property
+    def base_energy_cost(self):
+        """Uretim hizi = ribozom sayisi; maliyet 1/sure ile orantili."""
+        return game_settings.COST_RIBOSOME / max(0.001, self.base_production_time)
+
     def add_task(self, resource):
         self.queue.append(resource)
 

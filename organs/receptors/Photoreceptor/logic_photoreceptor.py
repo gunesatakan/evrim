@@ -15,6 +15,11 @@ class PhotoreceptorLogic:
         angle_deg = math.degrees(self.angle)
         self.neon_level = min(1.0, max(0.0, (angle_deg - 10) / 90.0))
 
+    @property
+    def base_energy_cost(self):
+        """Taranan gorme alaniyla orantili."""
+        return self.range * self.angle * game_settings.COST_PHOTORECEPTOR
+
     def update_stats(self, delta_range=0, delta_angle=0):
         self.range += delta_range
         self.angle += delta_angle

@@ -1,3 +1,4 @@
+import game_settings
 from .mechano_danger import MechanoDanger
 
 class MechanoreceptorLogic:
@@ -8,6 +9,10 @@ class MechanoreceptorLogic:
     @property
     def sensitivity(self):
         return self.size * 30
+
+    @property
+    def base_energy_cost(self):
+        return self.sensitivity * game_settings.COST_MECHANORECEPTOR
 
     def update_stats(self, delta_size=0):
         self.size += delta_size

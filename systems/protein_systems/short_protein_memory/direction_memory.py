@@ -1,16 +1,20 @@
-import time
 import pygame
 
 class MemoryProtein:
     def __init__(self, key, data, stability=5.0):
         self.key = key
         self.data = data # (start, end)
-        self.creation_time = time.time()
+        # Yaş SİMÜLASYON zamanıyla ilerler (update(dt) ile), duvar saatiyle
+        # değil. Eskiden time.time() kullanılıyordu; bu, hafızanın ömrünü
+        # bilgisayarın hızına bağlıyordu: oyun kasınca 5 saniyelik hafıza
+        # birkaç kare, hızlı çalışınca yüzlerce kare yaşıyordu. Aynı sebeple
+        # simülasyon tekrarlanabilir değildi.
+        self.age = 0.0
         self.stability = stability
 
     @property
     def is_degraded(self):
-        return (time.time() - self.creation_time) > self.stability
+        return self.age > self.stability
 
 class DirectionMemorySystem:
     def __init__(self, capacity=10):
@@ -36,10 +40,18 @@ class DirectionMemorySystem:
         if key in self.proteins:
             del self.proteins[key]
 
-    def update(self):
+    def update(self, dt=0.0):
+        """Hafızayı dt kadar yaşlandır ve bozulanları sil.
+
+        dt verilmezse yalnızca temizlik yapılır (yaşlandırma olmaz); bu,
+        aynı karede birden fazla çağrının zamanı iki kez ilerletmesini önler.
+        """
         current_keys = list(self.proteins.keys())
         for key in current_keys:
-            if self.proteins[key].is_degraded:
+            p = self.proteins[key]
+            if dt:
+                p.age += dt
+            if p.is_degraded:
                 del self.proteins[key]
     
     @property

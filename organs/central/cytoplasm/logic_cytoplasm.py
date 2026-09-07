@@ -3,7 +3,10 @@ from systems.protein_systems.enzymes.digestion_enzymes.digestion_enzymes import 
 import game_settings
 
 class CytoplasmLogic:
-    def __init__(self, size=1.0):
+    # Baslangic boyutu 2.0: size 1.0'da govde alani 314 px^2 ve bu,
+    # birkac organ takilinca `can_fit_food` icin yetmiyor - hucre
+    # hicbir besin alamiyordu (bkz. Doluluk gostergesi).
+    def __init__(self, size=2.0):
         self.size = size
         self.enzyme = DigestionEnzymes()
         self.food_queue = []
@@ -11,7 +14,11 @@ class CytoplasmLogic:
 
     @property
     def radius(self):
-        return self.size * 10 
+        # Kuresel olcek burada UYGULANMAZ: organs/registry.olcekle zaten
+        # `size` alanini carpiyor ve add_organ tek gecis noktasi. Ikisini
+        # birden yapinca olcek KARESIYLE giriyordu - olcek 30'da yaricap
+        # 300 yerine 9000 cikti.
+        return self.size * 10
 
     @property
     def total_area(self):
@@ -23,6 +30,17 @@ class CytoplasmLogic:
         if self.enzyme.current_food:
             count += 1
         return count * self.FOOD_AREA
+
+    @property
+    def base_energy_cost(self):
+        """Govde bakimi (alanla, yani boyutun karesiyle) + enzim uretimi.
+
+        Enzim maliyeti sindirim HIZIYLA orantilidir: sure kisaldikca daha
+        cok enzim tutmak gerekir, yani 1/sure.
+        """
+        body = (self.size ** 2) * game_settings.COST_CYTOPLASM
+        enzyme = game_settings.COST_DIGESTION / max(0.001, self.enzyme.base_digestion_time)
+        return body + enzyme
 
     def can_fit_food(self, total_organ_area):
         return (self.current_food_load + total_organ_area + self.FOOD_AREA) <= self.total_area
