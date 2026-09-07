@@ -782,6 +782,8 @@ def main(food_count=None, kaotropi_count=None):
     diag_file.write(f"Optropi sayısı: 4, Interval: {DIAG_INTERVAL}s\n")
 
     running = True
+    # Yakinlastirma katmani bir kez ayrilir, her karede degil.
+    _kat_yuzey = None
     birikim = 0.0     # sabit adim icin biriken gercek sure
     while running:
         real_dt = clock.tick(FPS) / 1000.0    # gercek gecen sure (cizim icin)
@@ -871,15 +873,40 @@ def main(food_count=None, kaotropi_count=None):
             if inspector.show_heatmap:
                 scent_env.draw_debug(screen)
         else:
+            # YALNIZCA GORUNEN BOLGE OLCEKLENIR.
+            #
+            # Once BUTUN DUNYA zoom oraniyla buyutulmus bir yuzeye
+            # olcekleniyordu: `smoothscale(kat, (WIDTH*z, HEIGHT*z))`.
+            # Arena 2400x1600 oldugu icin z=8'de bu 19200x12800 = 245
+            # milyon piksel, yani kare basina ~1 GB'lik bir yuzey ayirip
+            # olceklemek demekti. Olcum denemesi pygame'i SEGMENTATION
+            # FAULT ile dusurdu. Ustelik ara yuzey de her karede sifirdan
+            # ayriliyordu (15 MB).
+            #
+            # Ekranda zaten dunyanin yalnizca 1/z'lik bir parcasi
+            # goruluyor. O parcayi kesip ekran boyuna olceklemek, zoom ne
+            # olursa olsun SABIT maliyettir.
             _dz = kamera["z"]
-            _kat = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-            trail_manager.draw(_kat)
-            if inspector.show_heatmap:
-                scent_env.draw_debug(_kat)
-            _bk = pygame.transform.smoothscale(
-                _kat, (int(WIDTH * _dz), int(HEIGHT * _dz)))
-            screen.blit(_bk, (WIDTH * 0.5 - kamera["cx"] * _dz,
-                              HEIGHT * 0.5 - kamera["cy"] * _dz))
+            if _kat_yuzey is None:
+                _kat_yuzey = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+            _gw, _gh = WIDTH / _dz, HEIGHT / _dz
+            _src = pygame.Rect(int(kamera["cx"] - _gw * 0.5) - 2,
+                               int(kamera["cy"] - _gh * 0.5) - 2,
+                               int(_gw) + 4, int(_gh) + 4
+                               ).clip(_kat_yuzey.get_rect())
+            if _src.w > 1 and _src.h > 1:
+                _kat_yuzey.fill((0, 0, 0, 0), _src)
+                _kat_yuzey.set_clip(_src)
+                trail_manager.draw(_kat_yuzey, _src)
+                if inspector.show_heatmap:
+                    scent_env.draw_debug(_kat_yuzey)
+                _kat_yuzey.set_clip(None)
+                _bk = pygame.transform.smoothscale(
+                    _kat_yuzey.subsurface(_src),
+                    (max(1, int(_src.w * _dz)), max(1, int(_src.h * _dz))))
+                screen.blit(_bk,
+                            (WIDTH * 0.5 + (_src.x - kamera["cx"]) * _dz,
+                             HEIGHT * 0.5 + (_src.y - kamera["cy"]) * _dz))
 
         # 1. Memory lines (Background)
         # Memory is now drawn inside o.draw(), but since it's the bottom layer,

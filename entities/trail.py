@@ -166,10 +166,27 @@ class TrailManager:
                     out.extend(bucket)
         return out
 
-    def draw(self, screen):
+    def draw(self, screen, bolge=None):
+        """Izleri ciz. `bolge` verilirse yalnizca oradakiler.
+
+        Kirpma (set_clip) ekrana yazmayi engeller ama Python dongusu yine
+        butun noktalari dolasir - 6000 nokta demek kare basina 6000 bosa
+        yineleme demek. Uzamsal izgara zaten var; yakinlastirilmis karede
+        yalnizca gorunen kutulari sormak yeter.
+        """
         cache = self._stamp_cache
         blit = screen.blit
-        for p in self.points:
+        if bolge is not None:
+            c = self.CELL
+            noktalar = []
+            for cy in range(int(bolge.top // c), int(bolge.bottom // c) + 1):
+                for cx in range(int(bolge.left // c), int(bolge.right // c) + 1):
+                    b = self._grid.get((cx, cy))
+                    if b:
+                        noktalar.extend(b)
+        else:
+            noktalar = self.points
+        for p in noktalar:
             intensity_ratio = p.current_intensity / p.max_intensity
             if intensity_ratio <= 0: continue
 
