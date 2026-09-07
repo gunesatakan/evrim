@@ -405,7 +405,16 @@ class ModernLauncher:
 
         self.state = "DASHBOARD"
         self.sidebar_width = 220
-        self.tabs = ["DASHBOARD", "ENTITIES", "SETTINGS"]
+        self.tabs = ["DASHBOARD", "ENTITIES", "HARITA", "SETTINGS"]
+
+        # --- HARITA DUZENLEYICI ---
+        # Yamalar DUNYA koordinatlarinda saklanir: [x, y, adet, yaricap].
+        self.harita_yamalar = [list(y) for y in
+                               getattr(game_settings, 'HARITA_YAMALARI', [])]
+        self.harita_adet = 26          # firca: bir yamaya kac besin
+        self.harita_yaricap = 45.0     # firca: yamanin dagilma yaricapi
+        self.harita_siliyor = False    # sag tik / silgi kipi
+        self.harita_suruklu = False
 
         self.scroll_y = 0
         self.max_scroll = 0
@@ -882,6 +891,8 @@ class ModernLauncher:
         # ENTITIES sekmesinden ayrılırken organ düzenini kalıcılaştır
         if self.state == "ENTITIES" and state != "ENTITIES":
             self.save_all_organ_configs()
+        if self.state == "HARITA" and state != "HARITA":
+            self.harita_kaydet()
         self.state = state
         self.setup_ui()
 
@@ -895,6 +906,213 @@ class ModernLauncher:
             color = ACCENT_COLOR if tab == self.state else (WHITE if rect.collidepoint(pygame.mouse.get_pos()) else GRAY)
             if tab == self.state: pygame.draw.rect(self.screen, ACCENT_COLOR, (0, y, 5, 50))
             self.screen.blit(self.font_main.render(tab, True, color), (30, y + 12))
+
+    # ================================================================
+    # HARITA DUZENLEYICI
+    #
+    # Besin, dunyanin belli yerlerinde OBEKLER halinde bulunur ve nerede
+    # oldugu ekolojinin en belirleyici parametresidir: yamalarin sayisi ve
+    # araligi, koklamanin ise yarayip yaramayacagini, populasyonun kurulup
+    # kurulamayacagini, hatta avlanmanin baslayip baslamayacagini belirler.
+    # Bunu rastgeleye birakmak yerine elle kurabilmek gerekiyordu.
+    #
+    # Cizilen duzen KALICIDIR: hem baslangic besini hem de sonradan dogan
+    # besin yalnizca bu yamalarda olusur (bkz. Dunya.besin_yamasi).
+    # ================================================================
+
+    def _harita_tuval(self):
+        """Tuvalin ekrandaki dikdortgeni ve dunya -> ekran olcegi."""
+        from entities.entity import WIDTH as DW, HEIGHT as DH
+        x0 = self.sidebar_width + 30
+        y0 = 150
+        gen = self.screen_width - x0 - 40
+        yuk = self.screen_height - y0 - 40
+        k = min(gen / DW, yuk / DH)
+        return pygame.Rect(x0, y0, int(DW * k), int(DH * k)), k, DW, DH
+
+    def _harita_dunyaya(self, ekran_pos):
+        r, k, DW, DH = self._harita_tuval()
+        return ((ekran_pos[0] - r.x) / k, (ekran_pos[1] - r.y) / k)
+
+    def harita_dugmeleri(self):
+        """[(dikdortgen, etiket, eylem)] - ust seritteki dugmeler."""
+        y = 100
+        x = self.sidebar_width + 30
+        out = []
+        for etiket, eylem, gen in (
+                ("- ADET", "adet-", 90), ("+ ADET", "adet+", 90),
+                ("- YARICAP", "yari-", 110), ("+ YARICAP", "yari+", 110),
+                ("SILGI", "silgi", 90), ("TEMIZLE", "temizle", 110),
+                ("RASTGELE", "rastgele", 120)):
+            out.append((pygame.Rect(x, y, gen, 34), etiket, eylem))
+            x += gen + 8
+        return out
+
+    def draw_harita(self):
+        r, k, DW, DH = self._harita_tuval()
+        sx = self.sidebar_width + 30
+
+        self.screen.blit(self.font_title.render("HARITA", True, ACCENT_COLOR),
+                         (sx, 35))
+        toplam = sum(int(y[2]) for y in self.harita_yamalar)
+        bilgi = ("%d yama - %d besin   |   sol tik: koy, sag tik: sil, surukle: boya"
+                 % (len(self.harita_yamalar), toplam))
+        self.screen.blit(self.font_small.render(bilgi, True, TEXT_COLOR), (sx, 78))
+
+        # dugmeler
+        fare = pygame.mouse.get_pos()
+        for rect, etiket, eylem in self.harita_dugmeleri():
+            secili = (eylem == "silgi" and self.harita_siliyor)
+            renk = (DANGER if eylem in ("temizle",) else
+                    (SUCCESS if secili else
+                     (WHITE if rect.collidepoint(fare) else GRAY)))
+            pygame.draw.rect(self.screen, renk, rect, 2 if not secili else 0)
+            t = self.font_small.render(etiket, True,
+                                       BG_COLOR if secili else renk)
+            self.screen.blit(t, t.get_rect(center=rect.center))
+        # Firca degerleri dugme seridinin SAGINA yazilir; onceden dugmelerin
+        # ustune biniyordu.
+        d = self.font_small.render("firca: %d besin / %.0f px"
+                                   % (self.harita_adet, self.harita_yaricap),
+                                   True, ACCENT_COLOR)
+        _son = self.harita_dugmeleri()[-1][0]
+        self.screen.blit(d, (min(_son.right + 16,
+                                 self.screen_width - d.get_width() - 20), 108))
+
+        # tuval
+        pygame.draw.rect(self.screen, (10, 14, 20), r)
+        pygame.draw.rect(self.screen, SIDEBAR_COLOR, r, 2)
+        # dunya izgarasi (dortte bir cizgileri)
+        for i in (1, 2, 3):
+            pygame.draw.line(self.screen, (26, 32, 42),
+                             (r.x + r.w * i / 4, r.y),
+                             (r.x + r.w * i / 4, r.y + r.h))
+            pygame.draw.line(self.screen, (26, 32, 42),
+                             (r.x, r.y + r.h * i / 4),
+                             (r.x + r.w, r.y + r.h * i / 4))
+
+        # yamalar
+        for wx, wy, adet, yari in self.harita_yamalar:
+            px = int(r.x + wx * k)
+            py = int(r.y + wy * k)
+            pr = max(3, int(yari * k))
+            hale = pygame.Surface((pr * 4, pr * 4), pygame.SRCALPHA)
+            pygame.draw.circle(hale, (60, 220, 120, 40), (pr * 2, pr * 2), pr * 2)
+            pygame.draw.circle(hale, (80, 240, 140, 70), (pr * 2, pr * 2), pr)
+            self.screen.blit(hale, (px - pr * 2, py - pr * 2))
+            # besin sayisini nokta yogunlugu olarak goster
+            n = min(40, int(adet))
+            rnd = __import__("random").Random(int(wx) * 7919 + int(wy))
+            for _ in range(n):
+                ax = px + rnd.gauss(0, pr * 0.6)
+                ay = py + rnd.gauss(0, pr * 0.6)
+                pygame.draw.circle(self.screen, (90, 235, 130),
+                                   (int(ax), int(ay)), 1)
+            self.screen.blit(self.font_tiny.render(str(int(adet)), True,
+                                                   (150, 245, 190)),
+                             (px + pr + 3, py - 7))
+
+        # firca onizlemesi
+        if r.collidepoint(fare):
+            pr = max(3, int(self.harita_yaricap * k))
+            pygame.draw.circle(self.screen,
+                               DANGER if self.harita_siliyor else ACCENT_COLOR,
+                               fare, pr, 1)
+
+        alt = self.font_tiny.render(
+            "Dunya %dx%d px - cizilen duzen KALICI: sonradan dogan besin de "
+            "yalnizca bu yamalarda olusur. Bos birakilirsa besin rastgele doğar."
+            % (DW, DH), True, GRAY)
+        self.screen.blit(alt, (sx, r.y + r.h + 12))
+
+    def handle_harita_events(self, event, m_pos):
+        r, k, DW, DH = self._harita_tuval()
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            for rect, _etiket, eylem in self.harita_dugmeleri():
+                if rect.collidepoint(m_pos):
+                    if eylem == "adet-":
+                        self.harita_adet = max(1, self.harita_adet - 5)
+                    elif eylem == "adet+":
+                        self.harita_adet = min(200, self.harita_adet + 5)
+                    elif eylem == "yari-":
+                        self.harita_yaricap = max(10.0, self.harita_yaricap - 10)
+                    elif eylem == "yari+":
+                        self.harita_yaricap = min(400.0, self.harita_yaricap + 10)
+                    elif eylem == "silgi":
+                        self.harita_siliyor = not self.harita_siliyor
+                    elif eylem == "temizle":
+                        self.harita_yamalar = []
+                    elif eylem == "rastgele":
+                        self._harita_rastgele()
+                    self.harita_kaydet()
+                    return True
+            if r.collidepoint(m_pos):
+                self.harita_suruklu = True
+                self._harita_bas(m_pos, event.button)
+                # Her tikta kaydedilir. Once yalnizca fare BIRAKILDIGINDA
+                # kaydediliyordu; tek tikla konan bir yama, pencere baska
+                # bir yoldan kapanirsa kayboluyordu.
+                self.harita_kaydet()
+                return True
+        elif event.type == pygame.MOUSEBUTTONUP:
+            if self.harita_suruklu:
+                self.harita_suruklu = False
+                self.harita_kaydet()
+        elif event.type == pygame.MOUSEMOTION and self.harita_suruklu:
+            if r.collidepoint(m_pos):
+                dugmeler = pygame.mouse.get_pressed()
+                self._harita_bas(m_pos, 3 if dugmeler[2] else 1, surukleme=True)
+            return True
+        return False
+
+    def _harita_bas(self, m_pos, dugme, surukleme=False):
+        wx, wy = self._harita_dunyaya(m_pos)
+        sil = (dugme == 3) or self.harita_siliyor
+        if sil:
+            # En yakin yamayi kaldir (fircanin icindeyse)
+            for i, (x, y, _a, yari) in enumerate(self.harita_yamalar):
+                if (x - wx) ** 2 + (y - wy) ** 2 <= (yari + 10) ** 2:
+                    del self.harita_yamalar[i]
+                    return
+            return
+        # Suruklerken ust uste yigilmasin: fircanin yarisi kadar mesafe sart
+        if surukleme:
+            for x, y, _a, _r in self.harita_yamalar:
+                if (x - wx) ** 2 + (y - wy) ** 2 < (self.harita_yaricap) ** 2:
+                    return
+        self.harita_yamalar.append([round(wx, 1), round(wy, 1),
+                                    int(self.harita_adet),
+                                    float(self.harita_yaricap)])
+
+    def _harita_rastgele(self):
+        """FOOD_MAX kadar besini rastgele yamalara dagit (eski davranis)."""
+        import random as _r
+        from entities.entity import WIDTH as DW, HEIGHT as DH
+        self.harita_yamalar = []
+        kalan = int(game_settings.FOOD_MAX)
+        adet = max(1, int(game_settings.FOOD_PATCH_SIZE))
+        while kalan > 0:
+            n = min(adet, kalan)
+            self.harita_yamalar.append([
+                round(_r.uniform(80, DW - 80), 1),
+                round(_r.uniform(80, DH - 80), 1),
+                n, float(game_settings.FOOD_PATCH_SIGMA)])
+            kalan -= n
+
+    def harita_kaydet(self):
+        """Yamalari settings.json'a yaz.
+
+        Toplam besin sayisi FOOD_MAX'i asarsa tavan da yukseltilir; aksi
+        halde kullanicinin koydugu besinin bir kismi hic olusmaz ve
+        "koydum ama gorunmuyor" durumu ortaya cikar.
+        """
+        game_settings.HARITA_YAMALARI = [list(y) for y in self.harita_yamalar]
+        toplam = sum(int(y[2]) for y in self.harita_yamalar)
+        if toplam > int(game_settings.FOOD_MAX):
+            game_settings.FOOD_MAX = toplam
+        if toplam:
+            game_settings.FOOD_COUNT = toplam
+        game_settings.save_all()
 
     def draw_dashboard(self):
         rect = pygame.Rect(self.sidebar_width + 100, self.screen_height//2 - 40, 400, 80)
@@ -2452,6 +2670,8 @@ class ModernLauncher:
                     # düğmesinde kaydediliyordu; pencereyi kapatan kullanıcı
                     # tüm düzenlemesini kaybediyordu.
                     self.save_all_organ_configs()
+                    if self.state == "HARITA":
+                        self.harita_kaydet()
                     sys.exit()
                 if event.type == pygame.MOUSEWHEEL and self.state == "SETTINGS":
                     self.scroll_y = min(0, max(self.max_scroll, self.scroll_y + event.y * 30))
@@ -2472,6 +2692,8 @@ class ModernLauncher:
                     # tuketirse deger kutularina gitmesin
                     if not self.handle_settings_events(event, m_pos):
                         for el in self.ui_elements: el.handle_event(event, self.scroll_y)
+                elif self.state == "HARITA":
+                    self.handle_harita_events(event, m_pos)
                 elif self.state == "ENTITIES":
                     self.handle_entity_list_events(event, m_pos)
                     if self.entity_popup_open:
@@ -2481,6 +2703,7 @@ class ModernLauncher:
             self.draw_sidebar()
             if self.state == "DASHBOARD": self.draw_dashboard()
             elif self.state == "SETTINGS": self.draw_settings()
+            elif self.state == "HARITA": self.draw_harita()
             elif self.state == "ENTITIES": self.draw_entities()
             pygame.display.flip()
             self.clock.tick(60)

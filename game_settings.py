@@ -439,7 +439,13 @@ DEFAULT_SETTINGS = {
     # Bir yamayi bulmak beceri ister ve bulan cok kazanir - kemotaksinin
     # secilim baskisi bundan dogar.
     "FOOD_PATCH_SIZE": 26,       # bir yamadaki besin sayisi
-    "FOOD_PATCH_SIGMA": 45.0,    # yamanin yaricapi (px, gauss)
+    "FOOD_PATCH_SIGMA": 45.0,
+    # ELDE CIZILMIS HARITA: [[x, y, adet, yaricap], ...] dunya
+    # koordinatlarinda. Bos ise besin rastgele yerlerde doğar (eski
+    # davranis). Doluysa hem BASLANGIC besini hem de sonradan dogan
+    # besin YALNIZCA bu yamalarda olusur - yani kullanicinin cizdigi
+    # duzen kalici olur, bir dakika icinde yikanip gitmez.
+    "HARITA_YAMALARI": [],    # yamanin yaricapi (px, gauss)
 
     # BESIN YOGUNLUGU KITLIGI BELIRLER.
     #

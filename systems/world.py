@@ -168,9 +168,19 @@ class Dunya:
         # arasinda yapisal fark olmasin.
         self.foods = []
         self._yama_merkezleri = []
-        _yama = max(1, int(game_settings.FOOD_PATCH_SIZE))
-        while len(self.foods) < food_count:
-            self.besin_yamasi(min(_yama, food_count - len(self.foods)))
+        _elde = getattr(game_settings, 'HARITA_YAMALARI', None)
+        if _elde:
+            # Cizilen duzen aynen kurulur; FOOD_COUNT'a bakilmaz cunku
+            # kullanici besinin KAC TANE ve NEREDE olacagini zaten soyledi.
+            for _y in _elde:
+                self.besin_yamasi_konumda(
+                    float(_y[0]), float(_y[1]),
+                    int(_y[2]) if len(_y) > 2 else int(game_settings.FOOD_PATCH_SIZE),
+                    float(_y[3]) if len(_y) > 3 else game_settings.FOOD_PATCH_SIGMA)
+        else:
+            _yama = max(1, int(game_settings.FOOD_PATCH_SIZE))
+            while len(self.foods) < food_count:
+                self.besin_yamasi(min(_yama, food_count - len(self.foods)))
 
         # KURUCULAR BOSLUGA DEGIL, BIR YAMANIN YANINA DOGAR.
         #
@@ -394,7 +404,22 @@ class Dunya:
 
         resolve_overlaps(self.optropis + self.kaotropis)
 
-    def besin_yamasi(self, adet, izgara=None):
+    def besin_yamasi_konumda(self, cx, cy, adet, sigma, izgara=None):
+        """Belirtilen noktaya besin obegi birak (harita duzenleyici icin)."""
+        self._yama_merkezleri.append((cx, cy))
+        if len(self._yama_merkezleri) > 64:
+            del self._yama_merkezleri[0]
+        for _ in range(int(adet)):
+            if len(self.foods) >= game_settings.FOOD_MAX:
+                return
+            for _deneme in range(6):
+                x = min(WIDTH - 15, max(15, random.gauss(cx, sigma)))
+                y = min(HEIGHT - 15, max(15, random.gauss(cy, sigma)))
+                if izgara is None or not izgara.dolu(x, y):
+                    self.foods.append(Food(x, y))
+                    break
+
+    def besin_yamasi(self, adet=None, izgara=None):
         """Rastgele bir noktaya besin OBEGI birak.
 
         Tek tek dagitmak haritayi duzgun bir besin sisiyle kapliyordu ve
@@ -416,9 +441,22 @@ class Dunya:
         Besin ortamda belirir, bir hucrenin sitoplazmasinda degil. Uygun
         yer bulunamazsa o lokma o an olusmaz.
         """
-        sigma = game_settings.FOOD_PATCH_SIGMA
-        cx = random.uniform(60, WIDTH - 60)
-        cy = random.uniform(60, HEIGHT - 60)
+        # ELDE CIZILMIS HARITA VARSA ONA UYULUR.
+        # Kullanicinin koydugu yamalar kalici olmali; rastgele yer secmek
+        # o duzeni bir dakika icinde yikayip gotururdu.
+        elde = getattr(game_settings, 'HARITA_YAMALARI', None)
+        if elde:
+            y = random.choice(elde)
+            cx, cy = float(y[0]), float(y[1])
+            if len(y) > 2 and adet is None:
+                adet = int(y[2])
+            sigma = float(y[3]) if len(y) > 3 else game_settings.FOOD_PATCH_SIGMA
+        else:
+            sigma = game_settings.FOOD_PATCH_SIGMA
+            cx = random.uniform(60, WIDTH - 60)
+            cy = random.uniform(60, HEIGHT - 60)
+        if adet is None:
+            adet = int(game_settings.FOOD_PATCH_SIZE)
         self._yama_merkezleri.append((cx, cy))
         if len(self._yama_merkezleri) > 64:
             del self._yama_merkezleri[0]
