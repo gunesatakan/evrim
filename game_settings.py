@@ -12,7 +12,7 @@ DEFAULT_SETTINGS = {
     # donusuyor; 2.0'da orani %8'e duser, hareket ve uzun menzilli algi
     # anlam kazanir.
     "ARENA_OLCEK": 2.0,
-    "FOOD_COUNT": 120,
+    "FOOD_COUNT": 80,
     # BASLANGIC: her turden BIR adet. Populasyon zaten dakikalar icinde
     # tavana ciktigi icin bu sayi yalnizca ilk dakikayi belirler; asil yuk
     # DIVISION_MAX_POPULATION'dan gelir.
@@ -426,7 +426,7 @@ DEFAULT_SETTINGS = {
     # enerji/sn arz ile kalan 1364, yani saniyede ~8 bolunme - kusak ~25 sn.
     # Bolluk secilimi zayiflatmaz: nufus tavani zaten saniyede en dusuk
     # enerjili 8 hucreyi eliyor, yani secilim baskisi tavandan geliyor.
-    "FOOD_SPAWN_RATE": 7.33,
+    "FOOD_SPAWN_RATE": 4.89,
     # --- BESIN YAMALI DOGAR ---
     #
     # Besin haritaya duzgun dagildiginda koku alaninin gradyani duzlesir
@@ -468,7 +468,7 @@ DEFAULT_SETTINGS = {
     # yani sindirimin iki katindan uzun: artik besin BULMAK darbogaz.
     # Depo da ayni oranda buyur ki hucre ogunler arasinda dayanabilsin
     # (1500 enerji, bakim 2.2/sn ile ~11 dakika).
-    "FOOD_MAX": 120,
+    "FOOD_MAX": 80,
     # NOT: Bu dört anahtar eskiden yalnızca settings.json'da vardı. save_all()
     # sadece DEFAULT_SETTINGS'te bulunanları yazdığı için, launcher'dan yapılan
     # ilk kayıtta dosyadan siliniyor ve sonraki açılışta program çöküyordu.

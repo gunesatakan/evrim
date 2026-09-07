@@ -162,24 +162,45 @@ class Dunya:
         self.trail_manager = TrailManager()
         self.scent_env = ScentEnvironment(WIDTH, HEIGHT)
 
-        self.kaotropis = [Kaotropi(i, random.randint(50, WIDTH - 50),
-                                   random.randint(50, HEIGHT - 50))
-                          for i in range(kaotropi_count)]
-        self.optropis = []
-        for i in range(optropi_count):
-            self.optropis.append(Optropi(i, random.randint(50, WIDTH - 50),
-                                         random.randint(50, HEIGHT - 50),
-                                         OPTROPI_COLORS[i % len(OPTROPI_COLORS)]))
-        for _ in range(notropi_count):
-            self.optropis.append(Notropi(len(self.optropis),
-                                         random.randint(50, WIDTH - 50),
-                                         random.randint(50, HEIGHT - 50)))
-        # Baslangic besini de yamali: dunyanin ilk hali ile sonraki
-        # hali arasinda yapisal fark olmasin.
+        # ONCE BESIN, SONRA HUCRELER.
+        #
+        # Baslangic besini de yamali: dunyanin ilk hali ile sonraki hali
+        # arasinda yapisal fark olmasin.
         self.foods = []
+        self._yama_merkezleri = []
         _yama = max(1, int(game_settings.FOOD_PATCH_SIZE))
         while len(self.foods) < food_count:
             self.besin_yamasi(min(_yama, food_count - len(self.foods)))
+
+        # KURUCULAR BOSLUGA DEGIL, BIR YAMANIN YANINA DOGAR.
+        #
+        # Besin seyreklestiginde populasyon bir KURULUS ESIGINE carpiyor:
+        # uc kurucu hucre, yamalari bulamadan tukeniyor. Olculdu - 120
+        # besinle 240 saniyede nufus tavana (120) cikiyor ve 1642 lokma
+        # aliniyor; 80 besinle nufus 4'te kaliyor ve topu topu 3 lokma
+        # aliniyor. Kademeli degil, keskin bir esik. Yani sonucu ekoloji
+        # degil kuruculari sansi belirliyor.
+        #
+        # Bir populasyon zaten kaynagin oldugu yerde kurulur. Kurucular
+        # rastgele bir yamanin cevresine birakilir; oradan sonrasi
+        # tamamen secilime kalir.
+        def _dogum_yeri():
+            if not self._yama_merkezleri:
+                return (random.randint(50, WIDTH - 50),
+                        random.randint(50, HEIGHT - 50))
+            cx, cy = random.choice(self._yama_merkezleri)
+            yari = game_settings.FOOD_PATCH_SIGMA * 2.5
+            return (min(WIDTH - 50, max(50, random.gauss(cx, yari))),
+                    min(HEIGHT - 50, max(50, random.gauss(cy, yari))))
+
+        self.kaotropis = [Kaotropi(i, *_dogum_yeri())
+                          for i in range(kaotropi_count)]
+        self.optropis = []
+        for i in range(optropi_count):
+            self.optropis.append(Optropi(i, *_dogum_yeri(),
+                                         color=OPTROPI_COLORS[i % len(OPTROPI_COLORS)]))
+        for _ in range(notropi_count):
+            self.optropis.append(Notropi(len(self.optropis), *_dogum_yeri()))
         self._besin_izgara = BesinIzgarasi()
         self._hucre_izgara = None
         self._food_accum = 0.0
@@ -398,6 +419,9 @@ class Dunya:
         sigma = game_settings.FOOD_PATCH_SIGMA
         cx = random.uniform(60, WIDTH - 60)
         cy = random.uniform(60, HEIGHT - 60)
+        self._yama_merkezleri.append((cx, cy))
+        if len(self._yama_merkezleri) > 64:
+            del self._yama_merkezleri[0]
         for _ in range(adet):
             if len(self.foods) >= game_settings.FOOD_MAX:
                 return
