@@ -176,6 +176,10 @@ class RuntimeInspector:
         self.lab_kaynak = None
         self.lab_acik = True
         self.show_heatmap = True   # koku alanı varsayılan olarak görünür (H ile kapanır)
+        self.evrim_paneli = True   # populasyon ozeti (E ile kapanir)
+        self._evrim_onbellek = None
+        self._evrim_yas = 1e9
+        self._evrim_gecmis = []    # [(t, silahli_oran, katmanli_oran)]
         self.panel_x = WIDTH - self.PANEL_W
 
         # Fonts (pygame must be init'd before this)
@@ -208,6 +212,8 @@ class RuntimeInspector:
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_h:
                 self.show_heatmap = not self.show_heatmap
+            elif event.key == pygame.K_e:
+                self.evrim_paneli = not self.evrim_paneli
             elif event.key == pygame.K_ESCAPE:
                 self.selected = None
             elif event.key == pygame.K_SPACE:
@@ -303,7 +309,7 @@ class RuntimeInspector:
             True, (120, 130, 155))
         screen.blit(alt, (16, HEIGHT - 22))
 
-    def draw(self, screen, scent_env, elapsed, dt):
+    def draw(self, screen, scent_env, elapsed, dt, dunya=None):
         # 1) Selection ring
         if self.selected:
             self._draw_selection_ring(screen, elapsed)
@@ -311,10 +317,21 @@ class RuntimeInspector:
         # Hiz gostergesi - secim olsun olmasin her zaman gorunur
         self._draw_speed(screen)
 
+        # EVRIM PANELI: populasyonun BUTUNU.
+        #
+        # Tek hucreye bakarak evrim gorulmez - gorulen sey o hucrenin
+        # sansidir. Ekranda kalici duran bu birkac sayi silahin
+        # yayilmasini, katmanlarin birikmesini ve organ sayisinin artisini
+        # dogrudan gosterir; yoksa "evrim oluyor" iddiasi ancak kosu
+        # bittikten sonra bir dosyadan okunabilir.
+        if dunya is not None and self.evrim_paneli:
+            self._draw_evrim(screen, dunya)
+
         # 2) If nothing selected, just show a hint
         if not self.selected:
             hint = self._fnt_s.render(
-                "Click organism to inspect  |  H = Heatmap", True, (100, 100, 120))
+                "Hucreye tikla  |  H = koku  |  E = evrim paneli",
+                True, (100, 100, 120))
             screen.blit(hint, (WIDTH - hint.get_width() - 10, HEIGHT - 20))
             return
 
@@ -526,6 +543,105 @@ class RuntimeInspector:
         screen.blit(hint, (self.panel_x + 12, HEIGHT - 22))
 
     # ── drawing helpers ─────────────────────────────────────
+
+    #: Evrim paneli kac saniyede bir yeniden hesaplansin. Populasyonu
+    #  bastan taramak ucuz degil ve bu sayilar kare kare degismez.
+    EVRIM_ARALIK = 0.5
+
+    def _evrim_olc(self, dunya):
+        from organs.peripheral.weapons.weapons import BaseWeapon
+        h = dunya.hucreler
+        n = len(h)
+        if not n:
+            return None
+        silahli = katmanli = savunmaci = 0
+        organ = burun = kamci = 0
+        silah_sayaci = {}
+        for o in h:
+            s_ = 0
+            for x in o.organs:
+                ad = x.__class__.__name__
+                if isinstance(x, BaseWeapon):
+                    s_ += 1
+                    silah_sayaci[ad] = silah_sayaci.get(ad, 0) + 1
+                elif ad == "Chemoreceptor":
+                    burun += 1
+                elif ad == "Flagella":
+                    kamci += 1
+            organ += len(o.organs)
+            zar = getattr(getattr(o, "membrane", None), "logic", None)
+            k = 0
+            if zar is not None and hasattr(zar, "katman_var"):
+                k = sum(1 for a in ("wall", "capsule", "mucus", "slayer")
+                        if zar.katman_var(a))
+            if s_:
+                silahli += 1
+            if k:
+                katmanli += 1
+                if not s_:
+                    savunmaci += 1
+        return {
+            "n": n, "silahli": silahli / n, "katmanli": katmanli / n,
+            "savunmaci": savunmaci / n, "organ": organ / n,
+            "burun": burun / n, "kamci": kamci / n,
+            "kusak": dunya.dogum / max(1, n), "silah": silah_sayaci,
+        }
+
+    def _draw_evrim(self, screen, dunya):
+        self._evrim_yas += 1.0 / max(1.0, FPS)
+        if self._evrim_onbellek is None or self._evrim_yas >= self.EVRIM_ARALIK:
+            self._evrim_yas = 0.0
+            self._evrim_onbellek = self._evrim_olc(dunya)
+            v = self._evrim_onbellek
+            if v is not None:
+                self._evrim_gecmis.append(
+                    (dunya.gecen_sure, v["silahli"], v["katmanli"]))
+                if len(self._evrim_gecmis) > 300:
+                    del self._evrim_gecmis[0]
+        v = self._evrim_onbellek
+        if v is None:
+            return
+        g, y0, w, yuk = 12, 62, 252, 152
+        yuzey = pygame.Surface((w, yuk), pygame.SRCALPHA)
+        yuzey.fill((14, 18, 26, 205))
+        screen.blit(yuzey, (g, y0))
+        pygame.draw.rect(screen, (60, 80, 110), (g, y0, w, yuk), 1)
+        screen.blit(self._fnt_l.render("EVRIM", True, (140, 210, 180)),
+                    (g + 10, y0 + 7))
+
+        def sat(i, ad, deger, renk=(210, 220, 235)):
+            yy = y0 + 26 + i * 16
+            screen.blit(self._fnt_s.render(ad, True, (130, 145, 170)),
+                        (g + 10, yy))
+            t = self._fnt_s.render(deger, True, renk)
+            screen.blit(t, (g + w - 10 - t.get_width(), yy))
+
+        sat(0, "nufus / kusak", "%d / %.1f" % (v["n"], v["kusak"]))
+        sat(1, "silahli hucre", "%.0f%%" % (100 * v["silahli"]),
+            (240, 160, 140) if v["silahli"] > 0.05 else (150, 160, 175))
+        sat(2, "katmanli hucre", "%.0f%%" % (100 * v["katmanli"]),
+            (160, 200, 240) if v["katmanli"] > 0.05 else (150, 160, 175))
+        sat(3, "savunmaci tip", "%.0f%%" % (100 * v["savunmaci"]),
+            (150, 230, 190) if v["savunmaci"] > 0.02 else (150, 160, 175))
+        sat(4, "organ/burun/kamci",
+            "%.1f / %.1f / %.1f" % (v["organ"], v["burun"], v["kamci"]))
+        if v["silah"]:
+            ilk = sorted(v["silah"].items(), key=lambda x: -x[1])[:3]
+            sat(5, "silahlar", " ".join("%s%d" % (a[:3], b) for a, b in ilk),
+                (240, 190, 150))
+
+        # Kucuk zaman serisi: silahli (kirmizi) ve katmanli (mavi) oran.
+        if len(self._evrim_gecmis) > 2:
+            gx, gy, gw, gh = g + 10, y0 + yuk - 24, w - 20, 16
+            pygame.draw.rect(screen, (40, 50, 66), (gx, gy, gw, gh), 1)
+            t0 = self._evrim_gecmis[0][0]
+            t1 = max(t0 + 1e-6, self._evrim_gecmis[-1][0])
+            for idx, renk in ((1, (240, 160, 140)), (2, (160, 200, 240))):
+                nokta = [(gx + gw * (kayit[0] - t0) / (t1 - t0),
+                          gy + gh * (1.0 - min(1.0, kayit[idx])))
+                         for kayit in self._evrim_gecmis]
+                if len(nokta) > 1:
+                    pygame.draw.lines(screen, renk, False, nokta, 1)
 
     def _draw_selection_ring(self, screen, elapsed):
         o = self.selected
@@ -801,7 +917,7 @@ def main(food_count=None, kaotropi_count=None):
 
         # 7. Inspector panel (topmost layer)
         inspector.validate(optropis)
-        inspector.draw(screen, scent_env, elapsed_time, dt)
+        inspector.draw(screen, scent_env, elapsed_time, dt, dunya)
 
         window.fill((0, 0, 0))
         window.blit(pygame.transform.smoothscale(
