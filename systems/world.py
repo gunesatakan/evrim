@@ -83,6 +83,21 @@ class HucreIzgarasi:
             d.setdefault((int(o.pos.x // k), int(o.pos.y // k)), []).append(o)
         self._kutular = d
 
+    def dolu(self, x, y):
+        """Bu noktanin uzerinde bir hucre var mi?"""
+        k = self.KUTU
+        cx, cy = int(x // k), int(y // k)
+        d = self._kutular
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                for o in d.get((cx + dx, cy + dy), ()):  # noqa
+                    ddx = o.pos.x - x
+                    ddy = o.pos.y - y
+                    r = o.radius
+                    if ddx * ddx + ddy * ddy < r * r:
+                        return True
+        return False
+
     def yakin(self, hucre, r):
         k = self.KUTU
         p = hucre.pos
@@ -164,6 +179,7 @@ class Dunya:
         while len(self.foods) < food_count:
             self.besin_yamasi(min(_yama, food_count - len(self.foods)))
         self._besin_izgara = BesinIzgarasi()
+        self._hucre_izgara = None
         self._food_accum = 0.0
         self.gecen_sure = 0.0
         self.kare = 0
@@ -201,7 +217,10 @@ class Dunya:
                 while (self._food_accum >= yama
                         and len(foods) < game_settings.FOOD_MAX):
                     self._food_accum -= yama
-                    self.besin_yamasi(yama)
+                    # Onceki karenin hucre izgarasi: hucreler bir karede
+                    # kendi yaricaplarinin yuzde biri kadar yer degistirir,
+                    # bu yuzden bir kare eski olmasi onemsiz.
+                    self.besin_yamasi(yama, self._hucre_izgara)
             else:
                 self._food_accum = 0.0
 
@@ -256,6 +275,7 @@ class Dunya:
         hepsi = self.optropis + self.kaotropis
         Organism.population_count = len(hepsi)
         izgara = HucreIzgarasi(hepsi)
+        self._hucre_izgara = izgara
         eaten_prey = set()
         oldu = []
         for o in hepsi:
@@ -351,13 +371,27 @@ class Dunya:
 
         resolve_overlaps(self.optropis + self.kaotropis)
 
-    def besin_yamasi(self, adet):
+    def besin_yamasi(self, adet, izgara=None):
         """Rastgele bir noktaya besin OBEGI birak.
 
         Tek tek dagitmak haritayi duzgun bir besin sisiyle kapliyordu ve
         koku alaninin gradyanini duzlestiriyordu; koklamanin bir anlami
         kalmiyordu. Obek, hem gercekci (deniz kari, cokelti, les) hem de
         duyu organlarinin bedelini odetip karsiligini veren tek duzen.
+
+        BESIN HUCRENIN ICINDE BELIREMEZ.
+        #
+        Yaricapi 22 olan 200 hucre, 1200x800'luk dunyanin ucte birini
+        kapliyor - yani rastgele dogan besinin ucte biri dogrudan bir
+        hucrenin uzerine dusuyordu. Kimildamayan bir hucre bile boylece
+        besleniyor, hatta yalnizca daha ucuz oldugu icin KAZANIYORDU.
+        Olculdu: uzun kosularin sonunda populasyon kamcisini ve
+        kemoreseptorunu tamamen birakip zirh yigan, hareketsiz ve kor
+        bloklara donusuyordu (organ 5.7, kamci 0.06, burun 0.04,
+        katman 1.6, atis 0).
+
+        Besin ortamda belirir, bir hucrenin sitoplazmasinda degil. Uygun
+        yer bulunamazsa o lokma o an olusmaz.
         """
         sigma = game_settings.FOOD_PATCH_SIGMA
         cx = random.uniform(60, WIDTH - 60)
@@ -365,9 +399,12 @@ class Dunya:
         for _ in range(adet):
             if len(self.foods) >= game_settings.FOOD_MAX:
                 return
-            x = min(WIDTH - 15, max(15, random.gauss(cx, sigma)))
-            y = min(HEIGHT - 15, max(15, random.gauss(cy, sigma)))
-            self.foods.append(Food(x, y))
+            for _deneme in range(6):
+                x = min(WIDTH - 15, max(15, random.gauss(cx, sigma)))
+                y = min(HEIGHT - 15, max(15, random.gauss(cy, sigma)))
+                if izgara is None or not izgara.dolu(x, y):
+                    self.foods.append(Food(x, y))
+                    break
 
     # ------------------------------------------------------------------
     def organ_sayimi(self):
