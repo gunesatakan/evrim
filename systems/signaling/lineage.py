@@ -55,8 +55,9 @@ class LineageSignature:
         ÖLÇÜLDÜ - şu an bu bir dezavantaj DEĞİL: 3 tohumda kırık hücrelerin
         yavru sayısı sağlamlarla eşit (0.43-1.25 vs 0.76-0.84) ve ölüm oranı
         ikisinde daha düşük çıktı. Sebep, akraba tanımanın henüz bir işe
-        yaramaması: kin_response rastgele bir gen ve çoğunlukla 'ignore'a
-        düşüyor, tanımayan hücre de yüzey kimyasına geri düşüyor.
+        yaramaması: `kin_response` rastgele bir gen ve çoğunlukla sıfıra
+        yakın (ilgisizlik) düşüyor; tanımayan hücre de zaten koku
+        spektrumuna geri düşüyor.
 
         Gerçekte kuorum duyusu MALİYETLİ ORTAK DAVRANIŞLARI tetikler
         (biyofilm, biyolüminesans, virülans) - faydası akrabayla
