@@ -186,7 +186,10 @@
         "BEHAVIOR_MUTATION_SIGMA": 0.25,
         "MOTOR_TABAN_EFOR": 0.55,
         "MOTOR_EFOR_USSU": 2.0,
-        "ARENA_OLCEK": 2.0
+        "ARENA_OLCEK": 2.0,
+        "YUZEY_HACIM_REF": 2.0,
+        "MEMORY_TABAN": 10.0,
+        "MEMORY_CEVRIM": 0.02
     },
     "entities": {
         "optropi_0": {

@@ -814,8 +814,29 @@ class Organism(Entity):
 
         'move_regen' geniyle yükseltilir. Eskiden saniyede eklenen bedava
         enerji miktarıydı; artık besin başına kazancın çarpanı.
+
+        YUZEY/HACIM YASASI. Enerji uretimi (ETC) ZARDA olur, bakim ise
+        SITOPLAZMANIN tamaminda. Zar cevreyle, sitoplazma alanla buyur;
+        yani hucre irilestikce birim hacim basina dusen zar azalir ve
+        besinden cikarabildigi enerji duser. Hucrelerin neden sinirsiz
+        buyumedigini aciklayan sey budur ve modelde YOKTU.
+
+        Yoklugunun sonucu olculdu: govde 2.0'dan 4.18'e cikti, uzerine
+        3.92 katman zirh bindi, yaricap ~100 px oldu ve 200 hucre 2400x1600
+        haritanin tamamini kaplayip besini SIFIRA indirdi (hiz 1.2 px/sn,
+        kemoreseptor 0.00). Irilesmek her seyi cozuyordu: buyuk hucre
+        koklamadan da besine carpiyor, zirhi sayesinde de yenmiyordu.
+        Duyu ve davranis boyle bir dunyada gereksizdir.
+
+        Carpan referans boyutta 1.0'dir; iki kat iri hucre besinden yarisi
+        kadar enerji cikarir.
         """
-        return self.membrane.logic.energy_regen if hasattr(self, 'membrane') else 1.0
+        taban = self.membrane.logic.energy_regen if hasattr(self, 'membrane') else 1.0
+        govde = getattr(getattr(self, 'body', None), 'logic', None)
+        if govde is None:
+            return taban
+        ref = max(0.1, game_settings.YUZEY_HACIM_REF)
+        return taban * min(1.0, ref / max(0.1, float(govde.size)))
 
     @property
     def move_regen(self):
@@ -1975,6 +1996,24 @@ class Organism(Entity):
                     changes += game_settings.DIVERGENCE_UPGRADE
             # Bolunme deepcopy ile calisir: ebeveynde kalmis bir kopya zar
             # ya da sitoplazma butun soya gecerdi. Her yavru tekillenir.
+            # HAFIZA CEVRIMI (protein donusumu).
+            #
+            # `memory_length` geni kapasiteyi yalnizca ARTIRABILIYORDU ve
+            # torbadan herkes ayni sikilikta cekiyordu; yani her soy, ise
+            # yarasin yaramasin, kapasitesini durmadan sisiriyordu. Olculdu:
+            # 100 bin dogum sonunda kapasite 24'ten 173'e cikti ve tek
+            # basina saniyede 8.65 enerji goturuyordu - gelirin buyuk bir
+            # kismi. Bu, hucreleri bedelini karsilamak icin irilesmeye
+            # itiyordu.
+            #
+            # Gercek hucre kullanmadigi proteini yikar. Kapasite her
+            # bolunmede biraz erir; yuksek kalmasi icin genin YENIDEN
+            # cekilmesi gerekir. Organ kazanci/kaybi dengesiyle ayni mantik.
+            dm = daughter.direction_memory
+            taban = game_settings.MEMORY_TABAN
+            if dm.capacity > taban:
+                dm.capacity = max(taban, dm.capacity
+                                  * (1.0 - game_settings.MEMORY_CEVRIM))
             daughter.temel_yapiyi_tamamla()
             if getattr(daughter, 'lineage', None) is not None:
                 daughter.lineage.accumulate(changes)

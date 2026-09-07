@@ -161,6 +161,13 @@ DEFAULT_SETTINGS = {
     "COST_RIBOSOME": 0.3,
     "COST_MEMBRANE": 0.1,
     "COST_MEMORY": 0.05,
+    # Hafiza kapasitesinin dogal alt siniri ve her bolunmede eriyen pay.
+    # `memory_length` geni kapasiteyi yalnizca artirabiliyor ve torbadan
+    # herkes ayni sikilikta cekiyordu; kapasite 100 bin dogumda 24'ten
+    # 173'e ciktı ve tek basina saniyede 8.65 enerji goturur oldu. Gercek
+    # hucre kullanmadigi proteini yikar.
+    "MEMORY_TABAN": 10.0,
+    "MEMORY_CEVRIM": 0.02,
     # --- OLUM VE ELEME ---
     # Enerjisi biten hucre once "shutdown" olur (son sans: midesindeki besini
     # sindirip toparlanabilir). Bu sure boyunca toparlanamazsa olur ve
@@ -437,6 +444,9 @@ DEFAULT_SETTINGS = {
     # olamiyordu. 0.05 ile ~18 cekiste esik asilir; irilesmenin bedeli
     # (surtunme, bolunme maliyeti, bakim) zaten odenmeye devam ediyor.
     "GROW_BODY": 0.05,
+    # YUZEY/HACIM: bu boyutta enerji verimi 1.0'dir; iri hucre besinden
+    # daha az enerji cikarir (zar cevreyle, sitoplazma alanla buyur).
+    "YUZEY_HACIM_REF": 2.0,
     "GROW_MEMORY": 5,
 
     # Skaler koku alanı (ScentEnvironment)
