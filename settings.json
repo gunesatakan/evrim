@@ -179,7 +179,8 @@
         "TOXIN_ALLELES": 12,
         "TOXIN_ALLELE_MUTATION": 0.02,
         "ORGAN_ANGLE_RATE": 0.1,
-        "ORGAN_ANGLE_SIGMA": 18.0
+        "ORGAN_ANGLE_SIGMA": 18.0,
+        "YENI_KATMAN_YATIRIM": 0.6
     },
     "entities": {
         "optropi_0": {

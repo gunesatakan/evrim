@@ -115,6 +115,22 @@ class MembraneLogic:
         setattr(self, bayrak, True)
         # Yeni katman OLGUN kalinlikta dogmaz.
         self.kalinlik[alan] = self.YENI_KATMAN_KALINLIK
+        # VAR OLAN AMA SIFIR YATIRIMLI KATMAN BIR CELISKIDIR.
+        #
+        # `resistance` yalnizca YATIRIM sayisini okuyor. Mutasyonla yeni
+        # kazanilan bir katmanin yatirimi 0 oldugu icin hicbir koruma
+        # vermiyor, ama var oldugu icin bakim enerjisini (TABAN_COST_*) ve
+        # yaricap artisini hemen goturuyordu. Yani yeni bir katman, ilgili
+        # gen defalarca cekilip buyutulene kadar SAF ZARARDI - ve o
+        # kadar dayanamadan eleniyordu. Savunma tipinin evrimlesmesinin
+        # onundeki asil engel buydu (olculdu: katman orani 600 saniyede
+        # 0.055'te kaldi).
+        #
+        # Gen ifade edildiyse ortada bir madde vardir: katman bir kademe
+        # yatirimla dogar. Daha once tasinip birakilmis bir katman ise
+        # eski birikimini korur.
+        if getattr(self, alan, 0.0) <= 0.0:
+            setattr(self, alan, float(game_settings.YENI_KATMAN_YATIRIM))
         return True
 
     def katman_cikar(self, alan):

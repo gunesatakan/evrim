@@ -170,6 +170,10 @@ DEFAULT_SETTINGS = {
     "MEMBRANE_INTEGRITY_BASE": 100.0,
     "GROW_MEMBRANE_INTEGRITY": 20.0,
     # Savunma gelisim adimlari
+    # Yeni kazanilan bir katmanin BASLANGIC yatirimi. Sifir olamaz:
+    # var olup hicbir koruma vermeyen ama bedelini goturen bir katman
+    # her zaman elenir ve savunma hicbir zaman evrimlesemez.
+    "YENI_KATMAN_YATIRIM": 0.6,
     "GROW_WALL": 0.5,      # peptidoglikan duvar  -> mekanik
     "GROW_OUTER": 0.5,     # dis zar / LPS        -> kimyasal
     "GROW_CAPSULE": 0.5,   # kapsul / mukus       -> TEMAS gerektiren her sey
