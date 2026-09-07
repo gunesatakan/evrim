@@ -1093,6 +1093,7 @@ class Organism(Entity):
 
             # Bir hedef hem GÖRÜLEBİLİR hem DUYULABİLİR. İkisi ayrı uyaran
             # tipidir ve tabloda ayrı satırları vardır; en güçlü olan kazanır.
+            atak = game_settings.ATAK_ESIGI
             stimuli = []
             if vrange > 0.0 and d <= vrange + t.radius and self.can_see(t):
                 stimuli.append(('light',
@@ -1107,15 +1108,29 @@ class Organism(Entity):
                 # Duran hucre hic sinyal uretmez. Duyulmasi, sinyalin
                 # organin ESIGINI asmasina baglidir.
                 #
-                # Sinif BOYUT (ne buyuklukte bir sey), seviye ise sinyalin
-                # esige gore kac kati oldugu. Kokunun veremedigi bilgi
-                # budur: koku KIM oldugunu, ses NE YAPTIGINI soyler.
+                # TEPKI DE SUREKLI BIR SPEKTRUMDAN OKUNUR - koku gibi.
+                # Once boyut alti ayrik kutuya, siddet uc seviyeye
+                # bolunuyordu; kucuk bir genetik degisim hucreyi bir anda
+                # bambaska davranan biri yapiyordu ve mutasyon kutudan
+                # kutuya SICRADIGI icin secilim kucuk iyilestirmeleri
+                # biriktiremiyordu.
+                #
+                # Eksen GORELI BOYUT: ayni bozulma, kucuk bir hucre icin
+                # devasa bir tehdit, iri bir hucre icin onemsiz bir
+                # kipirdanmadir. Sinyalin siddeti ise tepkinin YONUNU
+                # degil BUYUKLUGUNU olcekler - yani "ne" bilgisi
+                # spektrumdan, "ne kadar" bilgisi dalganin siddetinden.
                 _gur = MechanoreceptorLogic.gurultu(t)
                 _sinyal = kulak.duyulan_sinyal(_gur, max(1.0, d - t.radius))
                 if _sinyal >= 1.0:
-                    stimuli.append(('sound',
-                                    BehaviorGenome.size_bin(t.radius),
-                                    BehaviorGenome.level_bin(_sinyal, 8.0)))
+                    _x = BehaviorGenome.relative_position(t.radius, self.radius)
+                    _r = (self.behavior.ses_tepkisi(_x)
+                          * BehaviorGenome.aciliyet(_sinyal))
+                    if _r >= atak:
+                        self.attack_targets.add(id(t))
+                    key = (abs(_r), -d)
+                    if best is None or key > best[0]:
+                        best = (key, t, _r, 'sound')
             # KOKU KAYNAGI HEDEFIN KONUMUNDA DEGIL, ARKASINDADIR.
             #
             # Hizli yuzen bir cisim kendi koku bulutunu geride birakir
@@ -1148,7 +1163,6 @@ class Organism(Entity):
                                     max(0.0, srange - d_koku), srange)))
 
             kin = self.is_kin(t)
-            atak = game_settings.ATAK_ESIGI
             if scent_x is not None:
                 # Akrabanın özel sinyali, spektrumdan okunan genel
                 # izlenimin önüne geçer: "iri biri" değil, "benden biri".

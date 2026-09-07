@@ -180,6 +180,10 @@ DEFAULT_SETTINGS = {
     # gerekli kilan sey tam olarak budur: hizla yaklasan cisim buruna
     # SESSIZ, kulaga GURULTULUDUR.
     "KOKU_SURUKLENME": 1.5,
+    # Duyulan sinyal esigin kac kati oldugunda tepki TAM gucle verilir.
+    # Tam duyma sinirindaki (1x) bir kipirdanma tepkinin ucte birini,
+    # sekiz kat guclu bir dalga tamamini uyandirir.
+    "SES_ACILIYET_REF": 8.0,
     "COST_PHOTORECEPTOR": 0.001,
     "COST_CYTOPLASM": 0.15,
     "COST_DIGESTION": 0.3,

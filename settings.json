@@ -198,7 +198,8 @@
         "GROW_MECHANO_KAPSAMA": 0.12,
         "GROW_MECHANO_ESIK": 0.12,
         "MECHANO_ESIK_MIN": 0.0015,
-        "KOKU_SURUKLENME": 1.5
+        "KOKU_SURUKLENME": 1.5,
+        "SES_ACILIYET_REF": 8.0
     },
     "entities": {
         "optropi_0": {

@@ -70,10 +70,16 @@ class BehaviorGenome:
     #: Yalnızca gösterim ve ölçüm için: spektrumun beş okunabilir bölgesi.
     ETIKETLER = ('kac', 'uzaklas', 'yoksay', 'yaklas', 'saldir')
 
-    # 'scent' artik TABLODA DEGIL: ayrik sinif yerine SUREKLI spektrum
-    # kullaniyor (asagidaki scent_cuts/scent_bands). Ayrik sinifta kucuk
-    # bir genetik degisim hucreyi bir anda "hic tanimadik biri" yapiyordu.
-    STIMULI = ('light', 'sound', 'kairomone')
+    # 'scent' ve 'sound' artik TABLODA DEGIL: ayrik sinif yerine SUREKLI
+    # spektrum kullaniyorlar. Ayrik sinifta kucuk bir genetik degisim
+    # hucreyi bir anda "hic tanimadik biri" yapiyordu; ustelik mutasyon
+    # bir kutudan otekine SICRAMA oldugu icin secilim kucuk iyilestirmeleri
+    # biriktiremiyordu.
+    #
+    # 'light' ayrik kaliyor cunku renk tonu SIRALI bir buyukluk degil:
+    # kirmizi maviden "daha buyuk" degildir, tonlar bir cember uzerinde
+    # durur. Orada kutu dogru temsildir.
+    STIMULI = ('light', 'kairomone')
 
     # --- KOKU SPEKTRUMU ---
     # Hucre koku eksenini kendi KESME NOKTALARIYLA boler ve her banda
@@ -82,6 +88,17 @@ class BehaviorGenome:
     # kendiliginden cikar, tersi de evrimlesebilir.
     SPECTRUM_CUTS = 4          # 4 kesme -> 5 bant
     SPECTRUM_BANDS = 5
+
+    # --- SES SPEKTRUMU ---
+    # Kulak bir BASINC DALGASI duyar ve o dalgayi uretenin BOYUTU sirali,
+    # surekli bir buyukluktur - tam olarak koku gibi. Bu yuzden ayni
+    # makine: kendi kesme noktalari, kendi bantlari, ikisi de gen.
+    #
+    # Eksen yine GORELIDIR: "benden buyuk mu kucuk mu". Ayni hidrodinamik
+    # bozulma, kucuk bir hucre icin devasa bir tehdit, iri bir hucre icin
+    # onemsiz bir kipirdanmadir.
+    SES_CUTS = 4
+    SES_BANDS = 5
     HUE_BINS = 6      # renk tonu kutusu
     LEVEL_BINS = 3    # zayıf / orta / güçlü
 
@@ -102,8 +119,31 @@ class BehaviorGenome:
         return 0.0 if x < 0.0 else (100.0 if x > 100.0 else x)
 
     def spectrum_response(self, x):
-        """0-100 eksenindeki bir konuma bu hucrenin verdigi tepki (-1..1)."""
+        """0-100 KOKU eksenindeki bir konuma verilen tepki (-1..1)."""
         return self.scent_bands[bisect.bisect_right(self.scent_cuts, x)]
+
+    def ses_tepkisi(self, x):
+        """0-100 SES (goreli boyut) eksenindeki bir konuma verilen tepki."""
+        return self.ses_bands[bisect.bisect_right(self.ses_cuts, x)]
+
+    @staticmethod
+    def aciliyet(sinyal, ref=None):
+        """Duyulan sinyal ne kadar ACIL? 0..1.
+
+        Sinyal esik biriminde gelir: 1 = tam duyma sinirinda, buyuk deger
+        = gurultulu/yakin/hizli. Aciliyet tepkinin YONUNU degil
+        BUYUKLUGUNU olcekler - yani harcanacak motor eforunu.
+
+        Uzaktan gelen zayif bir kipirdanma hafif bir yonelim uretir; tam
+        uzerine gelen bir sey tam gucle tepki. Boylece "ne" bilgisi
+        spektrumdan, "ne kadar" bilgisi dalganin siddetinden gelir.
+        """
+        import math as _m
+        if sinyal <= 0.0:
+            return 0.0
+        if ref is None:
+            ref = game_settings.SES_ACILIYET_REF
+        return min(1.0, _m.log(sinyal + 1.0) / _m.log(max(1.1, ref) + 1.0))
 
     @staticmethod
     def _rastgele_tepki(rng=_rnd):
@@ -111,7 +151,8 @@ class BehaviorGenome:
         return rng.uniform(-1.0, 1.0)
 
     def __init__(self, table=None, kin_response=None,
-                 scent_cuts=None, scent_bands=None, sosyal_oncelik=None):
+                 scent_cuts=None, scent_bands=None, sosyal_oncelik=None,
+                 ses_cuts=None, ses_bands=None):
         # {(tip, sınıf, seviye): -1..1}
         self.table = dict(table) if table else {}
         # Akraba tanindiginda ne yapilacagi. Soy imzasi "X sinifina ne
@@ -141,6 +182,13 @@ class BehaviorGenome:
         self.sosyal_oncelik = (float(sosyal_oncelik)
                                if sosyal_oncelik is not None
                                else _rnd.random())
+        # Ses spektrumu: koku gibi, kendi kesme noktalari ve bantlariyla.
+        self.ses_cuts = (sorted(ses_cuts) if ses_cuts is not None
+                         else sorted(_rnd.uniform(0.0, 100.0)
+                                     for _ in range(self.SES_CUTS)))
+        self.ses_bands = (list(ses_bands) if ses_bands is not None
+                          else [self._rastgele_tepki()
+                                for _ in range(self.SES_BANDS)])
 
     # ---------- kodlama ----------
 
@@ -150,20 +198,6 @@ class BehaviorGenome:
         r, g, b = (max(0.0, min(1.0, c / 255.0)) for c in color[:3])
         h, _s, _v = colorsys.rgb_to_hsv(r, g, b)
         return int(h * BehaviorGenome.HUE_BINS) % BehaviorGenome.HUE_BINS
-
-    @staticmethod
-    def size_bin(radius):
-        """Ses sınıfı: kaynağın boyutu.
-
-        Akustikte büyük cisim pes, küçük cisim tiz ses üretir. Böylece
-        "büyük bir şeyin sesinden kaç, küçük olana yaklaş" gibi paternler
-        kodlanabilir.
-        """
-        edges = (6, 10, 15, 22, 32)      # 6 kutu
-        for i, e in enumerate(edges):
-            if radius < e:
-                return i
-        return len(edges)
 
     # KAIROMON: avcinin AV YEDIGINI ele veren metabolik sizinti.
     #
@@ -217,7 +251,9 @@ class BehaviorGenome:
         return cls(cls.random_table(rng), cls._rastgele_tepki(rng),
                    sorted(rng.uniform(0.0, 100.0) for _ in range(cls.SPECTRUM_CUTS)),
                    [cls._rastgele_tepki(rng) for _ in range(cls.SPECTRUM_BANDS)],
-                   rng.random())
+                   rng.random(),
+                   sorted(rng.uniform(0.0, 100.0) for _ in range(cls.SES_CUTS)),
+                   [cls._rastgele_tepki(rng) for _ in range(cls.SES_BANDS)])
 
     def respond(self, stim, cls_idx, level):
         return self.table.get((stim, cls_idx, level), 0.0)
@@ -271,6 +307,18 @@ class BehaviorGenome:
         for i in range(len(self.scent_bands)):
             if rng.random() < rate:
                 self.scent_bands[i] = kaydir(self.scent_bands[i])
+                changes += 1
+        # Ses spektrumu da ayni bicimde kayar.
+        ses_moved = []
+        for c in self.ses_cuts:
+            if rng.random() < rate:
+                c = min(100.0, max(0.0, c + rng.gauss(0.0, cut_sigma)))
+                changes += 1
+            ses_moved.append(c)
+        self.ses_cuts = sorted(ses_moved)
+        for i in range(len(self.ses_bands)):
+            if rng.random() < rate:
+                self.ses_bands[i] = kaydir(self.ses_bands[i])
                 changes += 1
         # Sosyal oncelik de sureli bir gen.
         if rng.random() < rate:
