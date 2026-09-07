@@ -918,12 +918,24 @@ class Organism(Entity):
 
         Hizli yuzen bir cisim kendi bulutunu geride birakir; kaynak
         gittigi yonun tersine `hiz x KOKU_SURUKLENME` kadar otelenir.
+
+        ONBELLEKLI: bu deger HEDEFIN kendi ozelligidir, bakanin degil.
+        Her komsu icin yeniden hesaplaniyordu - 200 hucrede kare basina
+        1.6 milyon cagri. Kare basina bir kez tazelenir (koku_tazele).
         """
-        yon = getattr(self, 'hareket_yonu', None)
+        k = self._koku_kaynak
+        return self.pos if k is None else k
+
+    _koku_kaynak = None
+
+    def koku_kaynak_tazele(self):
+        yon = self.hareket_yonu
         if yon is None or self.speed <= 0.0:
-            return self.pos
-        return self.pos - yon * (self.speed
-                                 * game_settings.KOKU_SURUKLENME)
+            self._koku_kaynak = self.pos
+        else:
+            self._koku_kaynak = self.pos - yon * (
+                self.speed * game_settings.KOKU_SURUKLENME)
+        return self._koku_kaynak
 
     def koku_tazele(self):
         self._koku_onbellek = scent_value(self)
@@ -1121,6 +1133,8 @@ class Organism(Entity):
         atak = game_settings.ATAK_ESIGI
         surus = pygame.math.Vector2(0.0, 0.0)
         en_guclu = 0.0
+        # Koku kaynaginin konumdan en fazla ne kadar kayabilecegi
+        _kayma_payi = game_settings.KOKU_SURUKLENME * 120.0
         yaklas_top = 0.0
         kac_top = 0.0
 
@@ -1171,7 +1185,11 @@ class Organism(Entity):
             # Kaynak hedefin konumunda DEGIL, arkasindadir: hizli yuzen bir
             # cisim kendi bulutunu geride birakir (Peclet). Uzerine gelen
             # hizli bir hucreyi burunla gec fark edersin.
-            if srange > 0.0:
+            # Koku kaynagi hedefin ARKASINDA olabilir, yani gercek uzaklik
+            # `d`den en fazla surüklenme kadar buyuk/kucuk olur. Bu kaba
+            # elemeyi once yapmak, menzil disindaki komsular icin vektor
+            # isini tamamen atlar.
+            if srange > 0.0 and d - _kayma_payi <= srange + t.radius:
                 _kaynak = t.koku_kaynagi()
                 _kfark = _kaynak - self.pos
                 d_koku = _kfark.length()
@@ -2285,6 +2303,7 @@ class Organism(Entity):
         # gorurler), sonra onceki_pos tazelenir. Ters sirada prev == center
         # olur ve hucrenin hareketi molekullere HIC yansimazdi.
         self.koku_tazele()
+        self.koku_kaynak_tazele()
         self.molekulleri_guncelle(dt)
         self.onceki_pos = pygame.math.Vector2(self.pos)
         if hasattr(self, 'body'):
@@ -2364,8 +2383,10 @@ class Organism(Entity):
                 if urgency > max_urgency: max_urgency = urgency
         
         if hasattr(self, 'membrane'):
+            # Fizik burada YENIDEN HESAPLANMAZ: bu kareye ait hesap zaten
+            # motor guncellemesinden sonra yapiliyor. Iki kez cagirmak
+            # kare basina 200 gereksiz tam hesap demekti.
             self.membrane.update(dt, self, max_urgency)
-            self.recalculate_physics()
         
         # Hafıza Güncelleme — yaşlanma simülasyon zamanıyla ilerler
         self.direction_memory.update(dt)
@@ -2380,7 +2401,19 @@ class Organism(Entity):
         # sinifa gore dagitilmadigi icin "tehdit listesi" diye onceden
         # belirlenmis bir kume yok; hucre baskasinin izini gorur, ne
         # yapacagina davranis tablosu karar verir.
-        if trail_manager and (threat_uids is None or threat_uids):
+        # IZ TARAMASI SEYRELTILDI.
+        #
+        # Kare basina 200 hucre x ~400 iz noktasi = 82 bin temas testi
+        # ediyordu; profilde acik ara en cok cagrilan islem buydu. Oysa iz
+        # alani YAVAS degisen bir sey: noktalar kimildamiyor, yogunluk
+        # saniyeler icinde kayiyor. Saniyede alti kez taramak yeter.
+        # Hucreler indeksine gore kaydirilir ki hepsi ayni karede
+        # taramasin (yuk kareler arasina yayilsin).
+        self._iz_sayac = getattr(self, '_iz_sayac', self.index % 5) + 1
+        _iz_zamani = self._iz_sayac >= 5
+        if _iz_zamani:
+            self._iz_sayac = 0
+        if _iz_zamani and trail_manager and (threat_uids is None or threat_uids):
             chemos = [o for o in self.organs if isinstance(o, Chemoreceptor)]
             # Eskiden bu satır her kare TÜM iz noktalarını dolaşıp her
             # kemoreseptör için is_touching çağırıyordu (40 hücre x 20.000

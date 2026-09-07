@@ -146,7 +146,7 @@ class Dunya:
     """Bir ekosistem ornegi. adim(dt) bir kare ilerletir."""
 
     def __init__(self, food_count=None, kaotropi_count=None,
-                 optropi_count=4, notropi_count=None, tohum=None):
+                 optropi_count=None, notropi_count=None, tohum=None):
         if tohum is not None:
             random.seed(tohum)
         self.tohum = tohum
@@ -156,6 +156,8 @@ class Dunya:
             kaotropi_count = game_settings.KAOTROPI_COUNT
         if notropi_count is None:
             notropi_count = int(game_settings.NOTROPI_COUNT)
+        if optropi_count is None:
+            optropi_count = int(getattr(game_settings, 'OPTROPI_COUNT', 1))
 
         self.trail_manager = TrailManager()
         self.scent_env = ScentEnvironment(WIDTH, HEIGHT)

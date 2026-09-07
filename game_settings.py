@@ -13,12 +13,16 @@ DEFAULT_SETTINGS = {
     # anlam kazanir.
     "ARENA_OLCEK": 2.0,
     "FOOD_COUNT": 120,
-    "KAOTROPI_COUNT": 8,
+    # BASLANGIC: her turden BIR adet. Populasyon zaten dakikalar icinde
+    # tavana ciktigi icin bu sayi yalnizca ilk dakikayi belirler; asil yuk
+    # DIVISION_MAX_POPULATION'dan gelir.
+    "KAOTROPI_COUNT": 1,
+    "OPTROPI_COUNT": 1,
     # --- AVLANMA (Optropi -> Notropi) ---
     # Optropiler notropileri yem olarak gorur. Notropiler de koku yayar,
     # boylece kemotaksi onlara dogru surukler; gorus alanina girerse
     # dogrudan takip devreye girer.
-    "NOTROPI_COUNT": 30,
+    "NOTROPI_COUNT": 1,
     # TROFIK VERIM: avin biyokutlesinin ne kadari yiyene gecer.
     # 1.0 olsaydi avlanmak besin toplamaktan her zaman karli olurdu ve
     # ekosistem tek bir avci tipine cokerdi; gercekte de yenen her seyin
@@ -537,7 +541,14 @@ DEFAULT_SETTINGS = {
     # Nüfus tavanı. 0 = SINIRSIZ (nüfusu besin arzı ve avcılar dengeler).
     # Pozitif bir değer verilirse tavanda bölünme durur, hücre yükseltmesini
     # yine torbadan rastgele çeker (genetik model değişmez).
-    "DIVISION_MAX_POPULATION": 220,
+    # Nufus tavani AYNI ZAMANDA en buyuk hiz kolu. Olculdu (adim maliyeti
+    # ve simulasyonun ulasabilecegi en yuksek hiz):
+    #     200 -> 26.7 ms -> 1.25x        100 -> 12.7 ms -> 2.62x
+    #     140 -> 19.1 ms -> 1.75x         70 ->  9.6 ms -> 3.48x
+    #     120 -> ~16  ms -> ~2.1x         45 ->  5.6 ms -> 6.00x
+    # Makine zorlaniyorsa launcher'dan dusurulebilir; buyutmek cesitliligi
+    # ve secilim gucunu artirir.
+    "DIVISION_MAX_POPULATION": 120,
 
     # --- ORGAN MUTASYONU ---
     #
