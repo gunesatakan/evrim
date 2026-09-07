@@ -129,6 +129,37 @@ def kairomon_kacisi(o):
     return yuksek / ny - dusuk / nd
 
 
+def silah_gucu(o):
+    """Tasinan silahlarin toplam gucu."""
+    return sum(float(x.logic.power) for x in o.organs
+               if isinstance(x, BaseWeapon))
+
+
+def uzmanlasma(h):
+    """Populasyon SILAH ve ZIRH ekseninde ayrisiyor mu?
+
+    "Savunma tipi ortaya cikti" demek icin yalnizca zirhin yayilmasi
+    yetmez - herkes hem zirhli hem silahli olabilir, o zaman ortada bir
+    TIP yoktur. Ayrisma, iki yatirimin birbiriyle TERS gitmesidir: kimi
+    hucre zirha yatirir ve silahtan vazgecer, kimi tersini yapar.
+
+    Pearson korelasyonu doner. Negatif = uzmanlasma (savunmaci ve avci
+    ayri tipler), 0 = ilgisiz, pozitif = "cok tasiyan cok tasiyor".
+    """
+    if len(h) < 3:
+        return 0.0
+    xs = [savunma_puani(o) for o in h]
+    ys = [silah_gucu(o) for o in h]
+    n = len(xs)
+    mx, my = sum(xs) / n, sum(ys) / n
+    sx = sum((x - mx) ** 2 for x in xs)
+    sy = sum((y - my) ** 2 for y in ys)
+    if sx <= 1e-12 or sy <= 1e-12:
+        return 0.0
+    sxy = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+    return sxy / math.sqrt(sx * sy)
+
+
 # ---------------------------------------------------------------- OZET
 def _ort(xs):
     xs = list(xs)
@@ -190,6 +221,9 @@ def olc(d):
             sum(1 for o in h if silah_sayisi(o) > 0 and savunma_puani(o) > 0.5)
             / n, 3),
         "katman_ort": round(_ort(katman_sayisi(o) for o in h), 3),
+        "uzmanlasma": round(uzmanlasma(h), 3),
+        "zirhli_oran": round(
+            sum(1 for o in h if savunma_puani(o) > 0.5) / n, 3),
         # --- genel ---
         "organ_ort": round(_ort(len(o.organs) for o in h), 2),
         "hiz_ort": round(_ort(getattr(o, 'speed', 0.0) for o in h), 2),
