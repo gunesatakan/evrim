@@ -43,9 +43,10 @@ def _hazirla():
 
 
 def _bir_tohum(arg):
-    tohum, evrim_sure, yaris_sure, dt = arg
+    tohum, evrim_sure, yaris_sure, dt, kontrol = arg
     _hazirla()
     import game_settings
+    from entities.entity import WIDTH, HEIGHT
     from systems.world import Dunya
     from entities.organism import Organism
     from systems.signaling.behavior_genome import BehaviorGenome
@@ -80,12 +81,23 @@ def _bir_tohum(arg):
         b.bound_target = None
         b.bound_by = None
         # TEK FARK BU SATIR.
-        b.behavior = BehaviorGenome.random()
+        #
+        # KONTROL modunda bu satir atlanir: iki grup da evrimlesmis
+        # tabloyu tasir. Sonuc 0.5'ten sapiyorsa testin KENDISINDE bir
+        # yanlilik var demektir (siralama, konum, yikanma) ve asil sonuc
+        # o yanliliga gore okunmali. Boyle bir bos kontrol olmadan
+        # "evrimlesmis kaybetti" cumlesi kurulamaz.
+        if not kontrol:
+            b.behavior = BehaviorGenome.random()
         for x in (a, b):
             Organism._next_index += 1
             x.index = Organism._next_index
-            x.pos = x.pos.__class__(random.uniform(60, 1140),
-                                    random.uniform(60, 740))
+            # ARENA BOYUTU SABIT YAZILMAMALI. Once 1200x800 yaziliydi;
+            # arena 2400x1600'e cikinca butun yaris hucreleri haritanin
+            # SOL UST CEYREGINE yiginiyor, yogunluk dort katina cikiyordu.
+            # Olculen sey davranis degil, tikisiklik olurdu.
+            x.pos = x.pos.__class__(random.uniform(60, WIDTH - 60),
+                                    random.uniform(60, HEIGHT - 60))
         yeni.extend((a, b))
     d2.optropis = yeni
     d2.kaotropis = []
@@ -114,14 +126,18 @@ def main():
     ap.add_argument("--dt", type=float, default=1.0 / 30.0)
     ap.add_argument("--tohum", type=int, nargs="+",
                     default=[1, 2, 3, 4, 5, 6, 7, 8])
+    ap.add_argument("--kontrol", action="store_true",
+                    help="bos kontrol: iki grup da evrimlesmis tabloyu tasir")
     ap.add_argument("--cikti", type=str, default=None)
     a = ap.parse_args()
 
-    isler = [(t, a.evrim, a.yaris, a.dt) for t in a.tohum]
+    isler = [(t, a.evrim, a.yaris, a.dt, a.kontrol) for t in a.tohum]
     with mp.Pool(min(len(isler), os.cpu_count() or 1)) as p:
         sonuc = p.map(_bir_tohum, isler)
 
-    print("tohum   evrim  rastgele   evrim payi")
+    print("%s" % ("BOS KONTROL (iki grup da evrimlesmis)" if a.kontrol
+                  else "EVRIMLESMIS vs RASTGELE"))
+    print("tohum   A grubu  B grubu   A payi")
     paylar = []
     for r in sonuc:
         if "hata" in r:
