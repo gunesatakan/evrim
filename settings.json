@@ -27,7 +27,7 @@
         "COST_FLAGELLA": 0.03,
         "COST_CILIA": 0.05,
         "COST_CHEMORECEPTOR": 0.02,
-        "COST_MECHANORECEPTOR": 0.01,
+        "COST_MECHANORECEPTOR": 0.002,
         "COST_PHOTORECEPTOR": 0.001,
         "COST_CYTOPLASM": 0.15,
         "COST_DIGESTION": 0.3,
@@ -189,7 +189,16 @@
         "ARENA_OLCEK": 2.0,
         "YUZEY_HACIM_REF": 2.0,
         "MEMORY_TABAN": 10.0,
-        "MEMORY_CEVRIM": 0.02
+        "MEMORY_CEVRIM": 0.02,
+        "GURULTU_REF": 550.0,
+        "RENK_MUTASYON": 0.06,
+        "RENK_SIGMA": 0.05,
+        "SES_MENZIL_OLCEGI": 120.0,
+        "MECHANO_KAPSAMA_TABAN": 0.15,
+        "GROW_MECHANO_KAPSAMA": 0.12,
+        "GROW_MECHANO_ESIK": 0.12,
+        "MECHANO_ESIK_MIN": 0.0015,
+        "KOKU_SURUKLENME": 1.5
     },
     "entities": {
         "optropi_0": {

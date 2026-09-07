@@ -7,6 +7,8 @@ from entities.entity import Entity, SCALE
 import interactions.reflexes
 from organs.receptors.Photoreceptor.photoreceptor import Photoreceptor
 from organs.receptors.Mechanoreceptor.mechanoreceptor import Mechanoreceptor
+from organs.receptors.Mechanoreceptor.logic_mechanoreceptor import (
+    MechanoreceptorLogic)
 from organs.receptors.Chemoreceptor.chemoreceptor import Chemoreceptor
 from organs.peripheral.flagella.flagella import Flagella
 from organs.peripheral.cilia.cilia import Cilia
@@ -62,6 +64,7 @@ class Genome:
             'flagella', 'cilia', 'chemoreceptor', 'vision_angle', 'vision_range',
             'sound_radius', 'body_size', 'digestion_speed', 'ribosome_speed',
             'max_energy', 'move_regen', 'memory_length',
+            'sound_focus',
             'membrane_integrity', 'wall', 'outer', 'capsule', 'efflux', 'repair', 'slip',
             'mucus', 'slayer',
             'stylet', 'harpoon', 'nematocyst', 'toxin', 'lysin', 'phagocytosis'
@@ -122,7 +125,11 @@ class Genome:
                 key = 'mechanoreceptor'
                 idx = organ_counts.get(key, 0)
                 organ_counts[key] = idx + 1
+                # Kulagin IKI ayri gelisim ekseni var ve ikisi de ayri
+                # cekilir: esik (ne kadar kucugunu duyar) ve kapsama
+                # (nereden geldigini bilir).
                 genes.append(('sound_radius', idx))
+                genes.append(('sound_focus', idx))
             elif isinstance(organ, Chemoreceptor):
                 key = 'chemoreceptor'
                 idx = organ_counts.get(key, 0)
@@ -240,6 +247,10 @@ class Organism(Entity):
     koku_gradyani = None
     #: Motor eforu (0..1). Davranis spektrumunun buyuklugu belirler.
     motor_efor = 1.0
+    #: Sesin yonunu ne kadar sasirdigimiz (derece). Kapsama belirler.
+    hedef_yon_hatasi = 0.0
+    #: Gercek hareket yonu (koku bulutunun surüklenme yonu icin).
+    hareket_yonu = None
 
     #: Gorme organi onbellegi icin guvenli varsayilan. recalculate_physics
     #  tazeler; ondan once can_see cagrilirsa gozsuz sayilir.
@@ -896,6 +907,18 @@ class Organism(Entity):
 
     _koku_onbellek = None
 
+    def koku_kaynagi(self):
+        """Bu hucrenin kokusunun ETKIN kaynagi (konumu degil).
+
+        Hizli yuzen bir cisim kendi bulutunu geride birakir; kaynak
+        gittigi yonun tersine `hiz x KOKU_SURUKLENME` kadar otelenir.
+        """
+        yon = getattr(self, 'hareket_yonu', None)
+        if yon is None or self.speed <= 0.0:
+            return self.pos
+        return self.pos - yon * (self.speed
+                                 * game_settings.KOKU_SURUKLENME)
+
     def koku_tazele(self):
         self._koku_onbellek = scent_value(self)
         return self._koku_onbellek
@@ -1060,6 +1083,8 @@ class Organism(Entity):
             self.current_response = 0.0
             return None, None
         my_scent = self.scent_value      # döngü içinde değişmez, bir kez
+        kulak = next((o.logic for o in self.organs
+                      if isinstance(o, Mechanoreceptor)), None)
         best = None          # (seviye, -mesafe) -> hedef, tepki
         for t in others:
             if t is self or t.dead:
@@ -1073,13 +1098,39 @@ class Organism(Entity):
                 stimuli.append(('light',
                                 BehaviorGenome.hue_bin(t.color),
                                 BehaviorGenome.level_bin(max(0.0, vrange - d), vrange)))
-            if hrange > 0.0 and d <= hrange + t.radius:
-                # Ses yönsüzdür: koni yok, yarıçap içindeyse duyulur
-                stimuli.append(('sound',
-                                BehaviorGenome.size_bin(t.radius),
-                                BehaviorGenome.level_bin(max(0.0, hrange - d), hrange)))
+            if kulak is not None:
+                # SES = ORGANA CARPAN BASINC DALGASI.
+                #
+                # Kendi kendine yuzen bir cisim kuvvet-serbesttir; uzak
+                # alani stresslet'tir ve mesafenin KARESIYLE soner:
+                #     sinyal(r) = (yaricap x hiz) / r^2
+                # Duran hucre hic sinyal uretmez. Duyulmasi, sinyalin
+                # organin ESIGINI asmasina baglidir.
+                #
+                # Sinif BOYUT (ne buyuklukte bir sey), seviye ise sinyalin
+                # esige gore kac kati oldugu. Kokunun veremedigi bilgi
+                # budur: koku KIM oldugunu, ses NE YAPTIGINI soyler.
+                _gur = MechanoreceptorLogic.gurultu(t)
+                _sinyal = kulak.duyulan_sinyal(_gur, max(1.0, d - t.radius))
+                if _sinyal >= 1.0:
+                    stimuli.append(('sound',
+                                    BehaviorGenome.size_bin(t.radius),
+                                    BehaviorGenome.level_bin(_sinyal, 8.0)))
+            # KOKU KAYNAGI HEDEFIN KONUMUNDA DEGIL, ARKASINDADIR.
+            #
+            # Hizli yuzen bir cisim kendi koku bulutunu geride birakir
+            # (Peclet: tasinim difuzyonu asar). Sonucu su: uzerine gelen
+            # hizli bir hucreyi burunla GEC fark edersin, arkandan gideni
+            # cok daha UZAKTAN koklarsin.
+            #
+            # Mekanoreseptoru gerekli kilan sey tam olarak budur - hizla
+            # yaklasan cisim buruna SESSIZ, kulaga GURULTULUDUR. Iki duyu
+            # boylece birbirinin kopyasi olmaktan cikar.
+            _kaynak = t.koku_kaynagi()
+            d_koku = self.pos.distance_to(_kaynak)
+
             scent_x = None
-            if srange > 0.0 and d <= srange + t.radius:
+            if srange > 0.0 and d_koku <= srange + t.radius:
                 # KOKU: koni yok, menzil en uzun. Ayrık sınıf DEĞİL, sürekli
                 # eksen - ve hedefin puanı BENİM puanıma oranla okunur.
                 # Böylece küçük genetik değişim küçük konum kayması yapar,
@@ -1087,13 +1138,14 @@ class Organism(Entity):
                 scent_x = BehaviorGenome.relative_position(t.scent_value,
                                                            my_scent)
 
-            if srange > 0.0 and t.kairomone > 0.0 and d <= srange + t.radius:
+            if srange > 0.0 and t.kairomone > 0.0 and d_koku <= srange + t.radius:
                 # KAIROMON: sınıf, hedefin ne kadar YAKINDA avlandığı.
                 # Yüzey kimyası zırhı ele verir, kairomon ise davranışı:
                 # "bu hücre az önce birini yedi" bilgisini taşıyan tek kanal.
                 stimuli.append(('kairomone',
                                 BehaviorGenome.kairomone_bin(t.kairomone),
-                                BehaviorGenome.level_bin(max(0.0, srange - d), srange)))
+                                BehaviorGenome.level_bin(
+                                    max(0.0, srange - d_koku), srange)))
 
             kin = self.is_kin(t)
             atak = game_settings.ATAK_ESIGI
@@ -1113,7 +1165,7 @@ class Organism(Entity):
                 # yalnizca esitlik bozar.
                 key = (abs(resp), -d)
                 if best is None or key > best[0]:
-                    best = (key, t, resp)
+                    best = (key, t, resp, 'scent')
 
             for stim, cls_idx, level in stimuli:
                 resp = self.behavior.respond(stim, cls_idx, level)
@@ -1121,13 +1173,22 @@ class Organism(Entity):
                     self.attack_targets.add(id(t))
                 key = (abs(resp), -d)
                 if best is None or key > best[0]:
-                    best = (key, t, resp)
+                    best = (key, t, resp, stim)
 
         if best is None:
             self.current_response = 0.0
             return None, None
-        _k, target, resp = best
+        _k, target, resp, kanal = best
         self.current_response = resp
+        # SESIN YONU KAPSAMAYA BAGLI.
+        #
+        # Kazanan uyaran ses ise hucre "bir sey var" bilir ama nereden
+        # geldigini ancak kapsamasi kadar bilir. Kapsamasi dusuk olan ters
+        # yone kacabilir; yuksek olan dogrudan uzaklasir. Kulagin ikinci
+        # gelisim ekseninin karsiligi budur.
+        self.hedef_yon_hatasi = (kulak.yon_hatasi()
+                                 if (kanal == 'sound' and kulak is not None)
+                                 else 0.0)
         return resp, target
 
     # ---------------- BAĞLANMA ----------------
@@ -1666,6 +1727,37 @@ class Organism(Entity):
             self.genome.sequence.append((gene, idx))
         return organ
 
+    def renk_mutasyonu(self, rng=random):
+        """Rengi biraz kaydir.
+
+        RENK BIR SINIF ETIKETI DEGIL, KALITSAL BIR OZELLIK OLMALI.
+
+        Fotoreseptor hedefin RENK TONUNU okuyor (`hue_bin`) - ama renk
+        dogumda sinifa gore atanip bir daha hic degismiyordu. Dunyada
+        toplam alti sabit deger vardi ve hicbiri tasiyani hakkinda bir sey
+        soylemiyordu. Renge tepki evrimlestirmenin bir anlami yoktu;
+        islevsiz organ da atiliyordu.
+
+        Renk kalitsal ve mutasyona acik olunca bir SINYALE donusur. Ustelik
+        silahlarla ve zirhla birlikte kalitildigi icin onlarla ILISKILENIR:
+        zehirli bir soy rengini korur, o tondan kacinan avci hayatta kalir -
+        uyarici renklenme (aposematizm) boyle dogar. Savunmasiz bir soy
+        ayni tona surukleniyorsa taklit (mimikri) dogar. Ikisi de
+        kodlanmaz, cikabilir.
+
+        Ton kayar, doygunluk ve parlaklik dar bir bantta tutulur - hucre
+        ekranda gorunur kalmali.
+        """
+        import colorsys
+        r, g, b = (max(0, min(255, int(c))) for c in self.color[:3])
+        h, sat, v = colorsys.rgb_to_hsv(r / 255.0, g / 255.0, b / 255.0)
+        h = (h + rng.gauss(0.0, game_settings.RENK_SIGMA)) % 1.0
+        sat = min(1.0, max(0.45, sat + rng.gauss(0.0, 0.05)))
+        v = min(1.0, max(0.55, v + rng.gauss(0.0, 0.05)))
+        nr, ng, nb = colorsys.hsv_to_rgb(h, sat, v)
+        self.color = (int(nr * 255), int(ng * 255), int(nb * 255))
+        return self.color
+
     def organ_acisi_mutasyonu(self):
         """Bir organin TAKILDIGI ACIYI biraz kaydir.
 
@@ -1994,6 +2086,10 @@ class Organism(Entity):
             if random.random() < game_settings.ORGAN_ANGLE_RATE:
                 if daughter.organ_acisi_mutasyonu() is not None:
                     changes += game_settings.DIVERGENCE_UPGRADE
+            # Renk de kalitsal bir ozelliktir ve kayar.
+            if random.random() < game_settings.RENK_MUTASYON:
+                daughter.renk_mutasyonu()
+                changes += game_settings.DIVERGENCE_UPGRADE
             # Bolunme deepcopy ile calisir: ebeveynde kalmis bir kopya zar
             # ya da sitoplazma butun soya gecerdi. Her yavru tekillenir.
             # HAFIZA CEVRIMI (protein donusumu).
@@ -2056,7 +2152,9 @@ class Organism(Entity):
         upgrade_type, organ_index = instruction
 
         # Organ upgrade types need a valid organ reference
-        organ_upgrade_types = {'flagella', 'cilia', 'chemoreceptor', 'vision_angle', 'vision_range', 'sound_radius'}
+        organ_upgrade_types = {'flagella', 'cilia', 'chemoreceptor',
+                               'vision_angle', 'vision_range',
+                               'sound_radius', 'sound_focus'}
         organ_upgrade_types |= set(('stylet', 'harpoon', 'nematocyst', 'toxin', 'lysin', 'phagocytosis'))
 
         organ = None
@@ -2074,6 +2172,7 @@ class Organism(Entity):
         elif upgrade_type == 'vision_angle' and organ: organ.grow('angle')
         elif upgrade_type == 'vision_range' and organ: organ.grow('range')
         elif upgrade_type == 'sound_radius' and organ: organ.grow()
+        elif upgrade_type == 'sound_focus' and organ: organ.logic.grow_kapsama()
         elif upgrade_type in ('stylet', 'harpoon', 'nematocyst', 'toxin', 'lysin', 'phagocytosis') and organ: organ.grow()
         elif upgrade_type == 'body_size' and hasattr(self, 'body'): self.body.grow()
         elif upgrade_type == 'digestion_speed' and hasattr(self, 'body'): self.body.logic.grow_enzyme(); self._log("[EVRIM] Sindirim hizi artti")
@@ -2103,6 +2202,7 @@ class Organism(Entity):
             'vision_angle': Photoreceptor,
             'vision_range': Photoreceptor,
             'sound_radius': Mechanoreceptor,
+            'sound_focus': Mechanoreceptor,
         }
         for _wname, _wcls in WEAPON_CLASSES.items():
             type_map[_wname.lower()] = _wcls
@@ -2164,7 +2264,9 @@ class Organism(Entity):
         nearby_threats = []
         for o in self.organs:
             if isinstance(o, Mechanoreceptor):
-                heard = [k for k in kaotropis if o.is_hearing(self, k.pos, k.radius)]
+                heard = [k for k in kaotropis
+                         if o.is_hearing(self, k.pos, k.radius,
+                                         MechanoreceptorLogic.gurultu(k))]
                 nearby_threats.extend(heard)
         
         # Gözler de eklenmeli
@@ -2300,6 +2402,10 @@ class Organism(Entity):
                 # degerler ilgisiz surukleniste: hafifce yaklasma ya da
                 # hafifce uzaklasma, az motor enerjisiyle.
                 behave_dir = v if resp > 0 else -v
+                _hata = getattr(self, 'hedef_yon_hatasi', 0.0)
+                if _hata > 0.0:
+                    behave_dir = behave_dir.rotate(
+                        max(-180.0, min(180.0, random.gauss(0.0, _hata))))
                 behave_resp = resp
 
         # AV TESPİTİ - görüş alanındaki en yakın av
@@ -2457,6 +2563,9 @@ class Organism(Entity):
         immobile = (self.stun_timer > 0 or self.is_restrained
                     or self.bound_target is not None)
         move_dist = 0.0 if immobile else self.speed * dt
+        # Koku bulutunun nereye surukelendigini bilmek icin GERCEK hareket
+        # yonu saklanir (yon vektoru degil - kurek fiziginde ikisi ayrilir).
+        self.hareket_yonu = pygame.math.Vector2(0, 0) if immobile else move_dir
         self.pos += move_dir * move_dist
         self.check_bounds()
 

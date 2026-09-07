@@ -235,6 +235,13 @@ def olc(d):
         "kamci_ort": round(_ort(
             sum(1 for x in o.organs
                 if x.__class__.__name__ == 'Flagella') for o in h), 3),
+        "goz_ort": round(_ort(
+            sum(1 for x in o.organs
+                if x.__class__.__name__ == 'Photoreceptor') for o in h), 3),
+        "kulak_ort": round(_ort(
+            sum(1 for x in o.organs
+                if x.__class__.__name__ == 'Mechanoreceptor') for o in h), 3),
+        "renk_cesit": len({o.color for o in h}),
         "bant": {k: round(v, 3) for k, v in _bant_ortalama(h).items()},
         "olum": dict(d.olum_nedeni),
     }

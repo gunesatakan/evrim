@@ -12,7 +12,8 @@ import os
 
 
 ALANLAR = (("n", "%5.0f"), ("dogum", "%6.0f"), ("organ_ort", "%6.2f"),
-           ("burun_ort", "%6.2f"), ("kamci_ort", "%6.2f"),
+           ("burun_ort", "%6.2f"), ("goz_ort", "%6.2f"),
+           ("kulak_ort", "%6.2f"), ("kamci_ort", "%6.2f"),
            ("silahli_oran", "%7.3f"), ("silah_guc", "%7.3f"),
            ("atis", "%7.0f"), ("katman_ort", "%7.3f"),
            ("savunmaci_oran", "%8.3f"), ("uzmanlasma", "%8.3f"),

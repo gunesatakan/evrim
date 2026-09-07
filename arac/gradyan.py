@@ -41,6 +41,9 @@ TAKIMLAR = {
                    ("Flagella", 10.0)], {}),
     "uzun_burun": ([("Chemoreceptor", 12.0), ("Flagella", 10.0)], {}),
     "goz":      ([("Photoreceptor", 25.0), ("Flagella", 10.0)], {}),
+    "kulak":    ([("Mechanoreceptor", 1.0), ("Flagella", 10.0)], {}),
+    "burun+kulak": ([("Chemoreceptor", 6.0), ("Mechanoreceptor", 1.0),
+                     ("Flagella", 10.0)], {}),
     "duvarli":  ([("Chemoreceptor", 6.0), ("Flagella", 10.0)], {"wall": 3.0}),
     "stilet":   ([("Chemoreceptor", 6.0), ("Flagella", 10.0),
                   ("Stylet", 1.0)], {}),
@@ -114,7 +117,8 @@ def _kur(hucre, takim):
     for i, (tip, deger) in enumerate(organlar):
         aci = i * 2.0 * math.pi / max(1, len(organlar))
         anahtar = {"Chemoreceptor": "length", "Flagella": "length",
-                   "Photoreceptor": "range"}.get(tip, "power")
+                   "Photoreceptor": "range",
+                   "Mechanoreceptor": "size"}.get(tip, "power")
         hucre.add_organ(Morphology.build_organ(tip, aci, {anahtar: deger}))
     hucre.morphology = Morphology.from_organism(hucre)
     hucre.recalculate_physics()

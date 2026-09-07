@@ -153,7 +153,33 @@ DEFAULT_SETTINGS = {
     "COST_FLAGELLA": 0.03,
     "COST_CILIA": 0.05,
     "COST_CHEMORECEPTOR": 0.02,
-    "COST_MECHANORECEPTOR": 0.01,
+    "COST_MECHANORECEPTOR": 0.002,
+    # SES = hidrodinamik bozulma = yaricap x hiz. Bu referans degerdeki bir
+    # hedef, kulagin tam hassasiyet mesafesinden duyulur. Yaricapi 22,
+    # hizi 25 olan orta bir hucre ~550 uretir.
+    "GURULTU_REF": 550.0,
+    # Kulagin hassasiyeti = size x bu. size 1.0 (baslangic) -> 120 px,
+    # yani koku menziliyle ayni. Gurultulu hedef daha uzaktan, sessiz
+    # hedef hic duyulmaz.
+    "SES_MENZIL_OLCEGI": 120.0,
+    # Kapsama: sesin YONUNU cikarma yetisi (0 = yonsuz, 1 = tam). Menzili
+    # ARTIRMAZ. Kopepodun onlarca setasi bunun icindir: tek seta "bir sey
+    # oldu" der, cok seta "surdan geliyor" der. Dusuk baslar ki gelisecek
+    # yer olsun.
+    "MECHANO_KAPSAMA_TABAN": 0.15,
+    "GROW_MECHANO_KAPSAMA": 0.12,
+    # Esik gelisimi carpansaldir: her kademe esigi %12 dusurur, yani
+    # menzili %6.5 artirir. Alt sinir, tek bir kulagin butun haritayi
+    # duymasini engeller.
+    "GROW_MECHANO_ESIK": 0.12,
+    "MECHANO_ESIK_MIN": 0.0015,
+    # KOKU SURUKLENMESI (saniye). Hizli yuzen bir hucrenin kokusu
+    # ARKASINDA kalir: kaynak, konumundan `hiz x bu` kadar geride sayilir.
+    # Peclet fiziginin karsiligi - uzerine gelen hizli bir cismi burunla
+    # gec fark edersin, arkandan gideni cok uzaktan koklarsin. Kulagi
+    # gerekli kilan sey tam olarak budur: hizla yaklasan cisim buruna
+    # SESSIZ, kulaga GURULTULUDUR.
+    "KOKU_SURUKLENME": 1.5,
     "COST_PHOTORECEPTOR": 0.001,
     "COST_CYTOPLASM": 0.15,
     "COST_DIGESTION": 0.3,
@@ -508,6 +534,10 @@ DEFAULT_SETTINGS = {
     # duzeltilemiyordu. Kucuk kaymalar secilime tirmanacak bir egim verir.
     "ORGAN_ANGLE_RATE": 0.10,
     "ORGAN_ANGLE_SIGMA": 18.0,    # derece
+    # Renk kalitsaldir ve kayar; boylece fotoreseptorun okudugu sey bir
+    # sinif etiketi degil evrimlesen bir SINYAL olur (aposematizm/mimikri).
+    "RENK_MUTASYON": 0.06,
+    "RENK_SIGMA": 0.05,
 
     # Run-and-Tumble chemotaxis
     "TUMBLE_GAIN_POSITIVE": 5.0,
