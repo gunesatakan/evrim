@@ -40,7 +40,9 @@ class DangerTransmission:
         self.levy_run_duration = 0.0
         self.levy_timer = 0.0
 
-    def process_signals(self, dt, organism, nearby_threats, memory_system, scent_intensity, prey_dir=None, behavior_response='ignore'):
+    def process_signals(self, dt, organism, nearby_threats, memory_system,
+                        scent_intensity, prey_dir=None,
+                        behavior_response='ignore', koku_gradyani=None):
         """
         Sinyalleri işler ve hareket yönünü belirler.
         BehavioralState sistemini kullanarak iç duruma göre karar verir.
@@ -118,18 +120,53 @@ class DangerTransmission:
                         'approach': 'HUNT'}.get(behavior_response, 'HUNT')
             return (self.target_direction, vec_type, prey_dir * 45)
 
-        # 4. CHEMOTAXIS veya IDLE
+        # 4. ARAMA: Levy tabanli kesif + kemotaksi egilimi
+        #
+        # Once IKI AYRI MOD vardi: koku varsa run-and-tumble, yoksa Levy
+        # ucusu. Bu kurgu burnu olan hucreyi cezalandiriyordu. Levy ucusu
+        # superdifuzyondur - kosular 10 saniyeye kadar uzar, hucre genis
+        # bir alani tarar. Run-and-tumble ise saniyede bir yon degistiren
+        # bir rastgele yuruyustur ve ayni surede cok daha az yol alir.
+        # Yani KOKU ALMAK, iyi bir arama stratejisini kotusuyle
+        # degistiriyordu; kemotaksinin kazandirdigi egilim bu kaybi
+        # kapatmiyordu.
+        #
+        # Olculdu (6 tohum x 120 sn, yamali besin): yalnizca kamci tasiyan
+        # hucre 14.68 besin, kamci+burun tasiyan 14.04. Yani burun tasimak
+        # NET ZARARDI - bakim enerjisi ve surtunme goturuyor, karsiliginda
+        # hicbir sey vermiyordu. Boyle bir dunyada kemoreseptor
+        # evrimlesemez; olcut 2 icin gereken duyu-davranis baglantisi hic
+        # kurulamaz.
+        #
+        # Dogru kurgu TEK bir aramadir: taban kesif her hucrede aynidir
+        # (Levy), koku yalnizca KOSUNUN NE KADAR SURECEGINI degistirir.
+        #   gradyan yukseliyorsa -> kosu uzar  (iyi yondeyim, devam)
+        #   gradyan dusuyorsa    -> kosu kisalir (yanlis yon, hemen don)
+        # Boylece burun hicbir zaman zarar vermez: bilgi yoksa davranis
+        # burunsuzunkiyle birebir aynidir, bilgi varsa ustune egilim ekler.
+        # E. coli'nin yaptigi da tam olarak budur - tumble sikligini
+        # degistirir, yuzme bicimini degil.
+        # UZAMSAL GRADYAN: iki ya da daha fazla kemoreseptoru olan hucre
+        # kokunun YONUNU dogrudan okur; deneme yanilmayla aramasi gerekmez.
+        # Zamansal kemotaksinin ustune degil YERINE gecer - eldeki bilgi
+        # zaten yon, kosu uzunlugu ayarlamaya gerek yok.
+        if koku_gradyani is not None:
+            self.target_direction = koku_gradyani
+            self.levy_timer = 0.0
+            return (self.target_direction, None, None)
+
+        self.levy_timer += dt
+        uzatma = 1.0
         if scent_intensity > 0:
-            # --- RUN-AND-TUMBLE (pencereli zamansal örnekleme) ---
-            # Algıyı pencere boyunca biriktir; tumble_rate yalnızca pencere
-            # dolduğunda güncellenir ve aralarda korunur (hücrenin iç durumu).
+            # Algiyi pencere boyunca biriktir: kare basina (1/30 sn) olculen
+            # fark, hucre o surede neredeyse hic yer degistirmedigi icin
+            # sifira yakin cikar ve hicbir egilim uretmez.
             self._sample_accum += scent_intensity * dt
             self._sample_time += dt
-
             if self._sample_time >= self.sample_interval:
                 window_mean = self._sample_accum / self._sample_time
                 if self.last_perception is None:
-                    delta = 0.0          # ilk pencere: karşılaştıracak şey yok
+                    delta = 0.0      # ilk pencere: karsilastiracak sey yok
                 else:
                     delta = window_mean - self.last_perception
                 self.last_perception = window_mean
@@ -137,46 +174,40 @@ class DangerTransmission:
                 self._sample_accum = 0.0
                 self._sample_time = 0.0
 
-                gain_pos = getattr(game_settings, 'TUMBLE_GAIN_POSITIVE', 5.0)
-                gain_neg = getattr(game_settings, 'TUMBLE_GAIN_NEGATIVE', 2.0)
-                rate_min = getattr(game_settings, 'TUMBLE_RATE_MIN', 0.05)
-                rate_max = getattr(game_settings, 'TUMBLE_RATE_MAX', 10.0)
-
-                if delta > 0:
-                    self.tumble_rate = self.base_tumble_rate * math.exp(-gain_pos * delta)
-                else:
-                    self.tumble_rate = self.base_tumble_rate * math.exp(-gain_neg * delta)
-
-                self.tumble_rate = max(rate_min, min(rate_max, self.tumble_rate))
-
-            tumble_prob = 1.0 - math.exp(-self.tumble_rate * dt)
-
-            if random.random() < tumble_prob:
-                # TUMBLE: rastgele yeni yön
-                angle = random.uniform(-180, 180)
-                self.target_direction = self.target_direction.rotate(angle)
-                if self.target_direction.length() > 0:
-                    self.target_direction = self.target_direction.normalize()
-
-            return (self.target_direction, None, None)
+            d = self.last_delta
+            kazanc = (game_settings.TUMBLE_GAIN_POSITIVE if d > 0
+                      else game_settings.TUMBLE_GAIN_NEGATIVE)
+            tavan = game_settings.CHEMO_RUN_CLAMP
+            uzatma = math.exp(kazanc * d)
+            uzatma = max(1.0 / tavan, min(tavan, uzatma))
+            # Gozlem icin: etkin tumble sikligi
+            self.tumble_rate = 1.0 / max(1e-6, self.levy_run_duration * uzatma)
         else:
-            # --- LEVY FLIGHT ---
             self._reset_chemotaxis_sampling()
-            self.levy_timer += dt
 
-            if self.levy_timer >= self.levy_run_duration:
-                alpha = getattr(game_settings, 'LEVY_ALPHA', 1.5)
-                min_step = getattr(game_settings, 'LEVY_MIN_STEP', 0.5)
-                max_dur = getattr(game_settings, 'LEVY_MAX_DURATION', 10.0)
-                u = max(0.001, random.random())
-                self.levy_run_duration = min(min_step / (u ** (1.0 / (alpha - 1))), max_dur)
-                self.levy_timer = 0.0
-                angle = random.uniform(-180, 180)
-                self.target_direction = self.target_direction.rotate(angle)
-                if self.target_direction.length() > 0:
-                    self.target_direction = self.target_direction.normalize()
+        if self.levy_timer >= self.levy_run_duration * uzatma:
+            alpha = game_settings.LEVY_ALPHA
+            min_step = game_settings.LEVY_MIN_STEP
+            max_dur = game_settings.LEVY_MAX_DURATION
+            u = max(0.001, random.random())
+            self.levy_run_duration = min(min_step / (u ** (1.0 / (alpha - 1))),
+                                         max_dur)
+            self.levy_timer = 0.0
+            # TUMBLE ACISI DUZGUN DAGILIMLI DEGIL.
+            #
+            # Her donuste tamamen rastgele bir yone bakmak, bir onceki
+            # kosudan ogrenilen her seyi siler; gradyan yuruyusu ancak
+            # yonde bir SUREKLILIK kalirsa ise yarar. E. coli'nin tumble
+            # acisi ~68 derece ortalamalidir ve ileriye yanlidir.
+            aci = random.gauss(0.0, game_settings.TUMBLE_ANGLE_SIGMA)
+            if random.random() < 0.5:
+                aci = -aci
+            aci = max(-180.0, min(180.0, aci))
+            self.target_direction = self.target_direction.rotate(aci)
+            if self.target_direction.length() > 0:
+                self.target_direction = self.target_direction.normalize()
 
-            return (self.target_direction, None, None)
+        return (self.target_direction, None, None)
 
     def _reset_chemotaxis_sampling(self):
         """Algı penceresini sıfırla.

@@ -1,7 +1,7 @@
 {
     "settings": {
         "WORLD_SCALE": 1.0,
-        "FOOD_COUNT": 200,
+        "FOOD_COUNT": 420,
         "KAOTROPI_COUNT": 8,
         "NOTROPI_COUNT": 30,
         "PREY_FOOD_VALUE": 2,
@@ -114,7 +114,7 @@
         "PHAGO_COST": 0.08,
         "PHAGO_SIZE_RATIO": 0.7,
         "PHAGO_STUN": 1.0,
-        "SMELL_RANGE_BASE": 8.0,
+        "SMELL_RANGE_BASE": 20.0,
         "DIVERGENCE_NEW_ORGAN": 5.0,
         "DIVERGENCE_UPGRADE": 1.0,
         "SCENT_WEIGHT_MEMBRANE": 0.5,
@@ -131,8 +131,8 @@
         "SEPARATION_STRENGTH": 0.5,
         "CYTOSKELETON_AREA": 10.0,
         "FOOD_AREA": 100.0,
-        "FOOD_SPAWN_RATE": 7.0,
-        "FOOD_MAX": 500,
+        "FOOD_SPAWN_RATE": 12.0,
+        "FOOD_MAX": 420,
         "RIBOSOME_AREA": 20.0,
         "VACUOLE_AREA": 30.0,
         "CILIA_TURN_MULTI": 0.05,
@@ -169,7 +169,12 @@
         "LEVY_MAX_DURATION": 10.0,
         "ORGAN_GAIN_RATE": 0.02,
         "ORGAN_LOSS_RATE": 0.02,
-        "TRAIL_RATE": 6.0
+        "TRAIL_RATE": 6.0,
+        "FOOD_PATCH_SIZE": 26,
+        "FOOD_PATCH_SIGMA": 45.0,
+        "CHEMO_RUN_CLAMP": 6.0,
+        "TUMBLE_ANGLE_SIGMA": 60.0,
+        "SPATIAL_CHEMO_MIN": 0.06
     },
     "entities": {
         "optropi_0": {

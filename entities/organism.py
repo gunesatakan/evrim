@@ -236,6 +236,9 @@ class Morphology:
 
 
 class Organism(Entity):
+    #: Uzamsal koku gradyani (>=2 kemoreseptor varsa). Guvenli varsayilan.
+    koku_gradyani = None
+
     #: Gorme organi onbellegi icin guvenli varsayilan. recalculate_physics
     #  tazeler; ondan once can_see cagrilirsa gozsuz sayilir.
     _gozler = ()
@@ -292,7 +295,11 @@ class Organism(Entity):
         self.genome = None  # Sequential genetics - initialized after organs are added
         self.pending_children = []  # bölünmede doğan, simulation'a katılacak yavrular
         self.morphology = None      # iskelet geni; organlar eklendikten sonra kurulur
-        self.prey_eaten = 0         # kaç notropi yendi (istatistik)
+        self.prey_eaten = 0
+        # Omur boyu alinan besin. Sagkalimin degil BASARININ olcusu:
+        # iki hucre de hayattaysa hangisinin daha iyi beslendigini baska
+        # turlu gormek mumkun degil.
+        self.toplam_besin = 0         # kaç notropi yendi (istatistik)
         self.pending_organ_rolls = 0  # avlanmadan kazanılan, mitozda çekilecek gelişim hakları
         self.dead = False           # simulation.py listeden düşürür
         self.death_cause = None     # 'aclik' | 'avlandi' | 'elendi' | 'kaotropi'
@@ -984,6 +991,8 @@ class Organism(Entity):
         if hasattr(self, 'body'):
             organ_area = self.calculate_organ_area()
             taken = self.body.logic.add_food(food, organ_area)
+            if taken:
+                self.toplam_besin += 1
             if taken and getattr(food, 'from_corpse', False):
                 # LEŞ yemek de kairomon sızdırır. Avcıların çoğu avını
                 # doğrudan yutmaz: stiletle öldürür, leş besine dönüşür,
@@ -1980,14 +1989,43 @@ class Organism(Entity):
 
         unique_threats = list({k.uid: k for k in nearby_threats}.values())
 
-        # Koku örnekleme - scalar field'den oku
+        # KOKU ORNEKLEME - iki ayri yetenek
+        #
+        # TEK alici yalnizca ZAMANSAL kemotaksi yapabilir: "az once daha
+        # mi iyiydi?" diye sorar ve buna gore kosusunu uzatir. Bakteri de
+        # boyle yapar; govdesi bir gradyani uzunlugunca olcemeyecek kadar
+        # kucuktur.
+        #
+        # IKI ya da daha fazla alici, farkli acilara takili olduklari icin
+        # AYNI ANDA farkli yerlerden okur - yani UZAMSAL gradyan cikarabilir
+        # ve dogrudan o yone donebilir. Buyuk okaryot hucrelerin (amip,
+        # notrofil) yaptigi budur ve tam olarak bu yuzden yapabilirler:
+        # yeterince buyuk ve yeterince cok aliciya sahipler.
+        #
+        # Bu ayrim, karmasiklasmanin karsiligini veren gercek bir kazanc:
+        # ikinci burun tasimak sadece "biraz daha hassas" degil, NITELIK
+        # OLARAK BASKA bir arama demek.
         best_perception = 0.0
+        self.koku_gradyani = None
         if scent_env:
+            okumalar = []
             for organ in self.organs:
                 if isinstance(organ, Chemoreceptor):
                     perception = organ.sample_environment(self, scent_env)
                     if perception > best_perception:
                         best_perception = perception
+                    okumalar.append((organ._taban_ve_boy(self)[1], perception))
+            if len(okumalar) >= 2 and best_perception > 0.0:
+                ort = sum(p for _y, p in okumalar) / len(okumalar)
+                v = pygame.math.Vector2(0.0, 0.0)
+                for yon, p in okumalar:
+                    v += yon * (p - ort)
+                # Zayif bir fark gurultudur: aliciler birbirine yakinsa ya
+                # da bulut duzse yon bilgisi tasimaz. Esik, ortalamanin
+                # kucuk bir orani - mutlak deger degil, cunku algi
+                # logaritmik ve olcegi ortama gore degisir.
+                if v.length() > max(0.02, ort * game_settings.SPATIAL_CHEMO_MIN):
+                    self.koku_gradyani = v.normalize()
         scent_intensity = best_perception
         self.current_scent_intensity = scent_intensity
 
@@ -2088,7 +2126,7 @@ class Organism(Entity):
             drive = behave_dir if behave_dir is not None else prey_dir
             self.cytoskeleton.update(dt, self, unique_threats,
                                      self.direction_memory, scent_intensity,
-                                     drive, behave_resp)
+                                     drive, behave_resp, self.koku_gradyani)
         
         # Silah bekleme sayaçları ve yutma sersemliği
         for _o in self.organs:

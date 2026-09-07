@@ -148,7 +148,12 @@ class Dunya:
             self.optropis.append(Notropi(len(self.optropis),
                                          random.randint(50, WIDTH - 50),
                                          random.randint(50, HEIGHT - 50)))
-        self.foods = Food.spawn(food_count)
+        # Baslangic besini de yamali: dunyanin ilk hali ile sonraki
+        # hali arasinda yapisal fark olmasin.
+        self.foods = []
+        _yama = max(1, int(game_settings.FOOD_PATCH_SIZE))
+        while len(self.foods) < food_count:
+            self.besin_yamasi(min(_yama, food_count - len(self.foods)))
         self._besin_izgara = BesinIzgarasi()
         self._food_accum = 0.0
         self.gecen_sure = 0.0
@@ -179,14 +184,15 @@ class Dunya:
 
         trail_manager.update(dt)
 
-        # Besin yeniden dogusu
+        # Besin yeniden dogusu - YAMA YAMA.
         if game_settings.FOOD_SPAWN_RATE > 0:
             if len(foods) < game_settings.FOOD_MAX:
                 self._food_accum += game_settings.FOOD_SPAWN_RATE * dt
-                while self._food_accum >= 1.0 and len(foods) < game_settings.FOOD_MAX:
-                    self._food_accum -= 1.0
-                    foods.append(Food(random.randint(30, WIDTH - 30),
-                                      random.randint(30, HEIGHT - 30)))
+                yama = max(1, int(game_settings.FOOD_PATCH_SIZE))
+                while (self._food_accum >= yama
+                        and len(foods) < game_settings.FOOD_MAX):
+                    self._food_accum -= yama
+                    self.besin_yamasi(yama)
             else:
                 self._food_accum = 0.0
 
@@ -204,15 +210,25 @@ class Dunya:
 
         self._besin_izgara.kur(foods)
 
-        # Koku alani
+        # KOKU ALANI YALNIZCA BESINDIR.
+        #
+        # Once hucreler de ayni alana salgi birakiyordu ("avci kemotaksiyle
+        # avi bulsun" diye). Ama kemoreseptor de AYNI alandan okuyor: hucre
+        # kendi salgisini kokluyordu. Kendi sinyali kendi konumunda en
+        # yuksek oldugu icin - ve Weber-Fechner algiyi logaritmik
+        # sikistirdigi icin - besinin gradyani bunun altinda kayboluyordu.
+        #
+        # Olculdu: 120 besinlik yigina 700 px uzaktaki bir hucre yigindan
+        # gelen kokuyu degil kendi kokusunu okuyordu (algi 3.5-4.3 sabit,
+        # delta +-0.1 gurultu). Kemoreseptor tasimanin hicbir faydasi
+        # yoktu: burunlu hucre 3.37, ciplak hucre 3.50 besin aliyordu.
+        #
+        # Hucrelerin birbirini kokla bulmasi zaten IKI ayri yoldan var:
+        # iz sistemi (kendi izini disliyor) ve perceive_and_decide'in koku
+        # menzili. Difuzyon alanina ihtiyaci yok.
         for f in foods:
             scent_env.add_scent(f.pos.x, f.pos.y,
                                 f.radius * game_settings.FOOD_SCENT_EMISSION * dt)
-        if game_settings.PREY_SCENT_EMISSION > 0:
-            for pobj in self.optropis:
-                if isinstance(pobj, Notropi):
-                    scent_env.add_scent(pobj.pos.x, pobj.pos.y,
-                                        pobj.radius * game_settings.PREY_SCENT_EMISSION * dt)
         scent_env.update(dt)
 
         # --- HERKES ---
@@ -236,9 +252,6 @@ class Dunya:
         for o in hepsi:
             if random.random() < game_settings.TRAIL_RATE * dt:
                 trail_manager.add_point(o.pos.x, o.pos.y, o.uid, o.direction, o.radius)
-            if game_settings.PREY_SCENT_EMISSION > 0:
-                scent_env.add_scent(o.pos.x, o.pos.y,
-                                    o.radius * game_settings.PREY_SCENT_EMISSION * dt)
 
             menzil = algi_menzili(o) + o.radius + 40.0
             komsu = izgara.yakin(o, menzil)
@@ -312,6 +325,24 @@ class Dunya:
             self.kaotropis = [o for o in self.kaotropis if not o.dead]
 
         resolve_overlaps(self.optropis + self.kaotropis)
+
+    def besin_yamasi(self, adet):
+        """Rastgele bir noktaya besin OBEGI birak.
+
+        Tek tek dagitmak haritayi duzgun bir besin sisiyle kapliyordu ve
+        koku alaninin gradyanini duzlestiriyordu; koklamanin bir anlami
+        kalmiyordu. Obek, hem gercekci (deniz kari, cokelti, les) hem de
+        duyu organlarinin bedelini odetip karsiligini veren tek duzen.
+        """
+        sigma = game_settings.FOOD_PATCH_SIGMA
+        cx = random.uniform(60, WIDTH - 60)
+        cy = random.uniform(60, HEIGHT - 60)
+        for _ in range(adet):
+            if len(self.foods) >= game_settings.FOOD_MAX:
+                return
+            x = min(WIDTH - 15, max(15, random.gauss(cx, sigma)))
+            y = min(HEIGHT - 15, max(15, random.gauss(cy, sigma)))
+            self.foods.append(Food(x, y))
 
     # ------------------------------------------------------------------
     def organ_sayimi(self):

@@ -7,7 +7,7 @@ DEFAULT_SETTINGS = {
     # ~30 yapinca hucreler laboratuvardaki boyuta gelir ve katman/gozenek
     # yapisi gercekten cizilebilir hale gelir.
     "WORLD_SCALE": 1.0,
-    "FOOD_COUNT": 1000,
+    "FOOD_COUNT": 420,
     "KAOTROPI_COUNT": 8,
     # --- AVLANMA (Optropi -> Notropi) ---
     # Optropiler notropileri yem olarak gorur. Notropiler de koku yayar,
@@ -256,7 +256,15 @@ DEFAULT_SETTINGS = {
     # Kokunun ayirt edici ozelligi: KONI YOK ve gorusten UZUN. Kimyasal
     # sinyal gorus hatti gerektirmez, kosenin arkasindan gelir.
     # (Olculdu: gorus 15-25 px, ses 10-40 px, kemoreseptor uzunlugu 5-15.)
-    "SMELL_RANGE_BASE": 8.0,
+    # Koku menzili = SMELL_RANGE_BASE * kemoreseptor uzunlugu.
+    # 8 iken baslangic burnu (uzunluk 6) yalnizca 48 px goruyordu - hucre
+    # yaricapinin iki katindan az. Bir hucrenin baska bir hucreye tepki
+    # verebilmesi icin once onu ALGILAMASI gerekiyor; 48 px'de bu ancak
+    # carpismayla olur, yani kacma ya da saldirma karari verilecek zaman
+    # hic kalmaz. 20 ile baslangic burnu 120 px (yaklasik bes govde capi)
+    # kokluyor: nematosist (50) ve toksin (60) menzilinin otesi, yani
+    # silah kullanmadan once hedefi secebilecek kadar erken.
+    "SMELL_RANGE_BASE": 20.0,
     # --- KOKU KIMLIGI ---
     # Koku artik SUREKLI bir puandir (bkz. systems/signaling/scent_profile).
     # Ayrik sinif kalkti: kucuk genetik degisim puani biraz oynatir,
@@ -299,8 +307,22 @@ DEFAULT_SETTINGS = {
     "FOOD_AREA": 50.0,
     # Besin yeniden doğuşu: haritada saniyede kaç yeni besin belirsin.
     # 0 = kapalı (besinler tükenir). FOOD_MAX birikmeyi sınırlar.
-    "FOOD_SPAWN_RATE": 3.0,
-    "FOOD_MAX": 400,
+    "FOOD_SPAWN_RATE": 12.0,
+    # --- BESIN YAMALI DOGAR ---
+    #
+    # Besin haritaya duzgun dagildiginda koku alaninin gradyani duzlesir
+    # ve kemotaksinin tirmanacagi bir egim kalmaz. Olculdu: yamasiz
+    # dunyada kemoreseptor tasimak ZARARLI (kamci 16.2 besin, kamci+burun
+    # 13.3) - organ enerji ve surtunme goturuyor, karsiliginda hicbir sey
+    # vermiyor. Boyle bir dunyada duyu organlari evrimlesemez.
+    #
+    # Dogada besin zaten obek obektir: deniz kari, cokelti, olu hucre.
+    # Bir yamayi bulmak beceri ister ve bulan cok kazanir - kemotaksinin
+    # secilim baskisi bundan dogar.
+    "FOOD_PATCH_SIZE": 26,       # bir yamadaki besin sayisi
+    "FOOD_PATCH_SIGMA": 45.0,    # yamanin yaricapi (px, gauss)
+
+    "FOOD_MAX": 420,
     # NOT: Bu dört anahtar eskiden yalnızca settings.json'da vardı. save_all()
     # sadece DEFAULT_SETTINGS'te bulunanları yazdığı için, launcher'dan yapılan
     # ilk kayıtta dosyadan siliniyor ve sonraki açılışta program çöküyordu.
@@ -387,6 +409,20 @@ DEFAULT_SETTINGS = {
     # neredeyse hiç yer değiştirmediği için sıfıra yakın çıkar; bu pencere
     # boyunca biriktirilip pencere ortalamaları karşılaştırılır.
     "CHEMO_SAMPLE_INTERVAL": 0.5,
+
+    # Kemotaksinin kosuyu uzatabilecegi/kisaltabilecegi en fazla oran.
+    # Ustel kazanc sinirsiz birakilirsa tek bir pencere olcumu hucreyi
+    # dakikalarca ayni yone kilitleyebilir.
+    "CHEMO_RUN_CLAMP": 6.0,
+    # Uzamsal gradyan icin gereken en az KONTRAST (aliciler arasi algi
+    # farkinin ortalamaya orani). Altinda kalan fark gurultudur; hucre
+    # olmayan bir yonu takip etmemeli.
+    "SPATIAL_CHEMO_MIN": 0.06,
+    # Tumble acisinin dagilimi (derece, gauss sigma). Duzgun dagilim
+    # (-180..180) bir onceki kosudan kalan yon bilgisini tamamen siler;
+    # gradyan yuruyusu ancak sureklilik kalirsa ise yarar. E. coli'nin
+    # tumble acisi ~68 derece ortalamalidir.
+    "TUMBLE_ANGLE_SIGMA": 60.0,
 
     # Levy flight (idle wandering)
     "LEVY_ALPHA": 1.5,

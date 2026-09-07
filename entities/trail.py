@@ -38,6 +38,12 @@ class TrailPoint:
         # Populasyon 40 hucreye ciktiginda bu 5000 nokta x 60 kare eder ve
         # karenin en pahali islemi haline gelir - oysa azalma DOGRUSAL ve
         # butun noktalar icin ayni: okunacagi anda hesaplanabilir.
+        # Ekleme sirasi: izgara sorgusu noktalari farkli duzende
+        # dondurdugu icin, agirlikli ortalama alinmadan once buna gore
+        # siralanir (toplama sirasi degisince sonuc kayan noktada oynar).
+        self.seq = TrailPoint._next_seq
+        TrailPoint._next_seq += 1
+
         self.dogum = simdi
         self._saat = saat            # [t] - yoneticinin paylasilan saati
         # Temas testi saniyede milyonlarca kez calisiyor. Vector2 uzerinden
