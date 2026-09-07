@@ -44,7 +44,43 @@ TAKIMLAR = {
     "duvarli":  ([("Chemoreceptor", 6.0), ("Flagella", 10.0)], {"wall": 3.0}),
     "stilet":   ([("Chemoreceptor", 6.0), ("Flagella", 10.0),
                   ("Stylet", 1.0)], {}),
+    "toksin":   ([("Chemoreceptor", 6.0), ("Flagella", 10.0),
+                  ("Toxin", 1.0)], {}),
+    "zipkin":   ([("Chemoreceptor", 6.0), ("Flagella", 10.0),
+                  ("Nematocyst", 1.0)], {}),
+    "fagosit":  ([("Chemoreceptor", 6.0), ("Flagella", 10.0),
+                  ("Phagocytosis", 1.0)], {}),
+    "av":       ([("Chemoreceptor", 6.0), ("Flagella", 10.0)], {}),
+    "lizin":    ([("Chemoreceptor", 6.0), ("Flagella", 10.0),
+                  ("Lysin", 1.0)], {}),
+    "harpun":   ([("Chemoreceptor", 6.0), ("Flagella", 10.0),
+                  ("Harpoon", 1.0)], {}),
+    "av_duvar": ([("Chemoreceptor", 6.0), ("Flagella", 10.0)], {"wall": 4.0}),
+    "av_kapsul": ([("Chemoreceptor", 6.0), ("Flagella", 10.0)], {"capsule": 4.0}),
+    "av_mukus": ([("Chemoreceptor", 6.0), ("Flagella", 10.0)], {"mucus": 4.0}),
+    "av_slayer": ([("Chemoreceptor", 6.0), ("Flagella", 10.0)], {"slayer": 4.0}),
 }
+
+#: Testte davranis tablosu SABITLENIR.
+#
+# Silahin ise yarayip yaramadigini olcerken rastgele bir davranis
+# tablosu her seyi bulaniklastirir: hucrenin dortte uc ihtimalle
+# saldirmadigi bir denemede "silah ise yaramiyor" sonucu cikar, oysa
+# olculen sey silah degil zar atisi olur. Avcilara "saldir", avlara
+# "kac" verilir; sorulan soru yalnizca MEKANIZMANIN calisip
+# calismadigidir.
+AVCI_TAKIMLARI = ("stilet", "toksin", "zipkin", "fagosit",
+                  "lizin", "harpun")
+
+
+def _davranis_sabitle(hucre, saldirgan):
+    b = hucre.behavior
+    tepki = 'attack' if saldirgan else 'flee'
+    for k in list(b.table):
+        b.table[k] = tepki
+    b.scent_bands = [tepki] * len(b.scent_bands)
+    b.kin_response = 'ignore'      # kendi turunu yeme
+
 
 
 def _kur(hucre, takim):
@@ -76,7 +112,7 @@ def _kur(hucre, takim):
     for i, (tip, deger) in enumerate(organlar):
         aci = i * 2.0 * math.pi / max(1, len(organlar))
         anahtar = {"Chemoreceptor": "length", "Flagella": "length",
-                   "Photoreceptor": "range", "Stylet": "power"}[tip]
+                   "Photoreceptor": "range"}.get(tip, "power")
         hucre.add_organ(Morphology.build_organ(tip, aci, {anahtar: deger}))
     hucre.morphology = Morphology.from_organism(hucre)
     hucre.recalculate_physics()
@@ -85,7 +121,7 @@ def _kur(hucre, takim):
 
 
 def _bir_tohum(arg):
-    tohum, takimlar, sure, dt, sayi, besin = arg
+    tohum, takimlar, sure, dt, sayi, besin, sabit = arg
     _hazirla()
     import game_settings
     from entities.entity import WIDTH, HEIGHT
@@ -108,6 +144,8 @@ def _bir_tohum(arg):
             o = Optropi(len(hepsi), random.randint(80, WIDTH - 80),
                         random.randint(80, HEIGHT - 80), (200, 200, 200))
             _kur(o, takim)
+            if sabit:
+                _davranis_sabitle(o, takim in AVCI_TAKIMLARI)
             o.energy = o.max_energy
             hepsi.append(o)
     d.optropis = hepsi
@@ -123,6 +161,7 @@ def _bir_tohum(arg):
         out[takim] = {
             "sag": len(grup),
             "besin": yenen,
+            "av": sum(getattr(o, 'prey_eaten', 0) for o in grup),
             "enerji": round(sum(o.energy for o in grup) / max(1, len(grup)), 1),
         }
     return out
@@ -135,22 +174,27 @@ def main():
     ap.add_argument("--tohum", type=int, nargs="+", default=[1, 2, 3, 4, 5, 6])
     ap.add_argument("--sayi", type=int, default=12)
     ap.add_argument("--besin", type=int, default=None)
+    ap.add_argument("--sabit", action="store_true",
+                    help="davranis tablosunu sabitle (avci=saldir, av=kac)")
+    ap.add_argument("--bolun", action="store_true")
     ap.add_argument("--takim", type=str, nargs="+",
                     default=["ciplak", "burun", "kamci", "burun+kamci"])
     a = ap.parse_args()
 
-    isler = [(t, a.takim, a.sure, a.dt, a.sayi, a.besin) for t in a.tohum]
+    isler = [(t, a.takim, a.sure, a.dt, a.sayi, a.besin, a.sabit)
+             for t in a.tohum]
     with mp.Pool(min(len(isler), os.cpu_count() or 1)) as p:
         sonuc = p.map(_bir_tohum, isler)
 
-    print("takim           sagkalan  besin/hucre  enerji")
+    print("takim           sagkalan   besin/hucre   av   enerji")
     for takim in a.takim:
         sag = sum(r[takim]["sag"] for r in sonuc)
         besin = sum(r[takim]["besin"] for r in sonuc)
+        av = sum(r[takim]["av"] for r in sonuc)
         enerji = sum(r[takim]["enerji"] for r in sonuc) / len(sonuc)
         toplam = a.sayi * len(a.tohum)
-        print("%-15s %3d/%-3d   %8.2f   %7.1f"
-              % (takim, sag, toplam, besin / max(1, toplam), enerji))
+        print("%-15s %3d/%-3d   %9.2f %5d   %7.1f"
+              % (takim, sag, toplam, besin / max(1, toplam), av, enerji))
     print(json.dumps(sonuc[:1], ensure_ascii=False))
 
 

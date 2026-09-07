@@ -3738,6 +3738,53 @@ TESLIMAT_IZGARA = {
 }
 
 
+def _azalan_uydur(dizi):
+    """Diziye AZALMAYAN olmayan (non-increasing) en yakin egriyi uydur.
+
+    Havuzlama algoritmasi (PAVA): kurali bozan komsu ciftler ortalamalarina
+    cekilir, ta ki dizi bastan sona azalan olana kadar. En kucuk kareler
+    anlaminda en yakin cozumdur; yani olculen degerlerin SEVIYESINI korur.
+
+    Basit bir "kosan minimum" bunu yapamaz: dizinin ilk elemani bir alt
+    aykiri deger ise (orn. T6SS+lizozim zirhsizken 0.0 olculmus) butun
+    satiri sifira duzler ve gercekten olculmus yuksek degerleri siler.
+    """
+    kume = [[v, 1] for v in dizi]      # [toplam, adet]
+    i = 0
+    while i < len(kume) - 1:
+        if kume[i][0] / kume[i][1] < kume[i + 1][0] / kume[i + 1][1]:
+            kume[i][0] += kume[i + 1][0]
+            kume[i][1] += kume[i + 1][1]
+            del kume[i + 1]
+            if i > 0:
+                i -= 1
+        else:
+            i += 1
+    out = []
+    for toplam, adet in kume:
+        out.extend([round(toplam / adet, 4)] * adet)
+    return out
+
+
+def _izgarayi_monotonlastir(izgara):
+    """Zirh arttikca teslimat AZALMALI - artamaz.
+
+    Olculen tabloda bazi satirlar zirh 0'dan 6'ya cikarken YUKSELIYOR:
+    orn. fiskirtma+norotoksin (toksin) 0.654 -> 0.856. Yani duvar
+    ordurmek toksinden alinan hasari %30 ARTIRIYORDU. Bu fiziksel olarak
+    savunulamaz ve oyunda TERS bir secilim uretir: zirh takan hucre daha
+    cabuk oluyorsa savunma tipi hicbir zaman evrimlesemez.
+
+    Olcum gurultusu, teslimat kapisinin fiziksel kisitini bozmamali.
+    Satirlar en yakin azalan egriye cekilir; hicbir olcum atilmaz, yalnizca
+    imkansiz olan yon kapatilir.
+    """
+    return {k: _azalan_uydur(v) for k, v in izgara.items()}
+
+
+TESLIMAT_IZGARA = _izgarayi_monotonlastir(TESLIMAT_IZGARA)
+
+
 def teslimat(ci, pi, zirh=0.0):
     """Bu tasiyici+yuk ikilisi, bu zirha karsi yukun kacta kacini ulastirir.
 

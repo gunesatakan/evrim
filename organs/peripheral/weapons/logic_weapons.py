@@ -13,6 +13,8 @@ yerde tablo olarak yazılı değil; kurallardan doğuyor.
 
 Karar: hasar almak enerji yakmaz, saldırı KULLANMAK yakar.
 """
+import random
+
 import game_settings
 
 
@@ -134,21 +136,61 @@ class ToxinLogic(WeaponLogic):
     """Bakteriosin — kimyasal savaş.
 
     ALAN etkilidir, temas gerekmez, kaçana da işler; ama yavaştır ve
-    nişan alınamaz. Doğadaki gibi üretici kendi toksinine BAĞIŞIKTIR ve
-    aynı geni taşıyan herkes de bağışıktır (bağışıklık proteini).
+    nişan alınamaz. Üretici kendi toksinine BAĞIŞIKTIR (bağışıklık
+    proteini bakteriosin geniyle aynı operonda kodlanır).
+
+    BAĞIŞIKLIK TÜRE ÖZGÜDÜR, "toksin taşımak" değil.
+
+    Önceden bağışıklık `has_weapon(Toxin)` idi: toksin taşıyan herkes
+    HER toksine bağışıktı. Bunun sonucu ölçüldü - toksinli hücreler
+    birbirine dokunulmaz bir kartel kuruyor ve toksinsiz olan herkesi
+    kırıyordu (32/32 sağ kalan toksinli, diğer bütün takımlar silinmiş).
+    Böyle bir dünyada tek bir toksin soyu her şeyi süpürür; ne çeşitlilik
+    kalır ne de savunma tiplerinin ortaya çıkacağı bir ortam.
+
+    Gerçekte kolisin üreticisi YALNIZCA kendi kolisinine bağışıktır;
+    başka bir varyantı üretenin toksini onu da öldürür. Bu yüzden her
+    toksin geninin bir ALLELİ var: aynı alleli taşıyan bağışık, taşımayan
+    değil. Allel bölünmede nadiren değişir - yeni bir bakteriosin varyantı
+    doğduğunda üreticisi akrabalarının bağışıklığını yitirir.
     """
     KEY = "TOXIN"; CHANNEL = 'chemical'; CONTACT = False; CONTINUOUS = True
+
+    def __init__(self, power=1.0):
+        super().__init__(power)
+        self.allel = random.randrange(int(game_settings.TOXIN_ALLELES))
+
+    def allel_mutasyonu(self, rng=random):
+        """Yeni bir bakteriosin varyanti: bagisiklik iliskileri degisir."""
+        self.allel = rng.randrange(int(game_settings.TOXIN_ALLELES))
+        return self.allel
 
 
 class LysinLogic(WeaponLogic):
     VARSAYILAN_TASIYICI = 2
     VARSAYILAN_YUK = 4
-    """Ekstraselüler litik enzim.
+    """Ekstraselüler litik enzim — ZIRHIN CEVABI.
 
-    Kimyasal olduğu için hücre DUVARINI yok sayar — zırhlı hedefe karşı en
-    iyi silah. Karşılığında yavaştır.
+    Kimyasal olduğu için hücre DUVARINI yok sayar; zırhlı bir popülasyonda
+    işe yarayan tek silah odur. Ama bu rolü ancak hedefe ULAŞABİLİRSE
+    oynayabilir.
+
+    Önce 4 px menzilli, tek atışlık ve tutunmasız bir silahtı: hedefe
+    değecek kadar yaklaşıp 5-10 saniye öyle kalması gerekiyordu, oysa
+    tutunmadığı için av basitçe yüzüp gidiyordu. Ölçüldü - lizin taşıyan
+    takım 3/32 sağ kalıyor, silahsız takım 10/32. Yani zırhın cevabı
+    hiçbir zaman ortaya çıkamıyordu ve duvar mutlak bir üstünlüktü.
+
+    Gerçekteki karşılığı da tutunmalı bir silah değil: Lysobacter ve
+    miksobakteriler litik enzimi ORTAMA salar, çevrelerindeki hücreleri
+    yavaşça eritir. Bu yüzden artık sürekli ve alan etkili - toksinle aynı
+    mekanik, üç farkla:
+      - duvarı yok sayar (toksin duvarın gözeneklerinde durur),
+      - menzili kısadır (25'e karşı 60): yaklaşmak zorunda,
+      - BAĞIŞIKLIĞI YOKTUR. Salınan enzim kendi soyunu da eritir; miks
+        bakterilerin "dost ateşi" sorunu birebir budur.
     """
-    KEY = "LYSIN"; CHANNEL = 'chemical'; CONTACT = True
+    KEY = "LYSIN"; CHANNEL = 'chemical'; CONTACT = True; CONTINUOUS = True
 
 
 class PhagocytosisLogic(WeaponLogic):

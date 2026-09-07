@@ -37,7 +37,7 @@
         "COST_MEMORY": 0.05,
         "STARVE_TIMEOUT": 15.0,
         "CORPSE_FOOD_PER_ORGAN": 0.2,
-        "CORPSE_FOOD_MAX": 12,
+        "CORPSE_FOOD_MAX": 24,
         "MEMBRANE_INTEGRITY_BASE": 100.0,
         "GROW_MEMBRANE_INTEGRITY": 20.0,
         "GROW_WALL": 0.5,
@@ -100,10 +100,10 @@
         "TOXIN_ENERGY": 3.0,
         "TOXIN_GROW": 0.25,
         "TOXIN_COST": 0.1,
-        "LYSIN_DAMAGE": 12.0,
-        "LYSIN_RANGE": 4.0,
-        "LYSIN_COOLDOWN": 1.2,
-        "LYSIN_ENERGY": 3.0,
+        "LYSIN_DAMAGE": 9.0,
+        "LYSIN_RANGE": 25.0,
+        "LYSIN_COOLDOWN": 0.0,
+        "LYSIN_ENERGY": 3.5,
         "LYSIN_GROW": 0.25,
         "LYSIN_COST": 0.05,
         "PHAGO_DAMAGE": 0.0,
@@ -174,7 +174,10 @@
         "FOOD_PATCH_SIGMA": 45.0,
         "CHEMO_RUN_CLAMP": 6.0,
         "TUMBLE_ANGLE_SIGMA": 60.0,
-        "SPATIAL_CHEMO_MIN": 0.06
+        "SPATIAL_CHEMO_MIN": 0.06,
+        "PREY_BIOMASS_YIELD": 0.5,
+        "TOXIN_ALLELES": 12,
+        "TOXIN_ALLELE_MUTATION": 0.02
     },
     "entities": {
         "optropi_0": {

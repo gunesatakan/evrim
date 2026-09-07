@@ -1158,15 +1158,24 @@ class Organism(Entity):
     def has_weapon(self, cls):
         return any(isinstance(o, cls) for o in self.organs)
 
-    def is_immune_to_toxin(self):
-        """Bakteriosin bağışıklığı doğadaki gibi GENETİKTİR.
+    def is_immune_to_toxin(self, silah=None):
+        """Bu BELIRLI bakteriosine bagisik miyim?
 
-        Üretici hücre bir bağışıklık proteini taşır; aynı toksin genini
-        taşıyan herkes de bağışıktır. Açık bir akraba tanıma kodu olmadan
-        soy-içi işbirliği kendiliğinden doğar - ve geni mutasyonla kaybeden
-        yavru kendi soyunun toksininden ölebilir.
+        Bagisiklik proteini toksin geniyle ayni operonda kodlanir; yani
+        hucre yalnizca KENDI urettigi varyanta bagisiktir. Ayni alleli
+        tasiyan akrabalari da bagisiktir - acik bir akraba tanima kodu
+        olmadan soy-ici isbirligi buradan dogar. Alleli mutasyonla
+        degisen yavru ise kendi soyunun toksininden olebilir.
         """
-        return self.has_weapon(Toxin)
+        if silah is None:                 # eski cagri bicimi: herhangi biri
+            return self.has_weapon(Toxin)
+        allel = getattr(silah, 'allel', None)
+        if allel is None:
+            return self.has_weapon(Toxin)
+        for o in self.organs:
+            if isinstance(o, Toxin) and getattr(o.logic, 'allel', None) == allel:
+                return True
+        return False
 
     def fire_weapons(self, dt, candidates):
         """Menzildeki hedeflere ateş et. Ölen hedeflerin listesini döndürür.
@@ -1228,8 +1237,8 @@ class Organism(Entity):
                     continue
                 hit_any = False
                 for t in candidates:
-                    if t is self or t.dead or t.is_immune_to_toxin():
-                        continue          # aynı geni taşıyan bağışık
+                    if t is self or t.dead or t.is_immune_to_toxin(lg):
+                        continue          # ayni alleli tasiyan bagisik
                     if not organ.can_hit(self, t):
                         continue
                     # MOLEKUL SALIMI: hasari dogrudan yazmak yerine
@@ -1532,10 +1541,36 @@ class Organism(Entity):
         self.death_cause = cause
         self.release_binding()
 
-    def corpse_food_count(self):
-        """Leşten kaç besin çıkar (organ sayısıyla orantılı, tavanlı)."""
-        n = int(len(self.organs) * game_settings.CORPSE_FOOD_PER_ORGAN)
+    def biyokutle_besin(self):
+        """Bu hucrenin bedeni KAC BESINE denk?
+
+        Once avlanmanin degeri sabitti: bir hucre 2 besin (PREY_FOOD_VALUE),
+        lesi ise organ sayisiyla hesaplaniyordu ve pratikte 1 besin
+        birakiyordu. Oysa sitoplazma alani 1256, besin alani 100 - yani
+        bir hucre 12.6 besinlik biyokutle tasiyor. Avlanmak, tasidiginin
+        alti-on ikide biri fiyatlandiriliyordu.
+
+        Bunun sonucu olculebilir bir sey: avcilik ZARARLI bir secimdi.
+        Stilet tasiyan hucre hucre basina 1.34 besin aliyor, ayni dunyadaki
+        silahsiz hucre 6.47. Cunku avci kavrarken kipirdayamiyor ve o
+        surede toplayabilecegi yemi kaybediyor; karsiliginda aldigi 2
+        besin bu kaybi karsilamiyordu. Boyle bir dunyada avlanma davranisi
+        kendiliginden BASLAYAMAZ.
+
+        Artik deger bedenden cikar: alan / besin_alani * verim. Verim 1
+        degildir - yiyen, yedigin her seyi kullanamaz (trofik verim).
+        """
+        if not hasattr(self, 'body'):
+            return 1
+        alan = self.body.logic.total_area + self.calculate_organ_area()
+        n = int(alan / max(1.0, game_settings.FOOD_AREA)
+                * game_settings.PREY_BIOMASS_YIELD)
         return max(1, min(int(game_settings.CORPSE_FOOD_MAX), n))
+
+    def corpse_food_count(self):
+        """Lesten kac besin cikar. Yenmesiyle ayni deger - yalnizca
+        dagilmis halde: kim once varirsa o alir."""
+        return self.biyokutle_besin()
 
     # ---------------- AVLANMA ----------------
 
@@ -1717,7 +1752,9 @@ class Organism(Entity):
         # susturamaz. Avlanmanın bedeli budur.
         self.kairomone = min(game_settings.KAIROMONE_MAX,
                              self.kairomone + game_settings.KAIROMONE_PER_KILL)
-        n = int(game_settings.PREY_FOOD_VALUE)
+        # Avin degeri BEDENINDEN gelir, sabit bir sayidan degil: kucuk
+        # bir yavruyu yemek ile iri bir hucreyi yemek ayni sey olamaz.
+        n = prey.biyokutle_besin()
         for _ in range(n):
             self.body.logic.food_queue.append(prey)
         self.prey_eaten += 1
@@ -1821,6 +1858,14 @@ class Organism(Entity):
             # ORGAN MUTASYONU: avlanmaktan bagimsiz kazanc ve kayip.
             # Ilk silahli hucrenin ortaya cikabilmesi buna bagli - avlanma
             # oduluyle sinirli kalsaydi kimse ilk silahi edinemezdi.
+            # Yeni bakteriosin varyanti: nadir ama sonuclari buyuk.
+            # Alleli degisen soy akrabalarinin bagisikligini yitirir ve
+            # onlari oldurebilir hale gelir; toksin kartellerinin
+            # dagilmasi ve cesitliligin korunmasi buradan gelir.
+            for _o in daughter.organs:
+                if isinstance(_o, Toxin) and                         random.random() < game_settings.TOXIN_ALLELE_MUTATION:
+                    _o.logic.allel_mutasyonu()
+                    changes += 1
             if random.random() < game_settings.ORGAN_GAIN_RATE:
                 if daughter.yapi_kazan() is not None:
                     changes += game_settings.DIVERGENCE_NEW_ORGAN

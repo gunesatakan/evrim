@@ -14,7 +14,14 @@ DEFAULT_SETTINGS = {
     # boylece kemotaksi onlara dogru surukler; gorus alanina girerse
     # dogrudan takip devreye girer.
     "NOTROPI_COUNT": 30,
-    "PREY_FOOD_VALUE": 2,          # bir notropi kac besine bedel
+    # TROFIK VERIM: avin biyokutlesinin ne kadari yiyene gecer.
+    # 1.0 olsaydi avlanmak besin toplamaktan her zaman karli olurdu ve
+    # ekosistem tek bir avci tipine cokerdi; gercekte de yenen her seyin
+    # tamami kullanilamaz. 0.5 ile ortalama bir hucre 6 besin eder -
+    # bir bolunmenin enerjisi kadar, yani avlanmak gercek bir secenek
+    # ama bedava degil.
+    "PREY_BIOMASS_YIELD": 0.5,
+    "PREY_FOOD_VALUE": 2,          # (kullanilmiyor - biyokutleye gecildi)
     # Av yemek YENI ORGAN GARANTISI degildir; bir "gelisim hakki"
     # kazandirir. Hak mitoz sirasinda cekilise girer: bu ihtimalle
     # yeni bir organ cikar, aksi halde mevcut bir gen gelisir.
@@ -138,7 +145,7 @@ DEFAULT_SETTINGS = {
     "STARVE_TIMEOUT": 15.0,
     # Olen hucre yerine besin birakir (les). Ilk varan alir.
     "CORPSE_FOOD_PER_ORGAN": 0.2,
-    "CORPSE_FOOD_MAX": 12,
+    "CORPSE_FOOD_MAX": 24,
     # --- ZAR BUTUNLUGU VE SAVUNMA (savunma = zar ozelligi, organ degil) ---
     # Hasar uc kanaldan gelir: mekanik / kimyasal / yutma. Her savunma yalnizca
     # belirli kanallara ve yalnizca belirli menzillere karsi calisir; matris
@@ -226,16 +233,28 @@ DEFAULT_SETTINGS = {
     "NEMATOCYST_ENERGY": 10.0,
     "NEMATOCYST_GROW": 0.2,
     "NEMATOCYST_COST": 0.12,
+    # Bakteriosin varyanti sayisi. Kucuk tutulursa iki soy sik sik ayni
+    # allele carpar ve birbirine bagisik cikar; buyuk tutulursa bagisiklik
+    # neredeyse yalnizca oz kardesler arasinda kalir.
+    "TOXIN_ALLELES": 12,
+    "TOXIN_ALLELE_MUTATION": 0.02,
     "TOXIN_DAMAGE": 8.0,
     "TOXIN_RANGE": 60.0,
     "TOXIN_COOLDOWN": 0.0,
     "TOXIN_ENERGY": 3.0,
     "TOXIN_GROW": 0.25,
     "TOXIN_COST": 0.1,
-    "LYSIN_DAMAGE": 12.0,
-    "LYSIN_RANGE": 4.0,
-    "LYSIN_COOLDOWN": 1.2,
-    "LYSIN_ENERGY": 3.0,
+    # LIZIN: zirhin CEVABI. Kimyasal oldugu icin duvari yok sayar - zirhli
+    # bir populasyonda tek ise yarayan silah odur. 12 hasar / 1.2 sn
+    # bekleme = 10 dps ile bu rolu oynayamiyordu: 100 butunluklu bir hedefi
+    # oldurmek 10 saniye TEMAS gerektiriyor, iki hucre o kadar sure yan yana
+    # kalamaz. Olculdu: lizin tasiyan takim 2/32 sagkalim, silahsiz 11/32.
+    # 22 ile dps 18.3 olur - ciplak hedefte harpundan (50) hala cok zayif,
+    # ama duvarli hedefte harpun sifira duserken lizin isini gorur.
+    "LYSIN_DAMAGE": 9.0,
+    "LYSIN_RANGE": 25.0,
+    "LYSIN_COOLDOWN": 0.0,
+    "LYSIN_ENERGY": 3.5,
     "LYSIN_GROW": 0.25,
     "LYSIN_COST": 0.05,
     "PHAGO_DAMAGE": 0.0,
