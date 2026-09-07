@@ -5,3 +5,13 @@ __pycache__/
 !README.md
 .claude/
 nul
+
+# Olcum kosularinin ciktilari: veri, kaynak degil. Sonuclar
+# manifesto/evrim_deneyi.md icinde yazili.
+arac/sonuc/
+
+# settings.json yedekleri (deney oncesi anlik goruntuler)
+settings.json.*
+
+# Manifesto notlari .txt de olabilir; ustteki *.txt kuralindan muaf.
+!manifesto/*.txt

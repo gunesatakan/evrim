@@ -1,0 +1,61 @@
+# Biyolojik Algı ve Hareket Mekanizmaları
+
+Bu belge, simülasyonda kullanılan yapay yaşam algoritmalarının teorik temellerini açıklar. Proje, "tanrı modu" (her şeyi bilen) algoritmalar yerine, biyolojik kısıtlamalara sahip, yerel algılamaya dayalı stokastik süreçleri modellemektedir.
+
+## 1. Ortam Fiziği: Skaler Alan (Scalar Field & Diffusion)
+
+Geleneksel oyun geliştirmede kullanılan mesafe kontrolü ($O(N \cdot M)$) yerine, doğadaki kimyasal yayılımı simüle eden ızgara tabanlı bir sistem kullanılmıştır.
+
+### Mantık
+Dünya görünmez bir ızgaraya (Grid) bölünmüştür.
+- **Kaynak (Source):** Her besin maddesi, bulunduğu kareye her simülasyon adımında belirli miktarda "koku değeri" ekler.
+- **Yayılım (Diffusion):** Her karedeki koku değeri, komşu karelere (yukarı, aşağı, sağ, sol) yayılır. Bu işlem bir `Gaussian Blur` işlemine benzer.
+- **Buharlaşma (Decay):** Zamanla ortamdaki koku miktarı azalır (örn. her karede %5 kayıp).
+
+Bu sistem sayesinde rüzgar, engellerin arkasında koku birikmesi veya koku koridorları gibi karmaşık fenomenler kendiliğinden oluşur.
+
+## 2. Duyusal Algı: Weber-Fechner Yasası
+
+Canlılar uyaranları lineer (doğrusal) değil, logaritmik algılar.
+
+### Formül
+$$ S = k \cdot \ln\left(1 + \frac{I}{I_{threshold}}\right) $$
+
+- **$S$ (Sensation):** Canlının beynine giden sinyal gücü.
+- **$I$ (Intensity):** Ortamdaki fiziksel koku yoğunluğu (Grid'den okunan değer).
+- **$I_{threshold}$ (Eşik):** Canlının algılayabileceği minimum yoğunluk.
+  - *Evrimsel Bağlantı:* Kemoreseptör organı uzadıkça/geliştikçe, $I_{threshold}$ değeri düşer. Uzun burunlu canlılar, çok daha zayıf kokuları fark edebilir.
+
+## 3. Arama Stratejisi: Klinokinesis (Run-and-Tumble)
+
+Organizmaların "Sağımda koku var" veya "Solumda koku var" diyebilecek stereo (çift) sensörleri veya beyin kapasiteleri olmadığı durumlarda (veya vücut sürekli şekil değiştirdiğinde) kullanılan zamansal algılama yöntemidir.
+
+### Algoritma (Temporal Sensing)
+Canlı, anlık koku farkına ($\Delta S$) bakar: $\Delta S = S_{t} - S_{t-1}$
+
+1.  **Run (Koş):** Eğer $\Delta S > 0$ ise (koku artıyor), canlı doğru yoldadır. Dönme (tumble) olasılığı düşürülür. Mevcut yönde düz gitmeye devam eder.
+2.  **Tumble (Yuvarlan):** Eğer $\Delta S \le 0$ ise (koku azalıyor veya sabit), canlı yanlış yoldadır. Dönme olasılığı artırılır. Rastgele yeni bir yön seçilir.
+
+Bu yöntem, *E. coli* bakterisinin besin arama stratejisinin birebir simülasyonudur.
+
+## 4. Boşta Arama: Lévy Uçuşu (Lévy Flight)
+
+Ortamda hiç koku sinyali yoksa ($S \approx 0$), rastgele dolaşmak (Brownian Motion) verimsizdir. Canlılar bunun yerine "Lévy Uçuşu" yapar.
+
+### Mantık
+Adım uzunlukları ($l$), bir güç yasası (Power Law) dağılımına uyar:
+$$ P(l) \sim l^{-\mu} $$
+
+Bu pratikte şudur: Canlı çoğu zaman olduğu yerde küçük küçük kıpırdanarak arama yapar (kısa adımlar), ancak arada sırada çok uzun bir mesafe boyunca dümdüz giderek yer değiştirir (uzun sıçrama). Bu, seyrek kaynakların bulunduğu ortamlarda matematiksel olarak en verimli arama stratejisidir.
+
+## 5. Genetik: Sıralı Gelişim (Sequential Build Order)
+
+Canlıların gelişimi rastgele değil, genetik bir "inşaat planına" (genome) dayalıdır.
+
+### Yapı
+Her canlının bir `upgrade_sequence` listesi vardır:
+`[("Flagella", 0), ("Photoreceptor", 1), ("Cilia", 0), ...]`
+
+- Canlı yeterli enerjiyi topladığında, listedeki sıradaki elemanı gerçekleştirir.
+- Liste sonuna gelindiğinde başa döner (Döngüsel Gelişim).
+- **Mutasyon:** Nesiller arası geçişte bu liste değişebilir (araya yeni organ ekleme, sıra değiştirme, organ silme). Bu sayede "Önce motor yap, sonra göz yap" stratejisi ile "Önce göz yap, sonra motor yap" stratejisi birbirleriyle yarışabilir.
