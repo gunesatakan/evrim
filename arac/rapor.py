@@ -4,7 +4,13 @@
 Tek bir kosunun sonucu kanit degildir: evrim sansa cok duyarlidir ve bir
 tohumda gorulen egilim otekinde tersine donebilir. Bu yuzden her olcut
 TOHUMLAR ARASINDA degerlendirilir - kac tohumda gerceklesti, ortalama ne,
-sifirdan ne kadar uzak (standart hataya gore).
+sifirdan ne kadar uzak.
+
+OLCUT 2 ICIN NOT: burada "populasyon BENIM kuralimi ogrendi mi" diye
+sorulmaz. Kural dayatilmamali - sans eseri silah kazanmis bir hucrenin
+etrafinda ona saldiranlar olur, kacanlar yasar; kural kodda degil
+OLULERDE birikir. Sorulan sey davranis ekseninin RASTGELEDEN AYRILIP
+AYRILMADIGI. Yonu ne olursa olsun ayrilmissa bir sey secilmis demektir.
 """
 import argparse
 import json
@@ -26,127 +32,149 @@ def _sh(xs):
     return math.sqrt(var / len(xs))
 
 
-def _son(kayit):
-    return kayit[-1] if kayit else {}
-
-
-def _ilk(kayit):
-    return kayit[0] if kayit else {}
-
-
 def _t(deger, sifir=0.0):
     """Kaba bir t degeri: ortalamanin sifirdan kac standart hata uzakta."""
     o, h = _ort(deger), _sh(deger)
     return 0.0 if h <= 0 else (o - sifir) / h
 
 
+def _al(kayitlar, anahtar, ilk=False):
+    out = []
+    for k in kayitlar:
+        if not k:
+            continue
+        s = k[0] if ilk else k[-1]
+        v = s.get(anahtar)
+        if isinstance(v, (int, float)):
+            out.append(v)
+    return out
+
+
 def rapor(veri):
     ham = veri["ham"]
     n_tohum = len(ham)
-    son = [_son(k) for k in ham]
-    ilk = [_ilk(k) for k in ham]
+    son = [k[-1] for k in ham if k]
+    ilk = [k[0] for k in ham if k]
 
-    print("=" * 68)
+    print("=" * 72)
     print("EVRIM RAPORU  |  %d tohum x %.0f sim-saniye" % (n_tohum, veri["sure"]))
-    print("=" * 68)
+    print("=" * 72)
 
-    yasayan = [s for s in son if s.get("n", 0) > 0]
     print("\nPOPULASYON")
-    print("  yasayan tohum      : %d/%d" % (len(yasayan), n_tohum))
+    print("  yasayan tohum      : %d/%d"
+          % (sum(1 for s in son if s.get("n", 0) > 0), n_tohum))
     print("  son nufus          : %.0f  (baslangic %.0f)"
-          % (_ort([s.get("n") for s in son]), _ort([s.get("n") for s in ilk])))
-    print("  toplam dogum       : %.0f" % _ort([s.get("dogum") for s in son]))
-    print("  kusak (kabaca)     : %.1f"
-          % (_ort([s.get("dogum") for s in son])
-             / max(1.0, _ort([s.get("n") for s in son]))))
-    print("  ortalama hiz       : %.1f px/sn" % _ort([s.get("hiz_ort") for s in son]))
+          % (_ort(_al(ham, "n")), _ort(_al(ham, "n", ilk=True))))
+    print("  toplam dogum       : %.0f" % _ort(_al(ham, "dogum")))
+    print("  kusak (kabaca)     : %.0f"
+          % (_ort(_al(ham, "dogum")) / max(1.0, _ort(_al(ham, "n")))))
+    print("  ortalama hiz       : %.1f px/sn" % _ort(_al(ham, "hiz_ort")))
 
     # ---------------------------------------------------------- OLCUT 1
-    print("\n" + "-" * 68)
+    print("\n" + "-" * 72)
     print("OLCUT 1  |  SILAHLI AVLANMA")
-    print("-" * 68)
-    silahli = [s.get("silahli_oran", 0) for s in son]
-    olduren = []
-    av = [s.get("av_yeme", 0) for s in son]
-    for s in son:
-        olduren.append(sum((s.get("silah_olum") or {}).values()))
-    print("  silahli hucre orani : %.3f  (+-%.3f)  [baslangic 0.000]"
+    print("-" * 72)
+    silahli = _al(ham, "silahli_oran")
+    guc = _al(ham, "silah_guc")
+    atis = _al(ham, "atis")
+    olduren = [sum((s.get("silah_olum") or {}).values()) for s in son]
+    print("  silahli hucre orani : %.3f (+-%.3f)   [baslangic 0.000]"
           % (_ort(silahli), _sh(silahli)))
-    print("  silahla olum        : %.1f  (+-%.1f)" % (_ort(olduren), _sh(olduren)))
-    print("  hucre yeme olayi    : %.1f  (+-%.1f)" % (_ort(av), _sh(av)))
-    silah_top = {}
+    print("  en guclu silah gucu : %.3f (+-%.3f)   [baslangic 0.000]"
+          % (_ort(guc), _sh(guc)))
+    print("  silah KULLANIMI     : %.0f atis (+-%.0f)" % (_ort(atis), _sh(atis)))
+    print("  silahla olum        : %.1f (+-%.1f)" % (_ort(olduren), _sh(olduren)))
+    silah_top, olum_top = {}, {}
     for s in son:
         for k, v in (s.get("silah") or {}).items():
             silah_top[k] = silah_top.get(k, 0) + v
-    olum_top = {}
-    for s in son:
         for k, v in (s.get("silah_olum") or {}).items():
             olum_top[k] = olum_top.get(k, 0) + v
     print("  tasinan silahlar    : %s" % (silah_top or "yok"))
     print("  oldurme dagilimi    : %s" % (olum_top or "yok"))
-    k1 = (_ort(silahli) > 0.05 and _ort(olduren) >= 1.0
+    k1 = (_ort(silahli) > 0.10 and _ort(atis) > 100
           and sum(1 for x in olduren if x > 0) >= n_tohum * 0.5)
     print("  >> %s" % ("GERCEKLESTI" if k1 else "HENUZ DEGIL"))
 
     # ---------------------------------------------------------- OLCUT 2
-    print("\n" + "-" * 68)
-    print("OLCUT 2  |  OGRENILMIS KAC / SALDIR")
-    print("-" * 68)
-    sal = [s.get("saldiri_egilimi", 0) for s in son]
-    kac = [s.get("kacis_egilimi", 0) for s in son]
-    kai = [s.get("kairomon_kacisi", 0) for s in son]
-    for ad, dizi in (("zayifa saldiri egilimi", sal),
-                     ("gucluden kacis egilimi", kac),
-                     ("kairomondan kacis    ", kai)):
-        print("  %-22s: %+.4f (+-%.4f)  t=%+.2f"
-              % (ad, _ort(dizi), _sh(dizi), _t(dizi)))
-    bant = {}
+    print("\n" + "-" * 72)
+    print("OLCUT 2  |  DAVRANISIN RASTGELEDEN AYRILMASI")
+    print("-" * 72)
+    for ad, an in (("kararlilik (|tepki|)", "kararlilik"),
+                   ("ortalama tepki      ", "tepki_ort"),
+                   ("zayifa tepki        ", "zayifa_tepki"),
+                   ("gucluye tepki       ", "gucluye_tepki"),
+                   ("ayrim (zayif-guclu) ", "ayrim"),
+                   ("kairomon tepkisi    ", "kairomon_tepkisi"),
+                   ("sosyal oncelik geni ", "sosyal_ort")):
+        s0 = _ort(_al(ham, an, ilk=True))
+        s1 = _al(ham, an)
+        print("  %s: %+.4f -> %+.4f (+-%.4f)  degisim t=%+.2f"
+              % (ad, s0, _ort(s1), _sh(s1), _t([x - s0 for x in s1])))
+
+    b0, b1 = {}, {}
+    for s in ilk:
+        for k, v in (s.get("bant") or {}).items():
+            b0[k] = b0.get(k, 0.0) + v / max(1, len(ilk))
     for s in son:
         for k, v in (s.get("bant") or {}).items():
-            bant[k] = bant.get(k, 0.0) + v
-    if bant:
-        top = sum(bant.values()) or 1.0
-        print("  tepki dagilimi      : %s"
-              % {k: round(v / top, 3) for k, v in sorted(bant.items())})
-        print("     (rastgele tabloda hepsi 0.250 olur)")
-    k2 = max(abs(_t(sal)), abs(_t(kac)), abs(_t(kai))) >= 2.0
-    print("  >> %s" % ("GERCEKLESTI (rastgeleden ayrildi)" if k2
-                       else "HENUZ DEGIL (rastgeleden ayirt edilemiyor)"))
+            b1[k] = b1.get(k, 0.0) + v / max(1, len(son))
+    if b1:
+        print("\n  KOKU EKSENININ TEPKI DAGILIMI (eksenin ne kadari hangi bolgede)")
+        print("    %-10s %8s %8s %8s" % ("bolge", "basta", "sonda", "fark"))
+        for k in ("kac", "uzaklas", "yoksay", "yaklas", "saldir"):
+            print("    %-10s %8.3f %8.3f %+8.3f"
+                  % (k, b0.get(k, 0), b1.get(k, 0), b1.get(k, 0) - b0.get(k, 0)))
+        sapma = sum(abs(b1.get(k, 0) - b0.get(k, 0))
+                    for k in ("kac", "uzaklas", "yoksay", "yaklas", "saldir"))
+        print("    toplam kayma: %.3f  (0 = hic degismedi)" % sapma)
+    else:
+        sapma = 0.0
+
+    k2 = (sapma > 0.15
+          or abs(_t([x - _ort(_al(ham, "kararlilik", ilk=True))
+                     for x in _al(ham, "kararlilik")])) >= 2.0)
+    print("  >> %s" % ("DAVRANIS DEGISTI (rastgeleden ayrildi)" if k2
+                       else "HENUZ AYIRT EDILEMIYOR"))
+    print("  NOT: yonun ne oldugu bir basari olcutu DEGIL. Kanitlayici")
+    print("       sinama arac/rekabet.py - evrimlesmis tabloyu ayni bedende")
+    print("       rastgele tabloya karsi yaristirir.")
 
     # ---------------------------------------------------------- OLCUT 3
-    print("\n" + "-" * 68)
+    print("\n" + "-" * 72)
     print("OLCUT 3  |  SAVUNMA TIPLERI")
-    print("-" * 68)
-    kat = [s.get("katman_ort", 0) for s in son]
-    sav = [s.get("savunma_ort", 0) for s in son]
-    std = [s.get("savunma_std", 0) for s in son]
-    tip = [s.get("savunmaci_oran", 0) for s in son]
-    ss = [s.get("silahli_savunmali", 0) for s in son]
-    print("  hucre basina katman : %.3f (+-%.3f)  [baslangic 0.000]"
+    print("-" * 72)
+    kat = _al(ham, "katman_ort")
+    tip = _al(ham, "savunmaci_oran")
+    uzm = _al(ham, "uzmanlasma")
+    zir = _al(ham, "zirhli_oran")
+    print("  hucre basina katman : %.3f (+-%.3f)   [baslangic 0.000]"
           % (_ort(kat), _sh(kat)))
-    print("  savunma yatirimi    : %.3f (+-%.3f)" % (_ort(sav), _sh(sav)))
-    print("  yatirim dagilimi    : %.3f  (populasyon ici cesitlilik)" % _ort(std))
-    print("  SAVUNMACI tip orani : %.3f (+-%.3f)  (zirhli ve SILAHSIZ)"
+    print("  zirhli hucre orani  : %.3f (+-%.3f)" % (_ort(zir), _sh(zir)))
+    print("  SAVUNMACI tip orani : %.3f (+-%.3f)   (zirhli VE silahsiz)"
           % (_ort(tip), _sh(tip)))
-    print("  zirhli avci orani   : %.3f" % _ort(ss))
-    k3 = _ort(kat) > 0.15 and _ort(tip) > 0.05
+    print("  uzmanlasma (zirh~silah korelasyonu): %+.3f (+-%.3f)  t=%+.2f"
+          % (_ort(uzm), _sh(uzm), _t(uzm)))
+    print("     negatif = zirha yatiran silahtan vazgeciyor: AYRI TIPLER")
+    k3 = _ort(kat) > 0.15 and (_ort(tip) > 0.05 or _ort(uzm) < -0.10)
     print("  >> %s" % ("GERCEKLESTI" if k3 else "HENUZ DEGIL"))
 
-    # ---------------------------------------------------------- zaman serisi
-    print("\n" + "-" * 68)
+    # ---------------------------------------------------------- seri
+    print("\n" + "-" * 72)
     print("ZAMAN SERISI (tohum ortalamasi)")
-    print("-" * 68)
-    basliklar = ("t", "n", "silahli_oran", "katman_ort", "savunmaci_oran",
-                 "saldiri_egilimi", "kacis_egilimi", "organ_ort", "burun_ort")
-    print("  " + "".join("%>14s" % b if False else "%14s" % b for b in basliklar))
+    print("-" * 72)
+    basliklar = ("t", "n", "organ_ort", "burun_ort", "silahli_oran",
+                 "silah_guc", "katman_ort", "savunmaci_oran", "uzmanlasma",
+                 "kararlilik")
+    print("  " + "".join("%14s" % b for b in basliklar))
     for satir in veri["ozet"]:
         print("  " + "".join("%14s" % (
             round(satir.get(b), 3) if isinstance(satir.get(b), float)
             else satir.get(b, "-")) for b in basliklar))
 
-    print("\n" + "=" * 68)
+    print("\n" + "=" * 72)
     print("SONUC: %d/3 olcut" % sum((k1, k2, k3)))
-    print("=" * 68)
+    print("=" * 72)
     return k1, k2, k3
 
 
