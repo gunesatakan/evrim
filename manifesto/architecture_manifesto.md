@@ -69,6 +69,51 @@ Organizma anlık olarak yönünü bilmez, sadece durumunun **iyiye mi yoksa köt
 3.  **Idle State (Koku Yok):**
     *   **Lévy Uçuşu (Lévy Flight):** Rastgele yürüyüş (Brownian) yerine; çoğunlukla kısa, nadiren çok uzun ve düz hamleler yaparak ortamı tara.
 
+### DÜZELTME: İki mod tek aramada birleştirildi
+
+Yukarıdaki tasarım **iki ayrı mod** öngörüyordu: koku varsa run-and-tumble,
+yoksa Lévy uçuşu. Uygulandığında ölçüldü ki bu kurgu **burnu olan hücreyi
+cezalandırıyor**:
+
+| takım | 120 sn'de alınan besin |
+|---|---|
+| yalnızca kamçı | 14.68 |
+| kamçı + kemoreseptör | 14.04 |
+
+Sebep: Lévy uçuşu süperdifüzyondur (koşular 10 saniyeye kadar uzar, hücre
+geniş bir alanı tarar); run-and-tumble ise saniyede bir yön değiştiren bir
+rastgele yürüyüştür ve aynı sürede çok daha az yol alır. Yani **koku almak,
+iyi bir arama stratejisini kötüsüyle değiştiriyordu.** Kemotaksinin
+kazandırdığı eğilim bu kaybı kapatmıyordu.
+
+Doğru kurgu tek bir aramadır: **taban keşif her hücrede aynıdır (Lévy),
+koku yalnızca koşunun ne kadar süreceğini değiştirir.**
+
+$$ T_{\text{koşu}} = T_{\text{Lévy}} \cdot e^{g \Delta S},
+   \qquad g = g^{+} \ (\Delta S > 0), \quad g^{-} \ (\Delta S \le 0) $$
+
+Böylece burun hiçbir zaman zarar vermez: bilgi yoksa davranış burunsuzunkiyle
+birebir aynıdır, bilgi varsa üstüne bir eğilim ekler. E. coli'nin yaptığı da
+budur — tumble sıklığını değiştirir, yüzme biçimini değil.
+
+Tumble açısı da düzgün dağılım olmaktan çıkarıldı (~60° gauss): her dönüşte
+tamamen rastgele bir yöne bakmak, bir önceki koşudan gelen yön bilgisini
+siliyor ve gradyan yürüyüşünü imkânsız kılıyordu.
+
+### EK: Uzamsal gradyan (çok alıcılı hücre)
+
+Zamansal algılama bir **zorunluluk değil, küçük olmanın sonucudur**. Bakteri
+gövdesi bir gradyanı boyunca ölçemeyecek kadar kısadır; ama amip ve nötrofil
+yüzeylerindeki alıcıların doldurulma oranını karşılaştırıp yönü **doğrudan**
+okur.
+
+Simülasyonda da öyle: **tek kemoreseptör → zamansal, iki veya daha fazla
+kemoreseptör → uzamsal.** Alıcıların okumaları ortalamadan sapmalarıyla
+ağırlıklandırılıp toplanır; kontrast eşiği aşarsa hücre o yöne döner.
+
+Bu, karmaşıklaşmanın karşılığını veren gerçek bir kazançtır: ikinci burun
+"biraz daha hassas" değil, **nitelik olarak başka bir arama** demektir.
+
 ---
 
 ## 5. Genetik: Sıralı Deterministik Gelişim

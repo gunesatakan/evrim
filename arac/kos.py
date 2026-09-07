@@ -67,7 +67,7 @@ def _birlestir(kayitlar, anahtar):
             if dd:
                 birlesik[a] = round(sum(dd) / len(dd), 4)
         # sozluk alanlari toplanir
-        for a in ("silah", "silah_olum", "olum"):
+        for a in ("silah", "silah_olum", "olum", "bant"):
             top = {}
             for s in satirlar:
                 for kk, vv in (s.get(a) or {}).items():
@@ -80,8 +80,9 @@ def _birlestir(kayitlar, anahtar):
 
 SAYISAL = ("n", "dogum", "besin", "silahli_oran", "av_yeme",
            "saldiri_egilimi", "kacis_egilimi", "kairomon_kacisi",
-           "savunma_ort", "savunma_std", "savunmaci_oran", "katman_ort",
-           "organ_ort")
+           "savunma_ort", "savunma_std", "savunmaci_oran",
+           "silahli_savunmali", "katman_ort",
+           "organ_ort", "hiz_ort", "burun_ort", "govde_ort")
 
 
 def main():

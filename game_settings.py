@@ -417,6 +417,11 @@ DEFAULT_SETTINGS = {
     # yakmaya devam eder; onu yitiren yavru ucuza yasar. Indirgeyici
     # evrim buradan cikar - ve savunma tipinin silahlarini birakmasi da.
     "ORGAN_LOSS_RATE": 0.02,
+    # VUCUT PLANI DA EVRIMLESIR. Organin takilma acisi bir kez rastgele
+    # atanip sonsuza kadar oyle kaliyordu; ise yaramayan bir yerlesim
+    # duzeltilemiyordu. Kucuk kaymalar secilime tirmanacak bir egim verir.
+    "ORGAN_ANGLE_RATE": 0.10,
+    "ORGAN_ANGLE_SIGMA": 18.0,    # derece
 
     # Run-and-Tumble chemotaxis
     "TUMBLE_GAIN_POSITIVE": 5.0,

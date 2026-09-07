@@ -1605,6 +1605,41 @@ class Organism(Entity):
             self.genome.sequence.append((gene, idx))
         return organ
 
+    def organ_acisi_mutasyonu(self):
+        """Bir organin TAKILDIGI ACIYI biraz kaydir.
+
+        Organ konumu bu projede her yerde belirleyici: itme yonu, tork,
+        koku ornekleme noktasi, gorus konisi ve silahin isabet yayi hep
+        ondan cikiyor. Ama aci bir kez rastgele atandiktan sonra bir daha
+        HIC degismiyordu - iskelet genine yazilip oldugu gibi kalitiliyordu.
+        Sonucu su: mutasyonla stilet kazanan bir hucrenin stileti gerisine
+        bakiyorsa o soy sonsuza kadar gerisine bakan bir stiletle yasar.
+        Vucut plani evrimlesemez, yalnizca zar atisiyla belirlenir.
+
+        Kucuk kaymalar, secilimin tirmanabilecegi bir egim birakir: one
+        bakan silah isabet eder, arkaya bakan etmez; ise yarayan yerlesim
+        nesiller icinde keskinlesir.
+        """
+        aday = [o for o in self.organs
+                if o.__class__.__name__ in Morphology.SPAWNABLE]
+        if not aday:
+            return None
+        organ = random.choice(aday)
+        ad = organ.__class__.__name__
+        eski = organ.attachment_angle
+        yeni = eski + math.radians(random.gauss(
+            0.0, game_settings.ORGAN_ANGLE_SIGMA))
+        yeni = (yeni + math.pi) % (2 * math.pi) - math.pi
+        organ.attachment_angle = yeni
+        if self.morphology is not None:
+            for parca in self.morphology.parts:
+                if parca["type"] == ad and abs(parca["angle"] - eski) < 1e-9:
+                    parca["angle"] = yeni
+                    break
+        self._update_optimal_front()
+        self.recalculate_physics()
+        return ad
+
     def yapi_kazan(self):
         """Yeni bir YAPI kazan: organ ya da zar katmani.
 
@@ -1872,6 +1907,10 @@ class Organism(Entity):
             if random.random() < game_settings.ORGAN_LOSS_RATE:
                 if daughter.yapi_kaybet() is not None:
                     changes += game_settings.DIVERGENCE_NEW_ORGAN
+            # Vucut plani da evrimlesir: organin acisi kayar.
+            if random.random() < game_settings.ORGAN_ANGLE_RATE:
+                if daughter.organ_acisi_mutasyonu() is not None:
+                    changes += game_settings.DIVERGENCE_UPGRADE
             # Bolunme deepcopy ile calisir: ebeveynde kalmis bir kopya zar
             # ya da sitoplazma butun soya gecerdi. Her yavru tekillenir.
             daughter.temel_yapiyi_tamamla()
@@ -2137,7 +2176,19 @@ class Organism(Entity):
 
         # DAVRANIŞ GENOMU - görülen hücrelere verilecek tepki
         behave_dir, behave_resp = None, 'ignore'
-        seen_pool = list(kaotropis) + list(prey or [])
+        # Roller sinifa gore dagitilmayi biraktiginda "tehdit listesi" ve
+        # "av listesi" ayni komsu listesi oldu; ikisini toplamak her
+        # komsuyu IKI KEZ degerlendirmek demekti. perceive_and_decide
+        # karenin en sicak fonksiyonlarindan biri, bedeli iki katina
+        # cikiyordu.
+        if prey is kaotropis or not prey:
+            seen_pool = list(kaotropis)
+        elif not kaotropis:
+            seen_pool = list(prey)
+        else:
+            _g = {id(x): x for x in kaotropis}
+            _g.update({id(x): x for x in prey})
+            seen_pool = list(_g.values())
         resp, target = self.perceive_and_decide(seen_pool)
         if target is not None:
             v = target.pos - self.pos

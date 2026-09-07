@@ -82,6 +82,29 @@ def spektrum_egilimi(o):
     return (zayif_s - guclu_s) / n, (guclu_k - zayif_k) / n
 
 
+def bant_profili(o):
+    """Koku ekseni boyunca tepki dagilimi: {tepki: oran}.
+
+    "Ogrenmek" yalnizca saldirmak ya da kacmak degil; NE ZAMAN HICBIR SEY
+    YAPMAYACAGINI bilmek de ogrenmedir. Rastgele bir tabloda dort tepki de
+    %25 civarindadir; populasyon bunlardan uzaklasiyorsa bir sey secilmis
+    demektir.
+    """
+    b = getattr(o, 'behavior', None)
+    out = {r: 0.0 for r in BehaviorGenome.RESPONSES}
+    if b is None:
+        return out
+    n = 0
+    x = 0.0
+    while x <= 100.0:
+        out[b.spectrum_response(x)] += 1.0
+        n += 1
+        x += 1.0
+    for k in out:
+        out[k] /= max(1, n)
+    return out
+
+
 def kairomon_kacisi(o):
     """"Yakinda avlanmis birinden kac" ogrenildi mi?
 
@@ -159,8 +182,28 @@ def olc(d):
         "savunma_ort": round(_ort(savunma_puani(o) for o in h), 3),
         "savunma_std": round(_std([savunma_puani(o) for o in h]), 3),
         "savunmaci_oran": round(len(savunmaci) / n, 3),
+        "silahli_savunmali": round(
+            sum(1 for o in h if silah_sayisi(o) > 0 and savunma_puani(o) > 0.5)
+            / n, 3),
         "katman_ort": round(_ort(katman_sayisi(o) for o in h), 3),
         # --- genel ---
         "organ_ort": round(_ort(len(o.organs) for o in h), 2),
+        "hiz_ort": round(_ort(getattr(o, 'speed', 0.0) for o in h), 2),
+        "burun_ort": round(_ort(
+            sum(1 for x in o.organs
+                if x.__class__.__name__ == 'Chemoreceptor') for o in h), 3),
+        "govde_ort": round(_ort(
+            getattr(getattr(o, 'body', None), 'logic', None).size
+            if getattr(o, 'body', None) is not None else 0.0 for o in h), 3),
+        "bant": {k: round(v, 3) for k, v in
+                 _bant_ortalama(h).items()},
         "olum": dict(d.olum_nedeni),
     }
+
+
+def _bant_ortalama(h):
+    top = {r: 0.0 for r in BehaviorGenome.RESPONSES}
+    for o in h:
+        for k, v in bant_profili(o).items():
+            top[k] += v
+    return {k: v / max(1, len(h)) for k, v in top.items()}
