@@ -1798,9 +1798,23 @@ class Organism(Entity):
                              self.kairomone + game_settings.KAIROMONE_PER_KILL)
         # Avin degeri BEDENINDEN gelir, sabit bir sayidan degil: kucuk
         # bir yavruyu yemek ile iri bir hucreyi yemek ayni sey olamaz.
+        # KUYRUGA AVIN KENDISI DEGIL, BESIN NESNELERI KONUR.
+        #
+        # Once dogrudan `prey` (bir Organism) ekleniyordu. Bolunme
+        # deepcopy ile calistigi icin bu, yavruya avin TAMAMINI da
+        # kopyaliyordu: organlari, hafizasi, davranis tablosu ve KENDI
+        # sindirim kuyrugu - yani onun yedigi hucreler de. Her nesilde
+        # katlanan bir nesne agaci. Olculdu: 3000 saniyelik bir kosuda
+        # tek bir isci 6.3 GB'a ciktı.
+        #
+        # Sindirim zaten yalnizca iki sey soruyor: kac lokma var ve
+        # lestenmis mi (kairomon sizintisi icin). Ikisi de hafif bir
+        # Food nesnesiyle tasinir.
+        from entities.food import Food as _Besin
         n = prey.biyokutle_besin()
         for _ in range(n):
-            self.body.logic.food_queue.append(prey)
+            self.body.logic.food_queue.append(
+                _Besin(self.pos.x, self.pos.y, from_corpse=True))
         self.prey_eaten += 1
         # Organ ANINDA verilmez: bir "gelişim hakkı" birikir ve mitoz
         # sırasındaki çekilişte kullanılır (bkz. _apply_random_upgrade).
