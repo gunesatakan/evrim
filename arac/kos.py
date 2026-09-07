@@ -82,7 +82,8 @@ SAYISAL = ("n", "dogum", "besin", "silahli_oran", "av_yeme",
            "saldiri_egilimi", "kacis_egilimi", "kairomon_kacisi",
            "savunma_ort", "savunma_std", "savunmaci_oran",
            "silahli_savunmali", "katman_ort",
-           "organ_ort", "hiz_ort", "burun_ort", "govde_ort")
+           "organ_ort", "hiz_ort", "burun_ort", "govde_ort",
+           "sindirim_ort", "hafiza_ort", "sosyal_ort", "kamci_ort")
 
 
 def main():

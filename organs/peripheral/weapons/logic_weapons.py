@@ -89,8 +89,21 @@ class WeaponLogic:
         self.cooldown_timer = self.cooldown
 
     def grow(self):
-        self.power += self._s("GROW") / max(1e-6, self._s("DAMAGE") or 1.0) \
-            if self._s("DAMAGE") else self._s("GROW")
+        """Silahi gelistir: guc carpani artar (hasar = DAMAGE * power).
+
+        Once artis HASARA BOLUNUYORDU:
+            power += GROW / DAMAGE
+        Stilet icin bu 0.25/25 = 0.01 eder - bir yukseltme hasari binde
+        bir artiriyordu. Yani silahlar pratikte HIC gelismiyordu; oysa
+        istenen sey "kompleks saldiri silahlariyla donanmis hucreler".
+        Fagositoz ise DAMAGE = 0 oldugu icin tam GROW kadar buyuyordu;
+        aralarindaki bu ucurumun bir gerekcesi de yoktu.
+
+        Artik dogrudan: bir yukseltme gucu GROW kadar artirir (stilet icin
+        %25). Bedeli de birlikte buyur - base_energy_cost power ile
+        carpilir, yani guclu silah pahali silahtir.
+        """
+        self.power += self._s("GROW")
 
     def in_range(self, attacker, target):
         """Yalnızca MESAFE kontrolü. Yön kontrolü organ seviyesindedir

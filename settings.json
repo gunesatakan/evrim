@@ -147,7 +147,7 @@
         "GROW_VISION_ANGLE": 0.05,
         "GROW_SMELL": 1.0,
         "GROW_SOUND": 2.0,
-        "GROW_BODY": 0.01,
+        "GROW_BODY": 0.05,
         "GROW_MEMORY": 5,
         "SCENT_EVAP_RATE": 0.08,
         "SCENT_DIFF_RATE": 4.0,

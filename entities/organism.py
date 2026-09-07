@@ -1758,7 +1758,7 @@ class Organism(Entity):
         return bool(target.dead)
 
     def consume_prey(self, prey):
-        """Bir notropiyi ye: PREY_FOOD_VALUE kadar besin + bir gelişim hakkı.
+        """Bir hucreyi ye: BIYOKUTLESI kadar besin + bir gelisim hakki.
 
         Besinler sindirim kuyruğuna doğrudan konur (kapasite kontrolü
         atlanır) ki avın değeri tam karşılansın; enerji, yükseltme ve
@@ -1776,7 +1776,7 @@ class Organism(Entity):
         # AYNI MIDE: besin `can_fit_food`tan geciyordu ama av gecmiyordu.
         # Sonuc, organlarina sigmadigi icin bir besin bile alamayan bir
         # hucrenin koca bir hucreyi yutabilmesiydi. Deger tam odenir
-        # (PREY_FOOD_VALUE), ama en az bir lokmalik yer olmali.
+        # (avin biyokutlesi), ama en az bir lokmalik yer olmali.
         if not self.body.logic.can_fit_food(self.calculate_organ_area()):
             return False
         prey.consumed = True

@@ -195,6 +195,19 @@ def olc(d):
         "govde_ort": round(_ort(
             getattr(getattr(o, 'body', None), 'logic', None).size
             if getattr(o, 'body', None) is not None else 0.0 for o in h), 3),
+        "sindirim_ort": round(_ort(
+            getattr(getattr(getattr(o, 'body', None), 'logic', None),
+                    'enzyme', None).base_digestion_time
+            if getattr(o, 'body', None) is not None else 0.0 for o in h), 2),
+        "hafiza_ort": round(_ort(
+            getattr(getattr(o, 'direction_memory', None), 'capacity', 0)
+            for o in h), 1),
+        "sosyal_ort": round(_ort(
+            getattr(getattr(o, 'behavior', None), 'sosyal_oncelik', 0.0)
+            for o in h), 3),
+        "kamci_ort": round(_ort(
+            sum(1 for x in o.organs
+                if x.__class__.__name__ == 'Flagella') for o in h), 3),
         "bant": {k: round(v, 3) for k, v in
                  _bant_ortalama(h).items()},
         "olum": dict(d.olum_nedeni),

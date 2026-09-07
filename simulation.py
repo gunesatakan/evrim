@@ -221,9 +221,21 @@ class RuntimeInspector:
             elif event.key in (pygame.K_MINUS, pygame.K_KP_MINUS):
                 self._step_speed(-1)
 
-    SPEEDS = (0.25, 0.5, 1.0, 2.0, 4.0)
+    # HIZLANDIRMA ALT-ADIMLA YAPILIR, dt BUYUTULEREK DEGIL.
+    #
+    # Once time_scale dogrudan dt ile carpiliyordu: 4x demek kare basina
+    # 0.067 saniyelik bir adim demekti. O olcekte hucre bir karede kendi
+    # yaricapi kadar yer degistirir, temas ve gozenek fizigi kacar.
+    # 1'in ustundeki degerler artik kare basina KAC KEZ adim atilacagini
+    # soyluyor; her adim yine gercek kare suresi kadar. Fizik bozulmaz,
+    # yalnizca daha cok is yapilir.
+    #
+    # Bir kusak ~20 sim-saniye surdugu icin evrimi izlemek 1x'te uzun
+    # surer; 16x'te dakikalar mertebesine iner.
+    SPEEDS = (0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0)
     SPEED_KEYS = {pygame.K_1: 0.25, pygame.K_2: 0.5, pygame.K_3: 1.0,
-                  pygame.K_4: 2.0, pygame.K_5: 4.0}
+                  pygame.K_4: 2.0, pygame.K_5: 4.0, pygame.K_6: 8.0,
+                  pygame.K_7: 16.0}
 
     def _step_speed(self, direction):
         """Bir kademe hizlandir/yavaslat."""
@@ -242,8 +254,9 @@ class RuntimeInspector:
             col = (120, 220, 160) if self.time_scale <= 1.0 else (240, 200, 120)
         lbl = self._fnt_h.render(txt, True, col)
         screen.blit(lbl, (12, 10))
-        keys = self._fnt_s.render("1..5 = 0.25x/0.5x/1x/2x/4x   +/- kademe   BOSLUK = duraklat",
-                                  True, (100, 100, 120))
+        keys = self._fnt_s.render(
+            "1..7 = 0.25x .. 16x   +/- kademe   BOSLUK = duraklat",
+            True, (100, 100, 120))
         screen.blit(keys, (12, 34))
 
     def validate(self, alive_list):
@@ -657,8 +670,17 @@ def main(food_count=None, kaotropi_count=None):
         real_dt = clock.tick(FPS) / 1000.0    # gercek gecen sure (cizim icin)
         # Simulasyon zamani olceklenir. Duraklatildiginda dt=0: dunya donar
         # ama hicbir sey ilerlemez, yine de tiklayip inceleyebilirsin.
-        dt = 0.0 if inspector.paused else real_dt * inspector.time_scale
-        elapsed_time += dt
+        # 1x ve altinda: tek adim, olceklenmis sure (agir cekim).
+        # 1x ustunde : ayni sureli BIRDEN COK adim (gercek hizlanma).
+        if inspector.paused:
+            dt, adim_sayisi = 0.0, 0
+        elif inspector.time_scale <= 1.0:
+            dt, adim_sayisi = real_dt * inspector.time_scale, 1
+        else:
+            dt, adim_sayisi = real_dt, int(inspector.time_scale)
+        # Kare butcesi: makine yetismezse adim sayisi kirpilir ki arayuz
+        # donmasin. Hizlanma o zaman istenenden az olur - ama akici kalir.
+        kare_butce = 0.12
 
         for event in pygame.event.get():
             if hasattr(event, 'pos'):
@@ -690,7 +712,12 @@ def main(food_count=None, kaotropi_count=None):
         # Ekosistemin butunu systems/world.py'de. Buradaki tek is onu
         # ilerletmek; besin dogusu, koku, avlanma, bolunme, eleme - hepsi
         # olcum kosusuyla BIREBIR ayni koddan geciyor.
-        dunya.adim(dt)
+        _t0 = pygame.time.get_ticks()
+        for _ in range(adim_sayisi):
+            dunya.adim(dt)
+            elapsed_time += dt
+            if (pygame.time.get_ticks() - _t0) * 0.001 > kare_butce:
+                break
         kaotropis = dunya.kaotropis
         optropis = dunya.optropis
         foods = dunya.foods

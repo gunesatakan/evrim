@@ -21,7 +21,6 @@ DEFAULT_SETTINGS = {
     # bir bolunmenin enerjisi kadar, yani avlanmak gercek bir secenek
     # ama bedava degil.
     "PREY_BIOMASS_YIELD": 0.5,
-    "PREY_FOOD_VALUE": 2,          # (kullanilmiyor - biyokutleye gecildi)
     # Av yemek YENI ORGAN GARANTISI degildir; bir "gelisim hakki"
     # kazandirir. Hak mitoz sirasinda cekilise girer: bu ihtimalle
     # yeni bir organ cikar, aksi halde mevcut bir gen gelisir.
@@ -30,7 +29,6 @@ DEFAULT_SETTINGS = {
     # kare hizina bagliydi hem de 20 saniyelik omurle birlikte hucre
     # basina 360 canli nokta demekti. 6/sn ayni izi cok daha ucuz birakir.
     "TRAIL_RATE": 6.0,
-    "PREY_SCENT_EMISSION": 4.0,    # notropinin yaydigi koku (yaricap basina /sn)
     "PREY_VISION_PRIORITY": 1,     # 1 = goruse giren avi kokudan once takip et
 
     # --- SURUKLENME (Stokes) ---
@@ -164,7 +162,6 @@ DEFAULT_SETTINGS = {
     # listeden dusser - eskiden sonsuza kadar donuk kalip CPU yiyordu.
     "STARVE_TIMEOUT": 15.0,
     # Olen hucre yerine besin birakir (les). Ilk varan alir.
-    "CORPSE_FOOD_PER_ORGAN": 0.2,
     "CORPSE_FOOD_MAX": 24,
     # --- ZAR BUTUNLUGU VE SAVUNMA (savunma = zar ozelligi, organ degil) ---
     # Hasar uc kanaldan gelir: mekanik / kimyasal / yutma. Her savunma yalnizca
@@ -402,7 +399,12 @@ DEFAULT_SETTINGS = {
     "GROW_VISION_ANGLE": 2.0,
     "GROW_SMELL": 1.0,
     "GROW_SOUND": 2.0,
-    "GROW_BODY": 0.01,
+    # Govde buyumesi 0.01 iken bir adim hicbir sey ifade etmiyordu:
+    # fagositozun boy esigine (kendinden %43 buyuk olmak) ulasmak icin
+    # ayni geni 90 kez cekmek gerekiyordu - yani hicbir soy "iri avci"
+    # olamiyordu. 0.05 ile ~18 cekiste esik asilir; irilesmenin bedeli
+    # (surtunme, bolunme maliyeti, bakim) zaten odenmeye devam ediyor.
+    "GROW_BODY": 0.05,
     "GROW_MEMORY": 5,
 
     # Skaler koku alanı (ScentEnvironment)
