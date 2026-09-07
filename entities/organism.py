@@ -295,11 +295,16 @@ class Organism(Entity):
         self.genome = None  # Sequential genetics - initialized after organs are added
         self.pending_children = []  # bölünmede doğan, simulation'a katılacak yavrular
         self.morphology = None      # iskelet geni; organlar eklendikten sonra kurulur
-        self.prey_eaten = 0
+        self.prey_eaten = 0          # kac hucre yendi (istatistik)
         # Omur boyu alinan besin. Sagkalimin degil BASARININ olcusu:
         # iki hucre de hayattaysa hangisinin daha iyi beslendigini baska
         # turlu gormek mumkun degil.
-        self.toplam_besin = 0         # kaç notropi yendi (istatistik)
+        self.toplam_besin = 0
+        # Kac kez silah kullanildi. "Silah tasimak" ile "silah KULLANMAK"
+        # ayri seyler: ucuz tasinan bir silah populasyonda suruklenmeyle
+        # de yayilabilir. Avlanmanin gercekten basladigini soyleyebilmek
+        # icin atisin da sayilmasi gerekir.
+        self.atis_sayisi = 0
         self.pending_organ_rolls = 0  # avlanmadan kazanılan, mitozda çekilecek gelişim hakları
         self.dead = False           # simulation.py listeden düşürür
         self.death_cause = None     # 'aclik' | 'avlandi' | 'elendi' | 'kaotropi'
@@ -1209,6 +1214,7 @@ class Organism(Entity):
                         self.release_binding()
                         self.energy -= lg.energy_cost
                         lg.trigger()
+                        self.atis_sayisi += 1
                         self.stun_timer = game_settings.PHAGO_STUN
                         organ.last_target_pos = t.pos
                         t.die('yutuldu')
@@ -1227,6 +1233,7 @@ class Organism(Entity):
                     # kayganlık/kapsül hiçbir işe yaramaz.
                     self.energy -= lg.energy_cost
                     lg.trigger()
+                    self.atis_sayisi += 1
                     self.try_bind(t, lg.power)
                     break
                 continue
@@ -1254,6 +1261,7 @@ class Organism(Entity):
                         killed.append(t)
                 if hit_any:
                     self.energy -= lg.energy_cost * dt
+                    self.atis_sayisi += 1
                 continue
 
             # --- TEK ATIŞLIK SİLAHLAR ---
@@ -1269,6 +1277,7 @@ class Organism(Entity):
                             continue
                         self.energy -= lg.energy_cost
                         lg.trigger()
+                        self.atis_sayisi += 1
                         self.try_bind(t, lg.power)
                         break
                     continue
@@ -1277,6 +1286,7 @@ class Organism(Entity):
                     continue
                 self.energy -= lg.energy_cost
                 lg.trigger()
+                self.atis_sayisi += 1
                 organ.last_target_pos = t.pos
                 t.take_damage(lg.damage, lg.CHANNEL, lg.CONTACT,
                               organ.__class__.__name__.lower(), lg)
@@ -1290,6 +1300,7 @@ class Organism(Entity):
                     continue
                 self.energy -= lg.energy_cost
                 lg.trigger()
+                self.atis_sayisi += 1
                 organ.last_target_pos = t.pos
                 t.take_damage(lg.damage, lg.CHANNEL, lg.CONTACT,
                               organ.__class__.__name__.lower(), lg)

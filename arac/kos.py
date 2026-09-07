@@ -27,7 +27,7 @@ def _hazirla():
 
 
 def _bir_tohum(arg):
-    tohum, sure, dt, her, ayar = arg
+    tohum, sure, dt, her, ayar, izlek = arg
     _hazirla()
     import game_settings
     for k, v in (ayar or {}).items():
@@ -35,8 +35,19 @@ def _bir_tohum(arg):
     from systems.world import Dunya
     from arac.olcum import olc
 
+    # ILERLEME DOSYASI: uzun kosularda her sey bitene kadar hicbir sey
+    # gorunmuyordu; tek yavas tohum butun sonucu bekletiyor. Her tohum
+    # kendi satirini olctugu anda yaziyor.
+    def _yaz(satir):
+        if not izlek:
+            return
+        with open("%s.t%d.jsonl" % (izlek, tohum), "a", encoding="utf-8") as f:
+            f.write(json.dumps(satir, ensure_ascii=False) + "
+")
+
     d = Dunya(tohum=tohum)
     kayit = [dict(olc(d), tohum=tohum)]
+    _yaz(kayit[0])
     sonraki = her
     n = int(round(sure / dt))
     for _ in range(n):
@@ -44,6 +55,7 @@ def _bir_tohum(arg):
         if d.gecen_sure >= sonraki:
             sonraki += her
             kayit.append(dict(olc(d), tohum=tohum))
+            _yaz(kayit[-1])
         if not d.hucreler:
             break
     if kayit[-1]["t"] != round(d.gecen_sure, 1):
@@ -83,7 +95,8 @@ SAYISAL = ("n", "dogum", "besin", "silahli_oran", "av_yeme",
            "savunma_ort", "savunma_std", "savunmaci_oran",
            "silahli_savunmali", "katman_ort",
            "organ_ort", "hiz_ort", "burun_ort", "govde_ort",
-           "sindirim_ort", "hafiza_ort", "sosyal_ort", "kamci_ort")
+           "sindirim_ort", "hafiza_ort", "sosyal_ort", "kamci_ort",
+           "atis", "silah_guc")
 
 
 def main():
@@ -98,7 +111,8 @@ def main():
     a = ap.parse_args()
 
     ayar = json.loads(a.ayar) if a.ayar else {}
-    isler = [(t, a.sure, a.dt, a.her, ayar) for t in a.tohum]
+    izlek = a.cikti.replace(".json", "") if a.cikti else None
+    isler = [(t, a.sure, a.dt, a.her, ayar, izlek) for t in a.tohum]
     t0 = time.time()
     if len(isler) == 1:
         sonuc = [_bir_tohum(isler[0])]

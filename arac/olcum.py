@@ -174,6 +174,10 @@ def olc(d):
         "silah": silah_dagilim,
         "silah_olum": dict(d.silah_olumu),
         "av_yeme": d.av_yeme,
+        "atis": sum(getattr(o, 'atis_sayisi', 0) for o in h),
+        "silah_guc": round(_ort(
+            [max((x.logic.power for x in o.organs
+                  if isinstance(x, BaseWeapon)), default=0.0) for o in h]), 3),
         # --- olcut 2: ogrenilmis kac/saldir ---
         "saldiri_egilimi": round(_ort(sal), 4),
         "kacis_egilimi": round(_ort(kac), 4),
