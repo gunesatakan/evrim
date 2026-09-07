@@ -50,7 +50,7 @@ class Chemoreceptor(BaseOrgan):
         zarf = max(0.0, float(getattr(parent, 'radius', cek)) - cek)
         return taban, disa, zarf + self.logic.length
 
-    def sample_environment(self, parent, scent_env):
+    def sample_environment(self, parent, scent_env, dt=None):
         """Organın BOYUNCA örnekle, en güçlü okumayı al.
 
         Önceden yalnızca UÇ noktası okunuyordu ve bu iki şeyi bozuyordu:
@@ -73,7 +73,7 @@ class Chemoreceptor(BaseOrgan):
             ham = scent_env.get_concentration(nokta.x, nokta.y)
             if ham > en_yuksek:
                 en_yuksek = ham
-        return self.logic.perceive(en_yuksek)
+        return self.logic.perceive(en_yuksek, dt)
 
     def _get_all_sample_points(self, parent):
         """

@@ -199,7 +199,15 @@
         "GROW_MECHANO_ESIK": 0.12,
         "MECHANO_ESIK_MIN": 0.0015,
         "KOKU_SURUKLENME": 1.5,
-        "SES_ACILIYET_REF": 8.0
+        "SES_ACILIYET_REF": 8.0,
+        "CHEMO_GAIN_TABAN": 20.0,
+        "CHEMO_GAIN_MAX": 60.0,
+        "GROW_CHEMO_GAIN": 4.0,
+        "CHEMO_PENCERE_MAX": 3.0,
+        "GROW_CHEMO_PENCERE": 0.25,
+        "CHEMO_GURULTU": 0.01,
+        "TUMBLE_NEG_ORAN": 0.4,
+        "KOKU_UNUTMA": 1.5
     },
     "entities": {
         "optropi_0": {

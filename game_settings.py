@@ -577,7 +577,32 @@ DEFAULT_SETTINGS = {
     # Yuksek kazanc biyolojik olarak da dogrusu: E. coli'nin kemotaksi
     # agi, binlerce alicinin isbirlikci kumeler halinde dizilmesiyle
     # sinyali ~35 kat yukseltir. 5 gercekci degildi, dusuktu.
+    # KAZANC ARTIK BIR GEN (kemoreseptorde). Buradakiler yalnizca TABAN,
+    # TAVAN ve gelisim adimi. Kazanc: alicidan gelen kucuk bir fark
+    # davranisa ne kadar buyuk bir degisim olarak gecer - esikten
+    # bagimsiz bir molekuler ozellik (alici kumelerinin isbirligi).
+    "CHEMO_GAIN_TABAN": 20.0,
+    "CHEMO_GAIN_MAX": 60.0,
+    "GROW_CHEMO_GAIN": 4.0,
+    # Ornekleme penceresi de gen: uzun ortalama gurultuyu bastirir ama
+    # tepkiyi geciktirir.
+    "CHEMO_PENCERE_MAX": 3.0,
+    "GROW_CHEMO_PENCERE": 0.25,
+    # BERG-PURCELL: bagil olcum hatasi ~ sqrt(bu / (derisim x sure)).
+    # Kazanc genini bedelli kilan sey budur - gurultusuz bir kazanc geni
+    # "hep buyut" demek olurdu.
+    # Olculdu: gurultu 0.005'te en iyi kazanc 48, 0.015'te 24 - yani
+    # kazancin gurultuye BAGLI bir optimumu var ve fazlasi geri tepiyor.
+    # 0.01, tabani (20) acikca faydali birakip yukselmeye de yer birakan
+    # seviye.
+    "CHEMO_GURULTU": 0.01,
+    # Koku ne kadar sure hic alinmazsa adaptasyon durumu sifirlanir.
+    # Tek bir gurultulu kare pencereyi silmemeli.
+    "KOKU_UNUTMA": 1.5,
+    # (geriye uyumluluk: kemoreseptoru olmayan bir yol buraya duserse)
     "TUMBLE_GAIN_POSITIVE": 20.0,
+    # Negatif kazanc pozitifin bu kati (kotulesirken daha cabuk don).
+    "TUMBLE_NEG_ORAN": 0.4,
     "TUMBLE_GAIN_NEGATIVE": 8.0,
     "TUMBLE_RATE_MIN": 0.05,
     "TUMBLE_RATE_MAX": 10.0,

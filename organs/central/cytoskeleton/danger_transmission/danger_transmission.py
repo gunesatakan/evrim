@@ -6,6 +6,7 @@ import game_settings
 from systems.signaling.behavioral_state import BehavioralState
 from entities.entity import WIDTH, HEIGHT
 from organs.receptors.Photoreceptor.photoreceptor import Photoreceptor
+from organs.receptors.Chemoreceptor.chemoreceptor import Chemoreceptor
 
 class DangerTransmission:
     def __init__(self):
@@ -35,6 +36,7 @@ class DangerTransmission:
         self.sample_interval = getattr(game_settings, 'CHEMO_SAMPLE_INTERVAL', 0.5)
         self._sample_accum = 0.0
         self._sample_time = 0.0
+        self._koku_bos = 0.0       # kokusuz gecen sure
 
         # Levy flight (IDLE)
         self.levy_run_duration = 0.0
@@ -192,12 +194,29 @@ class DangerTransmission:
             self.levy_timer = 0.0
             return (self.target_direction, None, None)
 
+        # KAZANC VE PENCERE ARTIK ORGANDAN GELIYOR, sabitten degil.
+        # Ikisi de ayri birer gen: kazanc "farki ne kadar buyuturum",
+        # pencere "ne kadar uzun ortalarim". Uzun pencere Berg-Purcell
+        # gurultusunu bastirir ama tepkiyi geciktirir.
+        burun = None
+        for _o in organism.organs:
+            if isinstance(_o, Chemoreceptor):
+                if burun is None or _o.logic.kazanc > burun.kazanc:
+                    burun = _o.logic
+        if burun is not None:
+            self.sample_interval = burun.pencere
+            kazanc_p = burun.kazanc
+        else:
+            kazanc_p = game_settings.TUMBLE_GAIN_POSITIVE
+        kazanc_n = kazanc_p * game_settings.TUMBLE_NEG_ORAN
+
         self.levy_timer += dt
         uzatma = 1.0
         if scent_intensity > 0:
             # Algiyi pencere boyunca biriktir: kare basina (1/30 sn) olculen
             # fark, hucre o surede neredeyse hic yer degistirmedigi icin
             # sifira yakin cikar ve hicbir egilim uretmez.
+            self._koku_bos = 0.0
             self._sample_accum += scent_intensity * dt
             self._sample_time += dt
             if self._sample_time >= self.sample_interval:
@@ -212,15 +231,24 @@ class DangerTransmission:
                 self._sample_time = 0.0
 
             d = self.last_delta
-            kazanc = (game_settings.TUMBLE_GAIN_POSITIVE if d > 0
-                      else game_settings.TUMBLE_GAIN_NEGATIVE)
+            kazanc = kazanc_p if d > 0 else kazanc_n
             tavan = game_settings.CHEMO_RUN_CLAMP
             uzatma = math.exp(kazanc * d)
             uzatma = max(1.0 / tavan, min(tavan, uzatma))
             # Gozlem icin: etkin tumble sikligi
             self.tumble_rate = 1.0 / max(1e-6, self.levy_run_duration * uzatma)
         else:
-            self._reset_chemotaxis_sampling()
+            # TEK BIR BOS KARE PENCEREYI SILMEZ.
+            #
+            # Gurultulu bir olcum ya da yamanin kiyisindaki bir bosluk
+            # algiyi bir an sifira dusurebilir. Once bu, biriken butun
+            # pencereyi hemen sifirliyordu - yani gurultu, gradyani
+            # bozmakla kalmayip HAFIZAYI da siliyordu. Gercek bir hucre de
+            # alicisi bir an bos kaldi diye adaptasyon durumunu sifirlamaz.
+            # Ancak koku gercekten bir sure yoksa unutur.
+            self._koku_bos += dt
+            if self._koku_bos >= game_settings.KOKU_UNUTMA:
+                self._reset_chemotaxis_sampling()
 
         if self.levy_timer >= self.levy_run_duration * uzatma:
             alpha = game_settings.LEVY_ALPHA
@@ -257,6 +285,7 @@ class DangerTransmission:
         self.last_delta = 0.0
         self._sample_accum = 0.0
         self._sample_time = 0.0
+        self._koku_bos = 0.0
         self.tumble_rate = self.base_tumble_rate
 
     def _detect_wall_in_vision(self, organism):
