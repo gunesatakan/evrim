@@ -1,7 +1,7 @@
 {
     "settings": {
         "WORLD_SCALE": 1.0,
-        "FOOD_COUNT": 150,
+        "FOOD_COUNT": 360,
         "KAOTROPI_COUNT": 8,
         "NOTROPI_COUNT": 30,
         "PREY_FOOD_VALUE": 2,
@@ -131,8 +131,8 @@
         "SEPARATION_STRENGTH": 0.5,
         "CYTOSKELETON_AREA": 10.0,
         "FOOD_AREA": 100.0,
-        "FOOD_SPAWN_RATE": 20.0,
-        "FOOD_MAX": 150,
+        "FOOD_SPAWN_RATE": 22.0,
+        "FOOD_MAX": 360,
         "RIBOSOME_AREA": 20.0,
         "VACUOLE_AREA": 30.0,
         "CILIA_TURN_MULTI": 0.05,
@@ -180,7 +180,13 @@
         "TOXIN_ALLELE_MUTATION": 0.02,
         "ORGAN_ANGLE_RATE": 0.1,
         "ORGAN_ANGLE_SIGMA": 18.0,
-        "YENI_KATMAN_YATIRIM": 0.6
+        "YENI_KATMAN_YATIRIM": 0.6,
+        "ATAK_ESIGI": 0.5,
+        "KACIS_ESIGI": 0.5,
+        "BEHAVIOR_MUTATION_SIGMA": 0.25,
+        "MOTOR_TABAN_EFOR": 0.55,
+        "MOTOR_EFOR_USSU": 2.0,
+        "ARENA_OLCEK": 2.0
     },
     "entities": {
         "optropi_0": {

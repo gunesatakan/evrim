@@ -10,7 +10,7 @@ sonrasi ileri mi gittik geri mi, tartisilmadan gorulur.
 import math
 
 from organs.peripheral.weapons.weapons import BaseWeapon
-from systems.signaling.behavior_genome import BehaviorGenome
+from systems.signaling.behavior_genome import BehaviorGenome, etiket
 
 SILAH_ADLARI = ("Stylet", "Harpoon", "Nematocyst", "Toxin", "Lysin",
                 "Phagocytosis")
@@ -47,86 +47,81 @@ def katman_sayisi(o):
 
 
 # ---------------------------------------------------------------- OLCUT 2
-def spektrum_egilimi(o):
-    """Bu hucre "zayifa saldir, gucluden kac" der mi?
+#
+# DIKKAT: burasi "populasyon BENIM kuralimi ogrendi mi" diye sormaz.
+#
+# Kural dayatilmamali. Sans eseri silah kazanmis bir hucrenin etrafinda,
+# ona saldiranlar olur ve kacanlar yasar; kural kodda degil OLULERDE
+# birikir. Bu yuzden asagidakiler bir HEDEF degil, birer GOZLEM: davranis
+# ekseninin nereye yerlestigini tarif ederler.
+#
+# "Ogrenildi mi" sorusunun kanitlayici cevabi arac/rekabet.py'dedir:
+# evrimlesmis tabloyu AYNI BEDENDE rastgele tabloya karsi yaristirmak.
 
-    Koku ekseni 0-100: 50 = benimle esit, altinda benden zayif, ustunde
-    benden guclu. Ekseni 0.5 adimlarla tarayip her konumda tepkiyi okuruz.
+def spektrum_ozeti(o):
+    """Koku ekseni boyunca tepkinin sekli.
 
-    Doner: (saldiri_egilimi, kacis_egilimi)
-      saldiri_egilimi : zayif tarafta saldiri orani - guclu tarafta saldiri orani
-      kacis_egilimi   : guclu tarafta kacis orani  - zayif tarafta kacis orani
-
-    Ikisi de rastgele bir tabloda 0 civarinda olur. Pozitife kayarsa
-    populasyon "kimden kacilir kime saldirilir" ayrimini ogrenmis demektir;
-    negatife kayarsa TERS ogrenmis demektir - ki bu da gecerli bir sonuctur,
-    yeter ki sifirdan uzaklassin.
+    Doner: (ortalama, kararlilik, zayif_taraf, guclu_taraf)
+      ortalama    : eksenin tamamindaki ortalama tepki (-1..1)
+      kararlilik  : |tepki| ortalamasi - 0'a yakinsa hucre umursamiyor,
+                    1'e yakinsa her karsilasmada tam gucle tepki veriyor
+      zayif_taraf : kendinden ZAYIF kokanlara ortalama tepki
+      guclu_taraf : kendinden GUCLU kokanlara ortalama tepki
     """
     b = getattr(o, 'behavior', None)
     if b is None:
-        return 0.0, 0.0
-    zayif_s = zayif_k = guclu_s = guclu_k = 0
+        return 0.0, 0.0, 0.0, 0.0
+    top = kar = zayif = guclu = 0.0
     n = 0
     x = 0.0
     while x < 50.0:
         r1 = b.spectrum_response(x)
         r2 = b.spectrum_response(100.0 - x)
-        zayif_s += (r1 == 'attack')
-        zayif_k += (r1 == 'flee')
-        guclu_s += (r2 == 'attack')
-        guclu_k += (r2 == 'flee')
+        zayif += r1
+        guclu += r2
+        top += r1 + r2
+        kar += abs(r1) + abs(r2)
         n += 1
         x += 0.5
     if not n:
-        return 0.0, 0.0
-    return (zayif_s - guclu_s) / n, (guclu_k - zayif_k) / n
+        return 0.0, 0.0, 0.0, 0.0
+    return top / (2 * n), kar / (2 * n), zayif / n, guclu / n
 
 
-def bant_profili(o):
-    """Koku ekseni boyunca tepki dagilimi: {tepki: oran}.
+def kairomon_tepkisi(o):
+    """Yakinda avlanmis birine verilen tepki eksi temiz birine verilen.
 
-    "Ogrenmek" yalnizca saldirmak ya da kacmak degil; NE ZAMAN HICBIR SEY
-    YAPMAYACAGINI bilmek de ogrenmedir. Rastgele bir tabloda dort tepki de
-    %25 civarindadir; populasyon bunlardan uzaklasiyorsa bir sey secilmis
-    demektir.
-    """
-    b = getattr(o, 'behavior', None)
-    out = {r: 0.0 for r in BehaviorGenome.RESPONSES}
-    if b is None:
-        return out
-    n = 0
-    x = 0.0
-    while x <= 100.0:
-        out[b.spectrum_response(x)] += 1.0
-        n += 1
-        x += 1.0
-    for k in out:
-        out[k] /= max(1, n)
-    return out
-
-
-def kairomon_kacisi(o):
-    """"Yakinda avlanmis birinden kac" ogrenildi mi?
-
-    Kairomon, avcinin AV YEDIGINI ele veren sizintidir; kutu 0 temiz,
-    5 taze ve cok yemis. Yuksek kutularda kacis orani ile dusuk
-    kutulardaki kacis orani arasindaki fark olculur.
+    Negatif = "yemek yemis olandan uzak dur" yonunde bir ayrim var.
     """
     b = getattr(o, 'behavior', None)
     if b is None:
         return 0.0
-    dusuk = yuksek = 0
+    dusuk = yuksek = 0.0
     nd = ny = 0
     for c in range(BehaviorGenome.KAIROMONE_BINS):
         for lvl in range(BehaviorGenome.LEVEL_BINS):
             r = b.respond('kairomone', c, lvl)
             if c <= 1:
-                dusuk += (r == 'flee'); nd += 1
+                dusuk += r; nd += 1
             elif c >= 4:
-                yuksek += (r == 'flee'); ny += 1
+                yuksek += r; ny += 1
     if not nd or not ny:
         return 0.0
     return yuksek / ny - dusuk / nd
+
+
+# ---------------------------------------------------------------- OZET
+def _ort(xs):
+    xs = list(xs)
+    return sum(xs) / len(xs) if xs else 0.0
+
+
+def _std(xs):
+    xs = list(xs)
+    if len(xs) < 2:
+        return 0.0
+    m = sum(xs) / len(xs)
+    return math.sqrt(sum((x - m) ** 2 for x in xs) / (len(xs) - 1))
 
 
 def silah_gucu(o):
@@ -161,19 +156,6 @@ def uzmanlasma(h):
 
 
 # ---------------------------------------------------------------- OZET
-def _ort(xs):
-    xs = list(xs)
-    return sum(xs) / len(xs) if xs else 0.0
-
-
-def _std(xs):
-    xs = list(xs)
-    if len(xs) < 2:
-        return 0.0
-    m = sum(xs) / len(xs)
-    return math.sqrt(sum((x - m) ** 2 for x in xs) / (len(xs) - 1))
-
-
 def olc(d):
     """Dunyanin o anki durumundan olcut sozlugu uret."""
     h = d.hucreler
@@ -187,7 +169,11 @@ def olc(d):
     # "savunma tipi" degildir; ayirt edici olan seyi TASIMAMASI.
     savunmaci = [o for o in savunmali if silah_sayisi(o) == 0]
 
-    sal, kac = zip(*(spektrum_egilimi(o) for o in h)) if h else ((0,), (0,))
+    ozet = [spektrum_ozeti(o) for o in h]
+    tepki_ort = _ort(x[0] for x in ozet)
+    kararlilik = _ort(x[1] for x in ozet)
+    zayif = _ort(x[2] for x in ozet)
+    guclu = _ort(x[3] for x in ozet)
     silah_dagilim = {}
     for o in h:
         for x in o.organs:
@@ -209,10 +195,16 @@ def olc(d):
         "silah_guc": round(_ort(
             [max((x.logic.power for x in o.organs
                   if isinstance(x, BaseWeapon)), default=0.0) for o in h]), 3),
-        # --- olcut 2: ogrenilmis kac/saldir ---
-        "saldiri_egilimi": round(_ort(sal), 4),
-        "kacis_egilimi": round(_ort(kac), 4),
-        "kairomon_kacisi": round(_ort(kairomon_kacisi(o) for o in h), 4),
+        # --- olcut 2: davranis ekseninin sekli (GOZLEM, hedef degil) ---
+        "tepki_ort": round(tepki_ort, 4),
+        "kararlilik": round(kararlilik, 4),
+        "zayifa_tepki": round(zayif, 4),
+        "gucluye_tepki": round(guclu, 4),
+        "ayrim": round(zayif - guclu, 4),
+        "kairomon_tepkisi": round(_ort(kairomon_tepkisi(o) for o in h), 4),
+        "sosyal_ort": round(_ort(
+            getattr(getattr(o, 'behavior', None), 'sosyal_oncelik', 0.0)
+            for o in h), 3),
         # --- olcut 3: savunma tipleri ---
         "savunma_ort": round(_ort(savunma_puani(o) for o in h), 3),
         "savunma_std": round(_std([savunma_puani(o) for o in h]), 3),
@@ -240,21 +232,33 @@ def olc(d):
         "hafiza_ort": round(_ort(
             getattr(getattr(o, 'direction_memory', None), 'capacity', 0)
             for o in h), 1),
-        "sosyal_ort": round(_ort(
-            getattr(getattr(o, 'behavior', None), 'sosyal_oncelik', 0.0)
-            for o in h), 3),
         "kamci_ort": round(_ort(
             sum(1 for x in o.organs
                 if x.__class__.__name__ == 'Flagella') for o in h), 3),
-        "bant": {k: round(v, 3) for k, v in
-                 _bant_ortalama(h).items()},
+        "bant": {k: round(v, 3) for k, v in _bant_ortalama(h).items()},
         "olum": dict(d.olum_nedeni),
     }
 
 
 def _bant_ortalama(h):
-    top = {r: 0.0 for r in BehaviorGenome.RESPONSES}
+    """Koku ekseninin ne kadari hangi tepki bolgesinde.
+
+    Surekli deger okunabilir olsun diye bes bolgeye ayrilir:
+    kac / uzaklas / yoksay / yaklas / saldir. Rastgele bir genomda
+    dagilim yaklasik esittir; uclara yigilma bir sey secildigini gosterir.
+    """
+    top = {r: 0.0 for r in BehaviorGenome.ETIKETLER}
     for o in h:
-        for k, v in bant_profili(o).items():
-            top[k] += v
-    return {k: v / max(1, len(h)) for k, v in top.items()}
+        b = getattr(o, 'behavior', None)
+        if b is None:
+            continue
+        n = 0
+        x = 0.0
+        while x <= 100.0:
+            top[etiket(b.spectrum_response(x))] += 1.0
+            n += 1
+            x += 2.0
+        for k in top:
+            pass
+    toplam = sum(top.values()) or 1.0
+    return {k: v / toplam for k, v in top.items()}

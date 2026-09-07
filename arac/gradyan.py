@@ -74,12 +74,14 @@ AVCI_TAKIMLARI = ("stilet", "toksin", "zipkin", "fagosit",
 
 
 def _davranis_sabitle(hucre, saldirgan):
+    """Tepki artik SUREKLI: +1 tam saldiri, -1 tam kacis, 0 ilgisizlik."""
     b = hucre.behavior
-    tepki = 'attack' if saldirgan else 'flee'
+    tepki = 1.0 if saldirgan else -1.0
     for k in list(b.table):
         b.table[k] = tepki
     b.scent_bands = [tepki] * len(b.scent_bands)
-    b.kin_response = 'ignore'      # kendi turunu yeme
+    b.kin_response = 0.0           # kendi turunu yeme
+    b.sosyal_oncelik = 1.0         # testte komsu her zaman oncelikli
 
 
 

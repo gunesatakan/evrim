@@ -19,7 +19,31 @@ def _world_scale():
 # Dunya da ayni oranda buyur ki YOGUNLUK degismesin: ayni besin ve
 # kaotropi sayisi ayni birim alana dusmeye devam etsin.
 _WS = _world_scale()
-WIDTH, HEIGHT = int(1200 * _WS), int(800 * _WS)
+
+
+def _arena_scale():
+    """ARENA_OLCEK: yalnizca SAHAYI buyutur, hucreyi buyutmez.
+
+    WORLD_SCALE her uzunlugu birden olcekler - hucre de dunya da buyur,
+    yani yogunluk ve oranlar aynen kalir. Burada istenen bambaska bir sey:
+    hucre ayni kalsin, SAHA genislesin.
+
+    Neden gerekli: yaricapi 22 olan 200 hucre 1200x800'luk bir sahada
+    alanin ucte birini kapliyordu. Boyle bir kalabalikta her hucre her an
+    birilerine degiyor; her karsilasma bir arbede oluyor, yerel farklilasma
+    (yamalar, siginaklar, ekotiplerin uzamsal ayrismasi) icin yer kalmiyor.
+    Hareket etmenin ve uzagi algilamanin da bir anlami kalmiyor - zaten her
+    sey bir govde boyu otede.
+    """
+    try:
+        import game_settings
+        return float(getattr(game_settings, 'ARENA_OLCEK', 1.0))
+    except Exception:
+        return 1.0
+
+
+_AS = _arena_scale()
+WIDTH, HEIGHT = int(1200 * _WS * _AS), int(800 * _WS * _AS)
 FPS = 60
 SCALE = 10  # 1 unit = 10 pixels
 

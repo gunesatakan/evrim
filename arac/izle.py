@@ -15,8 +15,9 @@ ALANLAR = (("n", "%5.0f"), ("dogum", "%6.0f"), ("organ_ort", "%6.2f"),
            ("burun_ort", "%6.2f"), ("kamci_ort", "%6.2f"),
            ("silahli_oran", "%7.3f"), ("silah_guc", "%7.3f"),
            ("atis", "%7.0f"), ("katman_ort", "%7.3f"),
-           ("savunmaci_oran", "%8.3f"), ("saldiri_egilimi", "%8.3f"),
-           ("kacis_egilimi", "%8.3f"), ("govde_ort", "%6.2f"))
+           ("savunmaci_oran", "%8.3f"), ("uzmanlasma", "%8.3f"),
+           ("tepki_ort", "%8.3f"), ("kararlilik", "%8.3f"),
+           ("ayrim", "%8.3f"), ("govde_ort", "%6.2f"))
 
 
 def main():

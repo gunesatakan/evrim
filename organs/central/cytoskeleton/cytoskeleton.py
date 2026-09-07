@@ -8,7 +8,7 @@ class Cytoskeleton(BaseOrgan):
         self.logic = DangerTransmission()
 
     def update(self, dt, parent, nearby_threats, memory_system, scent_intensity,
-               prey_dir=None, behavior_response='ignore', koku_gradyani=None):
+               prey_dir=None, behavior_response=0.0, koku_gradyani=None):
         """
         Sinyalleri işler ve parent'ın yönünü ve görsel vektörlerini günceller.
 

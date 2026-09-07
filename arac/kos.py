@@ -90,7 +90,8 @@ def _birlestir(kayitlar, anahtar):
 
 
 SAYISAL = ("n", "dogum", "besin", "silahli_oran", "av_yeme",
-           "saldiri_egilimi", "kacis_egilimi", "kairomon_kacisi",
+           "tepki_ort", "kararlilik", "zayifa_tepki", "gucluye_tepki",
+           "ayrim", "kairomon_tepkisi",
            "savunma_ort", "savunma_std", "savunmaci_oran",
            "silahli_savunmali", "katman_ort",
            "organ_ort", "hiz_ort", "burun_ort", "govde_ort",

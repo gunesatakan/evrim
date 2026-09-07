@@ -238,6 +238,8 @@ class Morphology:
 class Organism(Entity):
     #: Uzamsal koku gradyani (>=2 kemoreseptor varsa). Guvenli varsayilan.
     koku_gradyani = None
+    #: Motor eforu (0..1). Davranis spektrumunun buyuklugu belirler.
+    motor_efor = 1.0
 
     #: Gorme organi onbellegi icin guvenli varsayilan. recalculate_physics
     #  tazeler; ondan once can_see cagrilirsa gozsuz sayilir.
@@ -703,6 +705,8 @@ class Organism(Entity):
         self._gozler = [o for o in self.organs if isinstance(o, Photoreceptor)]
 
         boost = self.membrane.logic.calcium_boost if hasattr(self, 'membrane') else 1.0
+        # Davranis spektrumunun belirledigi motor eforu ITKIYE dogrusal girer.
+        boost *= float(getattr(self, 'motor_efor', 1.0))
 
         # Net kuvvet ve tork hesabı
         net_force_x = 0.0
@@ -1014,14 +1018,15 @@ class Organism(Entity):
 
         Işık uyaranı: hedefin RENK TONU sınıfı, yakınlığı da seviyesi olur
         (yakın/büyük = güçlü uyaran). Tablo her (renk, seviye) ikilisi için
-        kaç / yaklaş / saldır / yoksay der.
+        -1..+1 arasi bir sayi verir: isaret yonu (uzerine / uzaga),
+        buyukluk ise harcanacak motor eforunu belirler.
 
-        En güçlü uyaranı veren hedefe göre karar döner:
+        EN GUCLU TEPKIYI uyandiran hedefe gore karar doner:
             (tepki, hedef) veya (None, None)
         """
         self.attack_targets = set()
         if not others or not game_settings.BEHAVIOR_ENABLED:
-            self.current_response = 'ignore'
+            self.current_response = 0.0
             return None, None
 
         # Menzil 0 ise o kanal KAPALIDIR. `max(1.0, ...)` yazmak, organsiz
@@ -1031,7 +1036,7 @@ class Organism(Entity):
         hrange = self.sound_radius
         srange = self.smell_range
         if vrange <= 0.0 and hrange <= 0.0 and srange <= 0.0:
-            self.current_response = 'ignore'
+            self.current_response = 0.0
             return None, None
         my_scent = self.scent_value      # döngü içinde değişmez, bir kez
         best = None          # (seviye, -mesafe) -> hedef, tepki
@@ -1070,31 +1075,35 @@ class Organism(Entity):
                                 BehaviorGenome.level_bin(max(0.0, srange - d), srange)))
 
             kin = self.is_kin(t)
+            atak = game_settings.ATAK_ESIGI
             if scent_x is not None:
                 # Akrabanın özel sinyali, spektrumdan okunan genel
                 # izlenimin önüne geçer: "iri biri" değil, "benden biri".
                 resp = (self.behavior.kin_response if kin
                         else self.behavior.spectrum_response(scent_x))
-                if resp == 'attack':
+                if resp >= atak:
                     self.attack_targets.add(id(t))
-                if resp != 'ignore':
-                    lvl = BehaviorGenome.level_bin(max(0.0, srange - d), srange)
-                    key = (lvl, -d)
-                    if best is None or key > best[0]:
-                        best = (key, t, resp)
+                # KAZANAN, EN GUCLU TEPKIYI UYANDIRAN HEDEFTIR.
+                #
+                # Once "uyaran siddeti" siralaniyordu: hangi hedef daha
+                # yakinsa o kazaniyordu, tepkinin ne oldugundan bagimsiz.
+                # Oysa artik tepkinin kendisi bir buyukluk - hucre neye
+                # daha cok tepki veriyorsa onunla ilgilenir. Yakinlik
+                # yalnizca esitlik bozar.
+                key = (abs(resp), -d)
+                if best is None or key > best[0]:
+                    best = (key, t, resp)
 
             for stim, cls_idx, level in stimuli:
                 resp = self.behavior.respond(stim, cls_idx, level)
-                if resp == 'attack':
+                if resp >= atak:
                     self.attack_targets.add(id(t))
-                if resp == 'ignore':
-                    continue
-                key = (level, -d)
+                key = (abs(resp), -d)
                 if best is None or key > best[0]:
                     best = (key, t, resp)
 
         if best is None:
-            self.current_response = 'ignore'
+            self.current_response = 0.0
             return None, None
         _k, target, resp = best
         self.current_response = resp
@@ -1238,30 +1247,52 @@ class Organism(Entity):
                     break
                 continue
 
-            # --- TOKSİN: sürekli, alan etkili ---
+            # --- TOKSİN / LIZIN: sürekli, alan etkili ---
             if lg.CONTINUOUS:
                 if self.energy < lg.energy_cost * dt:
                     continue
-                hit_any = False
-                for t in candidates:
-                    if t is self or t.dead or t.is_immune_to_toxin(lg):
-                        continue          # ayni alleli tasiyan bagisik
-                    if not organ.can_hit(self, t):
-                        continue
+                hedefler = [t for t in candidates
+                            if t is not self and not t.dead
+                            and not t.is_immune_to_toxin(lg)
+                            and organ.can_hit(self, t)]
+                if not hedefler:
+                    continue
+
+                # MADDE KORUNUMU: hucre saniyede belli miktarda molekul
+                # sentezler. Menzilde bes hedef varsa her birine besde biri
+                # duser - hepsine birden tam doz DUSMEZ.
+                #
+                # Once her hedef kendi tam salimini aliyordu ve bedel yine
+                # saniyede bir kez odeniyordu: kalabaliga rastgele sacmak
+                # bedavaydi. Toksin bu yuzden butun silahlari eziyordu -
+                # nisan almanin, yaklasmanin, secmenin hicbir karsiligi
+                # yoktu.
+                pay = 1.0 / len(hedefler)
+
+                for t in hedefler:
+                    # MESAFEYLE SEYRELME: radyal salinan bir maddenin
+                    # derisimi uzaklikla duser. Menzilin ucundaki hucre ile
+                    # dibindeki hucre ayni dozu alamaz; toksin boylece
+                    # YAKIN mesafe silahi olur ve kullanmak icin
+                    # yaklasmak - yani kendini gostermek - gerekir.
+                    d = max(0.0, self.pos.distance_to(t.pos)
+                            - self.radius - t.radius)
+                    r0 = max(1.0, self.radius)
+                    seyrelme = (r0 / (r0 + d)) ** 2
+                    olcek = pay * seyrelme
                     # MOLEKUL SALIMI: hasari dogrudan yazmak yerine
                     # gercek molekuller birakilir. Hedefe varip varmadigina
                     # KATMANLARIN DELIKLERI karar verir - lab.py'deki ayni
                     # fizik, ayni geometri. Hasar molekul varinca dogar
-                    # (HedefZarf.receive).
-                    if not self._molekul_birak(t, lg, dt):
-                        t.take_damage(lg.damage * dt, lg.CHANNEL, lg.CONTACT,
-                                      'toksin', lg)
-                    hit_any = True
+                    # (HedefZarf.receive). Molekul yolu mesafeyi zaten
+                    # fiziksel olarak yasar; ona yalnizca PAY uygulanir.
+                    if not self._molekul_birak(t, lg, dt * pay):
+                        t.take_damage(lg.damage * dt * olcek,
+                                      lg.CHANNEL, lg.CONTACT, 'toksin', lg)
                     if t.dead:
                         killed.append(t)
-                if hit_any:
-                    self.energy -= lg.energy_cost * dt
-                    self.atis_sayisi += 1
+                self.energy -= lg.energy_cost * dt
+                self.atis_sayisi += 1
                 continue
 
             # --- TEK ATIŞLIK SİLAHLAR ---
@@ -2206,7 +2237,7 @@ class Organism(Entity):
             else: self.direction_memory.forget("trail_prediction")
 
         # DAVRANIŞ GENOMU - görülen hücrelere verilecek tepki
-        behave_dir, behave_resp = None, 'ignore'
+        behave_dir, behave_resp = None, 0.0
         # Roller sinifa gore dagitilmayi biraktiginda "tehdit listesi" ve
         # "av listesi" ayni komsu listesi oldu; ikisini toplamak her
         # komsuyu IKI KEZ degerlendirmek demekti. perceive_and_decide
@@ -2221,14 +2252,16 @@ class Organism(Entity):
             _g.update({id(x): x for x in prey})
             seen_pool = list(_g.values())
         resp, target = self.perceive_and_decide(seen_pool)
-        if target is not None:
+        if target is not None and abs(resp) > 0.05:
             v = target.pos - self.pos
             if v.length() > 0:
                 v = v.normalize()
-                if resp == 'flee':
-                    behave_dir, behave_resp = -v, 'flee'
-                elif resp in ('approach', 'attack'):
-                    behave_dir, behave_resp = v, resp
+                # ISARET YON, BUYUKLUK EFOR.
+                # Pozitif = uzerine git, negatif = uzaklas. Ortadaki
+                # degerler ilgisiz surukleniste: hafifce yaklasma ya da
+                # hafifce uzaklasma, az motor enerjisiyle.
+                behave_dir = v if resp > 0 else -v
+                behave_resp = resp
 
         # AV TESPİTİ - görüş alanındaki en yakın av
         prey_dir = None
@@ -2244,6 +2277,17 @@ class Organism(Entity):
                 v = best.pos - self.pos
                 if v.length() > 0:
                     prey_dir = v.normalize()
+
+        # MOTOR EFORU: davranis spektrumunun BUYUKLUGU.
+        #
+        # Uclar (tam kacis / tam saldiri) motorlari sonuna kadar zorlar;
+        # ortadaki ilgisiz degerler neredeyse hic enerji harcamaz. Komsu
+        # yokken taban efor gecerli - besin aramak da hareket ister.
+        # Itki eforla DOGRUSAL, bedeli ise KARESIYLE artar: hizi iki
+        # katina cikarmak dorde katlar. Kacmak ve saldirmak boylece gercek
+        # bir karar olur, bedava bir refleks degil.
+        self.motor_efor = max(game_settings.MOTOR_TABAN_EFOR,
+                              min(1.0, abs(behave_resp)))
 
         # 2. KARAR MEKANİZMASI (CYTOSKELETON)
         if hasattr(self, 'cytoskeleton'):
@@ -2310,6 +2354,10 @@ class Organism(Entity):
         upkeep += self.direction_memory.capacity * game_settings.COST_MEMORY
 
         boost = self.membrane.logic.calcium_boost if hasattr(self, 'membrane') else 1.0
+        # Motor gucu = kuvvet x hiz; ikisi de eforla dogrusal oldugu icin
+        # bedel eforun KARESIYLE artar.
+        efor = float(getattr(self, 'motor_efor', 1.0))
+        boost *= efor ** game_settings.MOTOR_EFOR_USSU
         self.energy -= (upkeep + motor_cost * boost) * dt
 
         self.log_timer -= dt

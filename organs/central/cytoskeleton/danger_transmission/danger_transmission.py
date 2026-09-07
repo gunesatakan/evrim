@@ -42,7 +42,7 @@ class DangerTransmission:
 
     def process_signals(self, dt, organism, nearby_threats, memory_system,
                         scent_intensity, prey_dir=None,
-                        behavior_response='ignore', koku_gradyani=None):
+                        behavior_response=0.0, koku_gradyani=None):
         """
         Sinyalleri işler ve hareket yönünü belirler.
         BehavioralState sistemini kullanarak iç duruma göre karar verir.
@@ -102,18 +102,24 @@ class DangerTransmission:
         # sonucunu da bir gen belirler (sosyal_oncelik). Aksi halde koku
         # menzilindeki her komsu kemotaksiyi bastirir; hucre hic
         # beslenmeden omur boyu birilerinin pesinde kosar.
+        # Tepki SUREKLI bir sayi: isaret yon, buyukluk kararlilik.
+        # Cok zayif bir tepki (mutlak deger kucuk) beslenmenin onune
+        # gecmez - hucre umursamiyor demektir.
+        kararlilik = abs(float(behavior_response))
         genome_drives = (getattr(game_settings, 'BEHAVIOR_ENABLED', False)
-                         and behavior_response in ('flee', 'approach', 'attack')
+                         and kararlilik > 0.05
                          and prey_dir is not None)
-        if genome_drives and behavior_response != 'flee':
+        # KACIS her zaman onceliklidir - yenmek her seyi bitirir. Ama
+        # "kacis" bir emir degil, yeterince guclu bir NEGATIF tepkidir.
+        kaciyor = float(behavior_response) <= -game_settings.KACIS_ESIGI
+        if genome_drives and not kaciyor:
             b = getattr(organism, 'behavior', None)
             if b is not None and not b.sosyali_sec(scent_intensity):
                 genome_drives = False
         if genome_drives:
             self.target_direction = prey_dir
             self._reset_chemotaxis_sampling()
-            vec_type = {'flee': 'ESCAPE', 'attack': 'HUNT',
-                        'approach': 'HUNT'}[behavior_response]
+            vec_type = 'ESCAPE' if float(behavior_response) < 0 else 'HUNT'
             return (self.target_direction, vec_type, prey_dir * 45)
 
         # 2b. Davranis genomu kapaliysa eski sabit refleks

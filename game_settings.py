@@ -7,7 +7,12 @@ DEFAULT_SETTINGS = {
     # ~30 yapinca hucreler laboratuvardaki boyuta gelir ve katman/gozenek
     # yapisi gercekten cizilebilir hale gelir.
     "WORLD_SCALE": 1.0,
-    "FOOD_COUNT": 150,
+    # ARENA: yalnizca sahayi buyutur, hucreyi buyutmez. 2.0 = dort kat alan.
+    # 1.0'da 200 hucre sahanin ucte birini kapliyor ve her sey bir arbedeye
+    # donusuyor; 2.0'da orani %8'e duser, hareket ve uzun menzilli algi
+    # anlam kazanir.
+    "ARENA_OLCEK": 2.0,
+    "FOOD_COUNT": 360,
     "KAOTROPI_COUNT": 8,
     # --- AVLANMA (Optropi -> Notropi) ---
     # Optropiler notropileri yem olarak gorur. Notropiler de koku yayar,
@@ -335,6 +340,29 @@ DEFAULT_SETTINGS = {
     "SIGNATURE_COUPLED_RATIO": 0.7,
     "BEHAVIOR_MUTATION_RATE": 0.04,
     "BEHAVIOR_ENABLED": True,
+    # DAVRANIS BIR SPEKTRUMDUR: -1 (tam guc kac) .. 0 (yoksay) .. +1
+    # (tam guc saldir). Isaret ne yapilacagini, BUYUKLUK ne kadar motor
+    # enerjisi harcanacagini soyler.
+    #
+    # Bu esigi asan pozitif deger bir SALDIRI TAAHHUDUDUR: silahlar ancak
+    # o zaman ates eder. "Saldir" ayri bir emir degil, uzerine yeterince
+    # kararli gitmenin sonucu.
+    "ATAK_ESIGI": 0.5,
+    # Bu esigi asan negatif deger tam kacistir; tablo kactigini soyluyorsa
+    # beslenme onun onune gecemez.
+    "KACIS_ESIGI": 0.5,
+    # Tepki genlerinin mutasyonda ne kadar kaydigi. Ayrik tabloda mutasyon
+    # "rastgele baska bir tepkiye don" idi ve birikmis uyumu tek hamlede
+    # siliyordu; surekli eksende kucuk bir tedirginlik secilime
+    # tirmanabilecegi bir egim birakir.
+    "BEHAVIOR_MUTATION_SIGMA": 0.25,
+    # Komsu yokken (besin ararken) motorlara verilen efor. Uclarda efor
+    # 1.0'a cikar - kacmak ve saldirmak pahalidir.
+    "MOTOR_TABAN_EFOR": 0.55,
+    # Motor gucu efor'un KARESIYLE olceklenir (itki dogrusal). Hizi iki
+    # katina cikarmak bedeli dorde katlar - surtunme fiziginin gerektirdigi
+    # sey budur ve kacmayi/saldirmayi gercek bir karar haline getirir.
+    "MOTOR_EFOR_USSU": 2.0,
     # Sosyal oncelik geni ile koku siddetinin karsilastirildigi olcek.
     # Koku algisi logaritmiktir ve pratikte 0-8 arasinda gezer; 8, gen 1.0
     # iken hucrenin en guclu kokuyu bile birakip komsusunun pesine
@@ -357,7 +385,7 @@ DEFAULT_SETTINGS = {
     # enerji/sn arz ile kalan 1364, yani saniyede ~8 bolunme - kusak ~25 sn.
     # Bolluk secilimi zayiflatmaz: nufus tavani zaten saniyede en dusuk
     # enerjili 8 hucreyi eliyor, yani secilim baskisi tavandan geliyor.
-    "FOOD_SPAWN_RATE": 20.0,
+    "FOOD_SPAWN_RATE": 22.0,
     # --- BESIN YAMALI DOGAR ---
     #
     # Besin haritaya duzgun dagildiginda koku alaninin gradyani duzlesir
@@ -384,7 +412,7 @@ DEFAULT_SETTINGS = {
     # 150 ile rastgele carpisma araligi ~8-10 saniyeye cikar, yani
     # sindirim hiziyla ayni mertebeye. Artik besin bulmak da darbogaz:
     # daha iyi koklayan, sindirim kapasitesini dolduran kazanir.
-    "FOOD_MAX": 150,
+    "FOOD_MAX": 360,
     # NOT: Bu dört anahtar eskiden yalnızca settings.json'da vardı. save_all()
     # sadece DEFAULT_SETTINGS'te bulunanları yazdığı için, launcher'dan yapılan
     # ilk kayıtta dosyadan siliniyor ve sonraki açılışta program çöküyordu.

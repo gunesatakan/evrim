@@ -1,4 +1,4 @@
-"""Davranış genomu: uyaran → tepki tablosu.
+"""Davranış genomu: uyaran → tepki. Tepki AYRIK DEĞİL, SÜREKLİ.
 
 Bu, projedeki üçüncü gen tipidir ve diğer ikisiyle karıştırılmamalı:
 
@@ -6,21 +6,44 @@ Bu, projedeki üçüncü gen tipidir ve diğer ikisiyle karıştırılmamalı:
     Morphology  : hangi organın NEREDE olduğu (vücut planı)
     BehaviorGenome : hangi uyarana NE TEPKİ verileceği (davranış planı)
 
-Her uyaran üç bilgiyle kodlanır:
+---------------------------------------------------------------------------
+TEPKİ BİR SPEKTRUMDUR
+---------------------------------------------------------------------------
 
-    (tip, sınıf, seviye) → tepki
+Önceden dört ayrık tepki vardı: kaç / yaklaş / saldır / yoksay. Bunun iki
+ayrı sakıncası ölçüldü:
 
-  tip    : 'light' | 'sound' | 'scent'
-  sınıf  : NE olduğu  — ışık için renk tonu kutusu (0-5)
-  seviye : NE KADAR   — 0 zayıf, 1 orta, 2 güçlü
+1. **Mutasyonun tırmanabileceği bir eğim yoktu.** Bir gen mutasyona
+   uğradığında "rastgele başka bir tepkiye dön" oluyordu; yani birikmiş
+   her uyum tek hamlede siliniyordu. Seçilim küçük iyileştirmeleri
+   biriktiremez, yalnızca zar atışının sonucunu kabul eder. Popülasyonun
+   davranış eğilimi bu yüzden sıfır civarında salınıyordu — öğrenme değil
+   sürüklenme.
 
-Bu ayrım, "yüksek sese yaklaşırken düşük sesten kaçmak" ya da "farklı
-renklere farklı davranmak" gibi paternleri mümkün kılar. Sınıf ve seviye
-AYRIK kutulardır: sürekli değer kullanılsa genom sınırsız büyür ve mutasyon
-anlamını yitirirdi.
+2. **"Ne yapıyorum" ile "ne kadar enerji harcıyorum" birbirinden
+   kopuktu.** Kaçmak da yaklaşmak da aynı motor gücüyle yapılıyordu.
 
-Tüm hücreler rastgele bir tabloyla başlar; tablo bölünmede aktarılır ve
-mutasyona uğrar. Böylece davranış paterni zamanla evrimleşir.
+Artık tek bir sayı her ikisini birden kodluyor:
+
+        -1 ────────── 0 ────────── +1
+        kaç        yoksay        saldır
+      (tam güç)   (motor yok)  (tam güç)
+
+  * **İşaret** ne yapılacağını söyler: pozitif = üzerine git,
+    negatif = uzaklaş.
+  * **Büyüklük** ne kadar enerji harcanacağını söyler. Uçlar en pahalı
+    davranışlardır (itki ∝ efor, ama motor gücü ∝ efor²  — hız iki katına
+    çıkarken bedel dörde katlanır, gerçek sürüklenme fiziğinde olduğu gibi).
+  * Ortadaki değerler ilgisiz sürüklenme: hafifçe yaklaşma, hafifçe
+    uzaklaşma, hiç umursamama.
+
+Belli bir eşiği (`ATAK_ESIGI`) aşan pozitif değer SALDIRI taahhüdüdür:
+silahlar ancak o zaman ateşlenir. Yani "saldırmak" ayrı bir emir değil,
+üzerine yeterince kararlı gitmenin sonucu.
+
+Hiçbir yerde "güçlüden kaç" gibi bir kural yazılı değildir ve yazılmamalı.
+Şans eseri silah kazanmış bir hücrenin etrafında, ona saldıranlar ölür,
+kaçanlar yaşar. Kural kodda değil, ölülerde birikir.
 """
 import bisect
 import colorsys
@@ -30,10 +53,22 @@ import random as _rnd
 import game_settings
 
 
+def etiket(deger):
+    """Sürekli tepkinin okunabilir adı (yalnızca gösterim için)."""
+    if deger >= game_settings.ATAK_ESIGI:
+        return 'saldir'
+    if deger <= -game_settings.KACIS_ESIGI:
+        return 'kac'
+    if deger > 0.15:
+        return 'yaklas'
+    if deger < -0.15:
+        return 'uzaklas'
+    return 'yoksay'
+
+
 class BehaviorGenome:
-    # 'attack' olmadan silah kullanılamaz; 'approach' olmadan beslenme
-    # davranışı kodlanamaz (kemotaksi bu tabloya girmeli).
-    RESPONSES = ('flee', 'approach', 'attack', 'ignore')
+    #: Yalnızca gösterim ve ölçüm için: spektrumun beş okunabilir bölgesi.
+    ETIKETLER = ('kac', 'uzaklas', 'yoksay', 'yaklas', 'saldir')
 
     # 'scent' artik TABLODA DEGIL: ayrik sinif yerine SUREKLI spektrum
     # kullaniyor (asagidaki scent_cuts/scent_bands). Ayrik sinifta kucuk
@@ -67,41 +102,42 @@ class BehaviorGenome:
         return 0.0 if x < 0.0 else (100.0 if x > 100.0 else x)
 
     def spectrum_response(self, x):
-        """0-100 eksenindeki bir konuma bu hucrenin verdigi tepki."""
+        """0-100 eksenindeki bir konuma bu hucrenin verdigi tepki (-1..1)."""
         return self.scent_bands[bisect.bisect_right(self.scent_cuts, x)]
+
+    @staticmethod
+    def _rastgele_tepki(rng=_rnd):
+        """Baslangicta tepkiler duzgun dagilmis: uclar da orta da esit."""
+        return rng.uniform(-1.0, 1.0)
 
     def __init__(self, table=None, kin_response=None,
                  scent_cuts=None, scent_bands=None, sosyal_oncelik=None):
-        # {(tip, sınıf, seviye): tepki}
+        # {(tip, sınıf, seviye): -1..1}
         self.table = dict(table) if table else {}
         # Akraba tanindiginda ne yapilacagi. Soy imzasi "X sinifina ne
         # tepki vereyim" sorusunu sormaz, tek bir soru sorar: BU BENDEN Mi?
         # O yuzden 18 satir degil, TEK gen yeter. Yine de evrimlesir:
         # "kardesini yeme" cikabilir de cikmayabilir de - kodlanmaz.
-        self.kin_response = kin_response or _rnd.choice(self.RESPONSES)
+        self.kin_response = (float(kin_response) if kin_response is not None
+                             else self._rastgele_tepki())
         # Koku spektrumu: kesme noktalari (sirali) + her bandin tepkisi
         self.scent_cuts = (sorted(scent_cuts) if scent_cuts is not None
                            else sorted(_rnd.uniform(0.0, 100.0)
                                        for _ in range(self.SPECTRUM_CUTS)))
         self.scent_bands = (list(scent_bands) if scent_bands is not None
-                            else [_rnd.choice(self.RESPONSES)
+                            else [self._rastgele_tepki()
                                   for _ in range(self.SPECTRUM_BANDS)])
         # SOSYAL ONCELIK: baskasiyla ilgilenmek mi, karnini doyurmak mi?
         #
-        # Tablo "yaklas" ya da "saldir" dediginde bu karar BESLENMEYI
-        # bastiriyordu. Koku menzili bir hucrenin ~5 govde capina ciktigi
-        # ve dunyada 200 hucre oldugu icin her hucrenin HER AN bir komsusu
-        # var; yani kemotaksi hic calismiyordu. Burun ve kamci bedelini
-        # oduyor ama karsiligini alamiyordu. Olculdu: 400 saniyede
-        # kemoreseptor populasyondan tamamen silindi (1.00 -> 0.00), organ
-        # sayisi 7.0'dan 5.0'a dustu - yani hucreler hareketsizlesip
-        # korlesti. "Kompleks hucreler gelismesi" beklenirken tam tersi
-        # oluyordu.
+        # Tablo bir tepki verdiginde bu karar BESLENMEYI bastiriyordu. Koku
+        # menzili bir hucrenin ~5 govde capina ciktigi ve dunyada yuzlerce
+        # hucre oldugu icin her hucrenin HER AN bir komsusu var; yani
+        # kemotaksi hic calismiyordu. Burun ve kamci bedelini oduyor ama
+        # karsiligini alamiyordu (olculdu: kemoreseptor 400 saniyede
+        # populasyondan tamamen silindi).
         #
-        # Bu bir oncelik sorunudur ve cevabi dayatilmamali: hangi durumda
-        # komsuyla ilgilenilecegi de bir GENDIR. 0'a yakin bir hucre once
-        # karnini doyurur, 1'e yakin olan komsusunun pesine duser. Kacmak
-        # bunun disindadir - yenmek her seyi bitirir.
+        # Hangi durumda komsuyla ilgilenilecegi de bir GENDIR. Kacmak bunun
+        # disinda kalir - yenmek her seyi bitirir.
         self.sosyal_oncelik = (float(sosyal_oncelik)
                                if sosyal_oncelik is not None
                                else _rnd.random())
@@ -121,7 +157,7 @@ class BehaviorGenome:
 
         Akustikte büyük cisim pes, küçük cisim tiz ses üretir. Böylece
         "büyük bir şeyin sesinden kaç, küçük olana yaklaş" gibi paternler
-        kodlanabilir - kullanıcının istediği "yüksek/düşük ses ayrımı".
+        kodlanabilir.
         """
         edges = (6, 10, 15, 22, 32)      # 6 kutu
         for i, e in enumerate(edges):
@@ -173,15 +209,18 @@ class BehaviorGenome:
             n_class = cls.KAIROMONE_BINS if stim == 'kairomone' else cls.HUE_BINS
             for c in range(n_class):
                 for lvl in range(cls.LEVEL_BINS):
-                    table[(stim, c, lvl)] = rng.choice(cls.RESPONSES)
+                    table[(stim, c, lvl)] = cls._rastgele_tepki(rng)
         return table
 
     @classmethod
     def random(cls, rng=_rnd):
-        return cls(cls.random_table(rng), rng.choice(cls.RESPONSES),
+        return cls(cls.random_table(rng), cls._rastgele_tepki(rng),
                    sorted(rng.uniform(0.0, 100.0) for _ in range(cls.SPECTRUM_CUTS)),
-                   [rng.choice(cls.RESPONSES) for _ in range(cls.SPECTRUM_BANDS)],
+                   [cls._rastgele_tepki(rng) for _ in range(cls.SPECTRUM_BANDS)],
                    rng.random())
+
+    def respond(self, stim, cls_idx, level):
+        return self.table.get((stim, cls_idx, level), 0.0)
 
     def sosyali_sec(self, koku_siddeti):
         """Komsuyu mu takip edeyim, besini mi?
@@ -193,66 +232,68 @@ class BehaviorGenome:
         return (self.sosyal_oncelik * game_settings.SOSYAL_ESIK
                 >= koku_siddeti)
 
-    def respond(self, stim, cls_idx, level):
-        return self.table.get((stim, cls_idx, level), 'ignore')
-
     def mutate(self, rng=_rnd):
-        """Her girdi düşük olasılıkla başka bir tepkiye döner.
+        """Her gen düşük olasılıkla BİRAZ kayar - sıçramaz.
 
-        KAÇ girdinin gerçekten değiştiğini döndürür - bu sayı koku
-        kimliğinin ıraksama birikimini besler.
+        Ayrık tabloda mutasyon "rastgele başka bir tepkiye dön" idi ve
+        birikmiş uyumu tek hamlede siliyordu. Sürekli bir eksende küçük bir
+        tedirginlik, seçilime tırmanabileceği bir eğim bırakır: biraz daha
+        kararlı saldıran ya da biraz daha erken kaçan bir yavru, ebeveyninin
+        yanında az bir farkla öne geçebilir ve o fark birikebilir.
+
+        KAÇ genin gerçekten değiştiğini döndürür - bu sayı koku kimliğinin
+        ıraksama birikimini besler.
         """
-        rate = getattr(game_settings, 'BEHAVIOR_MUTATION_RATE', 0.04)
+        rate = game_settings.BEHAVIOR_MUTATION_RATE
+        sigma = game_settings.BEHAVIOR_MUTATION_SIGMA
         changes = 0
+
+        def kaydir(v):
+            return min(1.0, max(-1.0, v + rng.gauss(0.0, sigma)))
+
         for key in self.table:
             if rng.random() < rate:
-                new_r = rng.choice(self.RESPONSES)
-                if new_r != self.table[key]:
-                    changes += 1
-                self.table[key] = new_r
-        if rng.random() < rate:
-            new_r = rng.choice(self.RESPONSES)
-            if new_r != self.kin_response:
+                self.table[key] = kaydir(self.table[key])
                 changes += 1
-            self.kin_response = new_r
+        if rng.random() < rate:
+            self.kin_response = kaydir(self.kin_response)
+            changes += 1
 
-        # Kesme noktalari SICRAMAZ, kayar. Mutasyonun kucuk bir tedirginlik
-        # olmasi seciline egim tirmanma imkani verir; ayrik tabloda mutasyon
-        # "rastgele baska bir tepkiye don" oldugu icin bu mumkun degildi.
-        sigma = game_settings.SPECTRUM_MUTATION_SIGMA
+        # Kesme noktalari da kayar.
+        cut_sigma = game_settings.SPECTRUM_MUTATION_SIGMA
         moved = []
         for c in self.scent_cuts:
             if rng.random() < rate:
-                c = min(100.0, max(0.0, c + rng.gauss(0.0, sigma)))
+                c = min(100.0, max(0.0, c + rng.gauss(0.0, cut_sigma)))
                 changes += 1
             moved.append(c)
         self.scent_cuts = sorted(moved)
         for i in range(len(self.scent_bands)):
             if rng.random() < rate:
-                new_r = rng.choice(self.RESPONSES)
-                if new_r != self.scent_bands[i]:
-                    changes += 1
-                self.scent_bands[i] = new_r
-        # Sosyal oncelik SURELI bir gen: sicramaz, kayar.
+                self.scent_bands[i] = kaydir(self.scent_bands[i])
+                changes += 1
+        # Sosyal oncelik de sureli bir gen.
         if rng.random() < rate:
-            self.sosyal_oncelik = min(1.0, max(0.0, self.sosyal_oncelik
-                                               + rng.gauss(0.0, 0.15)))
+            self.sosyal_oncelik = min(1.0, max(
+                0.0, self.sosyal_oncelik + rng.gauss(0.0, 0.15)))
             changes += 1
         return changes
 
     # ---------- gözlem ----------
 
     def counts(self):
-        out = {r: 0 for r in self.RESPONSES}
-        for r in self.table.values():
-            out[r] += 1
+        """Tabloda her etiket bolgesinden kacar tane var."""
+        out = {r: 0 for r in self.ETIKETLER}
+        for v in self.table.values():
+            out[etiket(v)] += 1
         return out
 
     def describe(self, stim='light'):
         """Bir uyaran tipi için tabloyu kısa metne çevir."""
         rows = []
-        short = {'flee': 'K', 'approach': 'Y', 'attack': 'S', 'ignore': '-'}
+        kisa = {'kac': 'K', 'uzaklas': 'u', 'yoksay': '-',
+                'yaklas': 'y', 'saldir': 'S'}
         for c in range(self.HUE_BINS):
-            rows.append("".join(short[self.respond(stim, c, l)]
+            rows.append("".join(kisa[etiket(self.respond(stim, c, l))]
                                 for l in range(self.LEVEL_BINS)))
         return " ".join(rows)
