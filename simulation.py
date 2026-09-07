@@ -782,18 +782,36 @@ def main(food_count=None, kaotropi_count=None):
     diag_file.write(f"Optropi sayısı: 4, Interval: {DIAG_INTERVAL}s\n")
 
     running = True
+    birikim = 0.0     # sabit adim icin biriken gercek sure
     while running:
         real_dt = clock.tick(FPS) / 1000.0    # gercek gecen sure (cizim icin)
         # Simulasyon zamani olceklenir. Duraklatildiginda dt=0: dunya donar
         # ama hicbir sey ilerlemez, yine de tiklayip inceleyebilirsin.
-        # 1x ve altinda: tek adim, olceklenmis sure (agir cekim).
-        # 1x ustunde : ayni sureli BIRDEN COK adim (gercek hizlanma).
+        # SABIT SIMULASYON ADIMI.
+        #
+        # Once adim suresi KARE SURESIYDI (real_dt). Iki sakincasi vardi:
+        #
+        #  1. Simulasyon kare hizina bagimliydi: ayni dunya 30 fps'te
+        #     baska, 144 fps'te baska ilerliyordu. Fizik ve olcum
+        #     tekrarlanabilir olmuyordu.
+        #  2. Oyun 1/60'lik adimlarla, olcum kosulari 1/30'lik adimlarla
+        #     ilerliyordu - yani oyun ayni SIMULASYON saniyesi icin iki kat
+        #     is yapiyordu. Hizlandirma yarisi buraya gidiyordu.
+        #
+        # Artik adim sabit (SIM_DT) ve gecen gercek sure biriktirilerek
+        # kac adim atilacagi hesaplanir. 1x gercek zaman, 16x on alti kat.
+        SIM_DT = 1.0 / 30.0
         if inspector.paused:
             dt, adim_sayisi = 0.0, 0
-        elif inspector.time_scale <= 1.0:
-            dt, adim_sayisi = real_dt * inspector.time_scale, 1
         else:
-            dt, adim_sayisi = real_dt, int(inspector.time_scale)
+            dt = SIM_DT
+            birikim += real_dt * inspector.time_scale
+            adim_sayisi = int(birikim / SIM_DT)
+            birikim -= adim_sayisi * SIM_DT
+            # Cok geride kalindiysa borcu silmek gerekir; yoksa yavaslama
+            # bir daha asla kapanmayan bir kuyruk yaratir.
+            if birikim > 0.5:
+                birikim = 0.0
         # Kare butcesi: makine yetismezse adim sayisi kirpilir ki arayuz
         # donmasin. Hizlanma o zaman istenenden az olur - ama akici kalir.
         kare_butce = 0.12

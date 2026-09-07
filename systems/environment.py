@@ -9,6 +9,7 @@ burada D = diff_rate * cell_size^2 / 4 ve k = evap_rate. Buharlaşma çok
 düşük tutulursa bulutlar birbirine karışıp haritayı tek bir platoya
 çevirir ve kemotaksi için gereken gradyan kaybolur.
 """
+import array
 import math
 
 import pygame
@@ -29,9 +30,17 @@ class ScentEnvironment:
         self.rows = world_height // cell_size  # 40
         self.total = self.cols * self.rows      # 2400
 
-        # Double buffer
-        self.grid = [0.0] * self.total
-        self.scratch = [0.0] * self.total
+        # IZGARA BIR 'array' - LISTE DEGIL.
+        #
+        # Difuzyon numpy ile yapiliyor ama izgara Python listesiydi; her
+        # karede liste -> numpy -> liste donusumu yapiliyordu. 240x160'lik
+        # bir izgarada bu, kare basina 38.400 elemanin iki kez
+        # kopyalanmasi demek (olculdu: yalnizca asarray'e kare basina
+        # 1 ms). `array.array` hem liste gibi indekslenir hem de numpy
+        # tarafindan SIFIR KOPYAYLA sarilabilir - iki dunyanin da iyi
+        # yani.
+        self.grid = array.array('d', bytes(8 * self.total))
+        self.scratch = array.array('d', bytes(8 * self.total))
 
         # Parameters
         self.evap_rate = game_settings.SCENT_EVAP_RATE   # per second
@@ -51,6 +60,8 @@ class ScentEnvironment:
         # komsusu oldugu belirler. Her karede yeniden toplamak, kare
         # basina 2400 hucre x 8 komsu = 19 bin gereksiz islemdi.
         self._np_wsum = None
+        self._np_pad = None
+        self._np_acc = None
         if _np is not None:
             m = _np.zeros((self.rows + 2, self.cols + 2))
             m[1:-1, 1:-1] = 1.0
@@ -167,10 +178,15 @@ class ScentEnvironment:
         """
         self._heat_age += dt
         rows, cols = self.rows, self.cols
-        g = _np.asarray(self.grid, dtype=_np.float64).reshape(rows, cols)
-        pad = _np.zeros((rows + 2, cols + 2))
+        # SIFIR KOPYA: ayni bellek hem 'array' hem numpy dizisi olarak
+        # gorunur. Donusum maliyeti yok.
+        g = _np.frombuffer(self.grid, dtype=_np.float64).reshape(rows, cols)
+        if self._np_pad is None:
+            self._np_pad = _np.zeros((rows + 2, cols + 2))
+            self._np_acc = _np.zeros((rows, cols))
+        pad, acc = self._np_pad, self._np_acc
         pad[1:-1, 1:-1] = g
-        acc = _np.zeros((rows, cols))
+        acc[:] = 0.0
         for dr, dc, ww in self._KOMSU:
             acc += pad[1 + dr:1 + dr + rows, 1 + dc:1 + dc + cols] * ww
         val = g * (1.0 - self.evap_rate * dt)
@@ -178,7 +194,7 @@ class ScentEnvironment:
                          (self.diff_rate * dt) * (acc / self._np_wsum - g),
                          0.0)
         _np.clip(val, 0.0, self.max_concentration, out=val)
-        self.grid = val.ravel().tolist()
+        g[:] = val
 
     def _update_py(self, dt):
         self._heat_age += dt   # ısı haritası önbelleğinin yaşı
