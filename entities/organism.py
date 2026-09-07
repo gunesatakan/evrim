@@ -1542,30 +1542,28 @@ class Organism(Entity):
         self.release_binding()
 
     def biyokutle_besin(self):
-        """Bu hucrenin bedeni KAC BESINE denk?
+        """Bu hucreyi yiyen kac besin kazanir?
 
-        Once avlanmanin degeri sabitti: bir hucre 2 besin (PREY_FOOD_VALUE),
-        lesi ise organ sayisiyla hesaplaniyordu ve pratikte 1 besin
-        birakiyordu. Oysa sitoplazma alani 1256, besin alani 100 - yani
-        bir hucre 12.6 besinlik biyokutle tasiyor. Avlanmak, tasidiginin
-        alti-on ikide biri fiyatlandiriliyordu.
+        ENERJI KORUNUMU. Once deger hucrenin ALANINDAN hesaplaniyordu:
+        sitoplazma alani 1256 / besin alani 100 x 0.5 = 6 besin. Ama alan
+        bir kutle olcusu degil; o hucreyi INSA ETMEK 166 enerjiye, yani
+        iki besine mal olmustu. Yani her olum, sisteme yoktan 4 besinlik
+        enerji ekliyordu.
 
-        Bunun sonucu olculebilir bir sey: avcilik ZARARLI bir secimdi.
-        Stilet tasiyan hucre hucre basina 1.34 besin aliyor, ayni dunyadaki
-        silahsiz hucre 6.47. Cunku avci kavrarken kipirdayamiyor ve o
-        surede toplayabilecegi yemi kaybediyor; karsiliginda aldigi 2
-        besin bu kaybi karsilamiyordu. Boyle bir dunyada avlanma davranisi
-        kendiliginden BASLAYAMAZ.
+        Sonucu olculdu: nufus 300 saniyede 14 kez devrildi ve haritadaki
+        besin 450'den 20.589'a cikti. Boyle bir dunyada kitlik yoktur;
+        kitlik yoksa da ne kemotaksinin ne de avlanmanin bir anlami kalir.
+        Hucreler organlarini dokup en ucuz hale geliyordu (organ sayisi
+        7.0 -> 5.0).
 
-        Artik deger bedenden cikar: alan / besin_alani * verim. Verim 1
-        degildir - yiyen, yedigin her seyi kullanamaz (trofik verim).
+        Dogrusu: bir hucrenin tasidigi enerji, INSA BEDELI + DEPOSUNDAKI
+        artiktir. Trofik verim (< 1) ile carpilir, cunku yenen her sey
+        kullanilamaz - ve bu carpan sistemin enerji SIZDIRMASINI saglar.
+        Ac olen bir hucre neredeyse hicbir sey birakmaz; tok olen birakir.
         """
-        if not hasattr(self, 'body'):
-            return 1
-        alan = self.body.logic.total_area + self.calculate_organ_area()
-        n = int(alan / max(1.0, game_settings.FOOD_AREA)
-                * game_settings.PREY_BIOMASS_YIELD)
-        return max(1, min(int(game_settings.CORPSE_FOOD_MAX), n))
+        enerji = (self.division_energy_cost() + max(0.0, self.energy))             * game_settings.PREY_BIOMASS_YIELD
+        n = int(round(enerji / max(1.0, game_settings.FOOD_ENERGY)))
+        return max(0, min(int(game_settings.CORPSE_FOOD_MAX), n))
 
     def corpse_food_count(self):
         """Lesten kac besin cikar. Yenmesiyle ayni deger - yalnizca
@@ -1812,17 +1810,25 @@ class Organism(Entity):
         # yavru için ayrı ayrı çek. Yeni hücre inşa etmenin enerji bedeli
         # karşılanamıyorsa bölünme olmaz; hücre yalnızca gelişir.
         if game_settings.DIVISION_MODE:
-            cap = game_settings.DIVISION_MAX_POPULATION
+            # NUFUS TAVANI BIR DUVAR DEGIL, ELEMEDIR.
+            #
+            # Burada bir `has_room` kontrolu vardi: nufus tavana ulasinca
+            # bolunme DURUYORDU. Sonucu olculdu - populasyon tam 200'de
+            # donuyor, dogum neredeyse sifira iniyor (ilk 100 saniyede 165
+            # dogum, sonraki 100 saniyede 19) ve evrim duruyordu. Cunku
+            # mutasyon yalnizca bolunmede olur: bolunme yoksa cesitlilik de
+            # yok, secilim de yok.
+            #
+            # Tavan yine korunuyor ama BASKA bir yerden: dunya her karede
+            # fazlayi en dusuk enerjili hucreleri eleyerek kirpar. Yani
+            # tavan uremeyi engellemez, YERINI KIMIN ALACAGINI belirler -
+            # hizli beslenen gercekten yavasin yerini alir. Secilim budur.
             cost = self.division_energy_cost()
-            has_room = (cap <= 0 or Organism.population_count < cap)
-            if has_room and self.energy >= cost:
+            if self.energy >= cost:
                 self.energy -= cost
                 self.divide()
             else:
-                # Tavanda bölünme durur, AMA genetik model değişmez:
-                # yükseltme yine torbadan rastgele çekilir. (Aksi hâlde
-                # tavana ulaşınca popülasyon sessizce sıralı genom
-                # davranışına geçiyordu.)
+                # Bolunmeye enerji yetmiyor: gelisim yine torbadan cekilir.
                 self._apply_random_upgrade()
             return
 

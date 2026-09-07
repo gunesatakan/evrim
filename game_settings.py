@@ -7,7 +7,7 @@ DEFAULT_SETTINGS = {
     # ~30 yapinca hucreler laboratuvardaki boyuta gelir ve katman/gozenek
     # yapisi gercekten cizilebilir hale gelir.
     "WORLD_SCALE": 1.0,
-    "FOOD_COUNT": 420,
+    "FOOD_COUNT": 150,
     "KAOTROPI_COUNT": 8,
     # --- AVLANMA (Optropi -> Notropi) ---
     # Optropiler notropileri yem olarak gorur. Notropiler de koku yayar,
@@ -112,7 +112,27 @@ DEFAULT_SETTINGS = {
     # bittiğinde membran (ETC) onu enerjiye çevirir:
     #     kazanç = FOOD_ENERGY * ETC verimliliği
     # ETC verimliliği 'move_regen' geniyle yükseltilir.
-    "FOOD_ENERGY": 30.0,
+    # OLCULDU - metabolik marj yoktu ve KARMASIKLIK KARSILANAMIYORDU.
+    #
+    #   sindirim boru hatti : 10 sn/besin  -> en fazla 3.0 enerji/sn gelir
+    #   baslangic hucresinin bakimi        -> 2.18 enerji/sn gider
+    #   kalan artik                        -> 0.82 enerji/sn
+    #
+    # Yani gelirin %73'u ayakta kalmaya gidiyordu. Yeni bir organ 0.12-0.63
+    # enerji/sn goturur; iki organ eklemek artigin tamamini siliyordu.
+    # Populasyonun organ sayisi bu yuzden butun kosu boyunca 6.9-7.1
+    # arasinda cakili kaldi - "kompleks hucreler gelismesi" istenirken
+    # karmasiklik fiziksel olarak KARSILANAMAZ durumdaydi.
+    #
+    # Ayni daralma kusak suresini de belirliyordu: 166 enerjilik bolunme
+    # bedeli 0.82 artikla ~200 saniyede toplaniyordu. 900 saniyelik bir
+    # kosu topu topu bes kusak eder; bes kusakta evrim gozlenemez.
+    #
+    # 90 ile gelir 9.0 enerji/sn, artik 6.8 - bakimin uc kati. Hucre hem
+    # organ tasiyabilir hem de ~25 saniyede bolunur. Besin TUKETIM hizi
+    # degismez (yine 10 saniyede bir besin), yalnizca bir besinin kalorisi
+    # artar; ekosistemin besin akisi ve kitlik dengesi bozulmaz.
+    "FOOD_ENERGY": 90.0,
     # Yeni bir hücre inşa etmenin bedeli. Bölünme ancak bu enerji varsa
     # gerçekleşir; kalan enerji iki yavruya eşit bölünür.
     # BEDEL BUYUKLUKLE OLCEKLENIR: bolunmek tum hucreyi (govde + organlar)
@@ -314,6 +334,11 @@ DEFAULT_SETTINGS = {
     "SIGNATURE_COUPLED_RATIO": 0.7,
     "BEHAVIOR_MUTATION_RATE": 0.04,
     "BEHAVIOR_ENABLED": True,
+    # Sosyal oncelik geni ile koku siddetinin karsilastirildigi olcek.
+    # Koku algisi logaritmiktir ve pratikte 0-8 arasinda gezer; 8, gen 1.0
+    # iken hucrenin en guclu kokuyu bile birakip komsusunun pesine
+    # dusebilecegi anlamina gelir.
+    "SOSYAL_ESIK": 8.0,
     # --- HUCRE-HUCRE CARPISMA ---
     # Eskiden hic carpisma cozumu yoktu: hucreler birbirinin icinden
     # geciyordu (olculdu: karelerin %100'unde en az bir cift ic ice,
@@ -326,7 +351,12 @@ DEFAULT_SETTINGS = {
     "FOOD_AREA": 50.0,
     # Besin yeniden doğuşu: haritada saniyede kaç yeni besin belirsin.
     # 0 = kapalı (besinler tükenir). FOOD_MAX birikmeyi sınırlar.
-    "FOOD_SPAWN_RATE": 12.0,
+    # Besin arzi kusak suresini populasyon duzeyinde belirler: 200 hucre
+    # x 2.18 bakim = 436 enerji/sn zaten gidiyor. 20 besin/sn x 90 = 1800
+    # enerji/sn arz ile kalan 1364, yani saniyede ~8 bolunme - kusak ~25 sn.
+    # Bolluk secilimi zayiflatmaz: nufus tavani zaten saniyede en dusuk
+    # enerjili 8 hucreyi eliyor, yani secilim baskisi tavandan geliyor.
+    "FOOD_SPAWN_RATE": 20.0,
     # --- BESIN YAMALI DOGAR ---
     #
     # Besin haritaya duzgun dagildiginda koku alaninin gradyani duzlesir
@@ -341,7 +371,19 @@ DEFAULT_SETTINGS = {
     "FOOD_PATCH_SIZE": 26,       # bir yamadaki besin sayisi
     "FOOD_PATCH_SIGMA": 45.0,    # yamanin yaricapi (px, gauss)
 
-    "FOOD_MAX": 420,
+    # BESIN YOGUNLUGU KITLIGI BELIRLER.
+    #
+    # 450 besin, 960.000 px'lik dunyada besin basina 2133 px demek; 22
+    # yaricapli bir hucre 20 px/sn ile suzulurken saniyede 880 px tarar,
+    # yani her 2.4 saniyede bir besine RASTGELE carpar. Oysa sindirim 10
+    # saniye suruyor - besin bulmak hicbir zaman darbogaz olmuyor,
+    # dolayisiyla koklamanin da bir getirisi olmuyordu. Olculdu: bollukta
+    # hucreler organlarini dokuyor (7.0 -> 5.0).
+    #
+    # 150 ile rastgele carpisma araligi ~8-10 saniyeye cikar, yani
+    # sindirim hiziyla ayni mertebeye. Artik besin bulmak da darbogaz:
+    # daha iyi koklayan, sindirim kapasitesini dolduran kazanir.
+    "FOOD_MAX": 150,
     # NOT: Bu dört anahtar eskiden yalnızca settings.json'da vardı. save_all()
     # sadece DEFAULT_SETTINGS'te bulunanları yazdığı için, launcher'dan yapılan
     # ilk kayıtta dosyadan siliniyor ve sonraki açılışta program çöküyordu.

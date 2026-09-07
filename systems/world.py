@@ -107,9 +107,18 @@ def algi_menzili(o):
 
 
 def drop_corpse(organism, foods):
-    """Olen hucre yerine besin birakir. Oldurenin onceligi yoktur."""
+    """Olen hucre yerine besin birakir. Oldurenin onceligi yoktur.
+
+    TAVAN LESE DE UYGULANIR. Eskiden yalnizca DOGAN besin FOOD_MAX ile
+    sinirlaniyordu; lesler siniri gormeden ekleniyordu. Hizli devrilen bir
+    populasyonda bu, haritayi besinle bogar (olculdu: 450 -> 20.589) ve
+    kitligi tamamen ortadan kaldirir. Harita doluyken cozunen bir les
+    ortama yayilmis sayilir - kimse toplamaya yetismez.
+    """
     n = organism.corpse_food_count()
     for _ in range(n):
+        if len(foods) >= game_settings.FOOD_MAX:
+            break
         fx = organism.pos.x + random.uniform(-organism.radius, organism.radius)
         fy = organism.pos.y + random.uniform(-organism.radius, organism.radius)
         foods.append(Food(max(15, min(WIDTH - 15, fx)),
@@ -308,19 +317,35 @@ class Dunya:
         self.optropis = [o for o in self.optropis if id(o) not in olu] + yavru_opt
         self.kaotropis = [o for o in self.kaotropis if id(o) not in olu] + yavru_kao
 
-        # NUFUS TAVANI = ELEME (duvar degil).
-        # Tavan asildiginda bolunme engellenmez; en dusuk enerjili hucre
-        # elenir. Boylece hizli beslenen gercekten yavasin yerini alir.
-        # Tavan artik BUTUN populasyona uygulanir; eskiden yalnizca
-        # optropiler sayiliyordu ve kaotropiler sinirsiz uruyordu.
+        # NUFUS TAVANI = KEMOSTAT SEYRELMESI (rastgele yikanma).
+        #
+        # Once "en dusuk enerjili hucreyi ele" kurali vardi ve kulaga makul
+        # geliyordu. Oysa SECILIMI TERSINE CEVIRIYORDU: bolunen hucrenin
+        # enerjisi once bolunme bedeli kadar duser, sonra ikiye bolunur -
+        # yani her uremis hucre bir anda listenin en dibine iner ve ilk
+        # elenen o olur. Hic bolunmeyip enerjisini deposunda tutan bir
+        # hucre ise hep tepede kalir ve hic elenmez.
+        #
+        # Olculdu: populasyon 400 saniyede kamcisini ve kemoreseptorunu
+        # TAMAMEN yitirdi (1.00 -> 0.00), organ sayisi 7.0'dan 5.0'a dustu.
+        # Yani hucreler hareketsizlesip korlesti - cunku dunya, ureyeni
+        # cezalandirip istifleyeni odullendiriyordu. "Kompleks hucreler
+        # gelismesi" beklenirken tam tersi seciliyordu.
+        #
+        # Kemostatta seyrelme RASTGELEDIR: kim oldugundan bagimsiz olarak
+        # herkes ayni oranda disari yikanir. Boyle bir dunyada tek bir sey
+        # kazandirir - KENDINI DAHA HIZLI YERINE KOYMAK. Mikrobiyal evrim
+        # deneylerinin standart duzeni de tam olarak budur.
+        #
+        # Yikanan hucre les de birakmaz: sistemden CIKMISTIR, olmemistir.
         cap = int(game_settings.DIVISION_MAX_POPULATION)
         tum = self.optropis + self.kaotropis
-        if cap > 0 and len(tum) > cap:
-            tum.sort(key=lambda x: x.energy)
-            for victim in tum[:len(tum) - cap]:
-                victim.die('elendi')
+        fazla = len(tum) - cap
+        if cap > 0 and fazla > 0:
+            for victim in random.sample(tum, fazla):
+                victim.die('yikandi')
                 self._olum_kaydet(victim)
-                drop_corpse(victim, foods)
+                victim.consumed = True      # les birakmaz
             self.optropis = [o for o in self.optropis if not o.dead]
             self.kaotropis = [o for o in self.kaotropis if not o.dead]
 

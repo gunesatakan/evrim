@@ -1,7 +1,7 @@
 {
     "settings": {
         "WORLD_SCALE": 1.0,
-        "FOOD_COUNT": 420,
+        "FOOD_COUNT": 150,
         "KAOTROPI_COUNT": 8,
         "NOTROPI_COUNT": 30,
         "PREY_FOOD_VALUE": 2,
@@ -21,7 +21,7 @@
         "RIBOSOME_TIME": 1.0,
         "VACUOLE_ENERGY_MULTI": 16.666666666666668,
         "ENERGY_REGEN_BASE": 1.0,
-        "FOOD_ENERGY": 30.0,
+        "FOOD_ENERGY": 90.0,
         "DIVISION_ENERGY_COST": 50.0,
         "DIVISION_COST_REF_AREA": 400.0,
         "COST_FLAGELLA": 0.03,
@@ -131,8 +131,8 @@
         "SEPARATION_STRENGTH": 0.5,
         "CYTOSKELETON_AREA": 10.0,
         "FOOD_AREA": 100.0,
-        "FOOD_SPAWN_RATE": 12.0,
-        "FOOD_MAX": 420,
+        "FOOD_SPAWN_RATE": 20.0,
+        "FOOD_MAX": 150,
         "RIBOSOME_AREA": 20.0,
         "VACUOLE_AREA": 30.0,
         "CILIA_TURN_MULTI": 0.05,
@@ -177,7 +177,9 @@
         "SPATIAL_CHEMO_MIN": 0.06,
         "PREY_BIOMASS_YIELD": 0.5,
         "TOXIN_ALLELES": 12,
-        "TOXIN_ALLELE_MUTATION": 0.02
+        "TOXIN_ALLELE_MUTATION": 0.02,
+        "ORGAN_ANGLE_RATE": 0.1,
+        "ORGAN_ANGLE_SIGMA": 18.0
     },
     "entities": {
         "optropi_0": {

@@ -71,7 +71,7 @@ class BehaviorGenome:
         return self.scent_bands[bisect.bisect_right(self.scent_cuts, x)]
 
     def __init__(self, table=None, kin_response=None,
-                 scent_cuts=None, scent_bands=None):
+                 scent_cuts=None, scent_bands=None, sosyal_oncelik=None):
         # {(tip, sınıf, seviye): tepki}
         self.table = dict(table) if table else {}
         # Akraba tanindiginda ne yapilacagi. Soy imzasi "X sinifina ne
@@ -86,6 +86,25 @@ class BehaviorGenome:
         self.scent_bands = (list(scent_bands) if scent_bands is not None
                             else [_rnd.choice(self.RESPONSES)
                                   for _ in range(self.SPECTRUM_BANDS)])
+        # SOSYAL ONCELIK: baskasiyla ilgilenmek mi, karnini doyurmak mi?
+        #
+        # Tablo "yaklas" ya da "saldir" dediginde bu karar BESLENMEYI
+        # bastiriyordu. Koku menzili bir hucrenin ~5 govde capina ciktigi
+        # ve dunyada 200 hucre oldugu icin her hucrenin HER AN bir komsusu
+        # var; yani kemotaksi hic calismiyordu. Burun ve kamci bedelini
+        # oduyor ama karsiligini alamiyordu. Olculdu: 400 saniyede
+        # kemoreseptor populasyondan tamamen silindi (1.00 -> 0.00), organ
+        # sayisi 7.0'dan 5.0'a dustu - yani hucreler hareketsizlesip
+        # korlesti. "Kompleks hucreler gelismesi" beklenirken tam tersi
+        # oluyordu.
+        #
+        # Bu bir oncelik sorunudur ve cevabi dayatilmamali: hangi durumda
+        # komsuyla ilgilenilecegi de bir GENDIR. 0'a yakin bir hucre once
+        # karnini doyurur, 1'e yakin olan komsusunun pesine duser. Kacmak
+        # bunun disindadir - yenmek her seyi bitirir.
+        self.sosyal_oncelik = (float(sosyal_oncelik)
+                               if sosyal_oncelik is not None
+                               else _rnd.random())
 
     # ---------- kodlama ----------
 
@@ -161,7 +180,18 @@ class BehaviorGenome:
     def random(cls, rng=_rnd):
         return cls(cls.random_table(rng), rng.choice(cls.RESPONSES),
                    sorted(rng.uniform(0.0, 100.0) for _ in range(cls.SPECTRUM_CUTS)),
-                   [rng.choice(cls.RESPONSES) for _ in range(cls.SPECTRUM_BANDS)])
+                   [rng.choice(cls.RESPONSES) for _ in range(cls.SPECTRUM_BANDS)],
+                   rng.random())
+
+    def sosyali_sec(self, koku_siddeti):
+        """Komsuyu mu takip edeyim, besini mi?
+
+        Karsilastirma sureklidir: gen esigi, o anda alinan besin kokusunun
+        siddetiyle olculur. Koku ne kadar guclyse besini birakmak o kadar
+        zorlasir.
+        """
+        return (self.sosyal_oncelik * game_settings.SOSYAL_ESIK
+                >= koku_siddeti)
 
     def respond(self, stim, cls_idx, level):
         return self.table.get((stim, cls_idx, level), 'ignore')
@@ -203,6 +233,11 @@ class BehaviorGenome:
                 if new_r != self.scent_bands[i]:
                     changes += 1
                 self.scent_bands[i] = new_r
+        # Sosyal oncelik SURELI bir gen: sicramaz, kayar.
+        if rng.random() < rate:
+            self.sosyal_oncelik = min(1.0, max(0.0, self.sosyal_oncelik
+                                               + rng.gauss(0.0, 0.15)))
+            changes += 1
         return changes
 
     # ---------- gözlem ----------

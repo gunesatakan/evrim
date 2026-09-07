@@ -59,47 +59,34 @@ class DangerTransmission:
         if self.escape_lock_timer > 0:
             self.escape_lock_timer -= dt
 
-        # Davranış durumunu değerlendir (interoception)
-        state = self.behavioral_state.evaluate(organism, nearby_threats, scent_intensity > 0)
+        # Davranış durumunu değerlendir (interoception). Donen deger
+        # dogrudan kullanilmaz; ic durum should_flee() uzerinden okunur.
+        self.behavioral_state.evaluate(organism, nearby_threats,
+                                       scent_intensity > 0)
 
-        # 1. THREATENED - Tehdit varsa kaç.
-        # Davranış genomu açıkken kaçma kararı ARTIK TABLODAN gelir; sabit
-        # "tehdit gördün, kaç" refleksi yalnızca tablo susarsa devreye girer.
-        genome_drives = (getattr(game_settings, 'BEHAVIOR_ENABLED', False)
-                         and behavior_response in ('flee', 'approach', 'attack')
-                         and prey_dir is not None)
-        if not genome_drives and self.behavioral_state.should_flee():
-            # En yakın tehdidi bul
-            closest_threat = min(nearby_threats, key=lambda k: self_pos.distance_to(k.pos))
+        # KARAR SIRASI
+        #
+        # Once "tehdit gordun, KAC" refleksi en usteydi ve davranis
+        # tablosunun onune geciyordu. Bu, kacma davranisini DOGUSTAN
+        # yapiyordu: mekanoreseptor kazanan bir hucre butun komsularini
+        # duyar, hepsini tehdit sayar ve genomu 'yoksay' dese bile
+        # kacardi. Roller sinifa gore dagitilmayi biraktiginda bu daha da
+        # kotulesti - artik herkesin komsu listesi butun populasyon.
+        #
+        # Kacmanin, saldirmanin ve yaklasmanin EVRIMLESMESI isteniyorsa
+        # kararin sahibi tablo olmali. 'yoksay' da bir karardir, susmak
+        # degil. Bu yuzden sira su:
+        #
+        #   1) DUVAR  - fiziksel kisit, davranis degil
+        #   2) TABLO  - hucrenin evrimlesmis karari (kac/yaklas/saldir)
+        #   3) IZ     - tablo susuyorsa baskasinin izinden kacin
+        #   4) ARAMA  - kimse yoksa besin ara
+        #
+        # Sabit tehdit refleksi yalnizca davranis genomu KAPALIYKEN
+        # (BEHAVIOR_ENABLED = False) devreye girer; o zaman zaten
+        # evrimlesecek bir tablo yoktur.
 
-            # Eğer kaçış yönü kilitliyse, onu kullan
-            if self.escape_lock_timer > 0 and self.locked_escape_dir:
-                self.target_direction = self.locked_escape_dir
-            else:
-                # Yeni kaçış yönü hesapla ve kilitle
-                mem_data = memory_system.retrieve(closest_threat.uid)
-                escape_dir = MoveDirection.calculate_threat_escape(self_pos, closest_threat, mem_data)
-                self.target_direction = escape_dir
-                self.locked_escape_dir = escape_dir
-                self.escape_lock_timer = 0.5  # 0.5 saniye kilitle
-
-            self._reset_chemotaxis_sampling()
-            return (self.target_direction, 'ESCAPE', self.target_direction * 40)
-
-        # Tehdit yok, kaçış kilidini sıfırla
-        self.locked_escape_dir = None
-        self.escape_lock_timer = 0
-
-        # 2. KOKU İZİNDEN KAÇINMA (tehdit olmasa bile iz varsa kaçın)
-        trail_mem = memory_system.retrieve("trail_prediction")
-        if trail_mem:
-            avoid_dir = MoveDirection.calculate_trail_avoid(self_pos, trail_mem)
-            if avoid_dir and avoid_dir.length() > 0:
-                self.target_direction = avoid_dir
-                self._reset_chemotaxis_sampling()
-                return (self.target_direction, 'TRAIL', avoid_dir * 50)
-
-        # 3. WALL_AVOID - Duvar görünüyorsa kaçın
+        # 1. DUVAR - gorunuyorsa kacin (fiziksel kisit)
         wall_data = self._detect_wall_in_vision(organism)
         if wall_data:
             avoid_dir = MoveDirection.calculate_wall_avoidance(self_pos, wall_data)
@@ -108,17 +95,61 @@ class DangerTransmission:
                 self._reset_chemotaxis_sampling()
                 return (self.target_direction, 'WALL_AVOID', avoid_dir * 25)
 
-        # 3.5 AVLANMA - görüş alanındaki avı doğrudan takip et.
-        # Tehdit / iz / duvardan SONRA gelir: kaçmak ve sıkışmamak önceliklidir.
-        # Ava görüşle kilitlenmek kokudan önce gelir; koku zaten avın yaydığı
-        # izi takip ederek hücreyi buraya kadar getirmiştir.
-        if prey_dir is not None and getattr(game_settings, 'PREY_VISION_PRIORITY', 1):
+        # 2. TABLO - hucrenin kendi karari
+        #
+        # KACMAK her zaman oncelikli: yenmek her seyi bitirir.
+        # YAKLASMAK / SALDIRMAK ise beslenmeyle YARISIR ve bu yarisin
+        # sonucunu da bir gen belirler (sosyal_oncelik). Aksi halde koku
+        # menzilindeki her komsu kemotaksiyi bastirir; hucre hic
+        # beslenmeden omur boyu birilerinin pesinde kosar.
+        genome_drives = (getattr(game_settings, 'BEHAVIOR_ENABLED', False)
+                         and behavior_response in ('flee', 'approach', 'attack')
+                         and prey_dir is not None)
+        if genome_drives and behavior_response != 'flee':
+            b = getattr(organism, 'behavior', None)
+            if b is not None and not b.sosyali_sec(scent_intensity):
+                genome_drives = False
+        if genome_drives:
             self.target_direction = prey_dir
             self._reset_chemotaxis_sampling()
-            # Görselleştirme tepkiye göre: kaçış / yaklaşma / saldırı
             vec_type = {'flee': 'ESCAPE', 'attack': 'HUNT',
-                        'approach': 'HUNT'}.get(behavior_response, 'HUNT')
+                        'approach': 'HUNT'}[behavior_response]
             return (self.target_direction, vec_type, prey_dir * 45)
+
+        # 2b. Davranis genomu kapaliysa eski sabit refleks
+        if not getattr(game_settings, 'BEHAVIOR_ENABLED', False)                 and self.behavioral_state.should_flee():
+            closest_threat = min(nearby_threats,
+                                 key=lambda k: self_pos.distance_to(k.pos))
+            if self.escape_lock_timer > 0 and self.locked_escape_dir:
+                self.target_direction = self.locked_escape_dir
+            else:
+                mem_data = memory_system.retrieve(closest_threat.uid)
+                escape_dir = MoveDirection.calculate_threat_escape(
+                    self_pos, closest_threat, mem_data)
+                self.target_direction = escape_dir
+                self.locked_escape_dir = escape_dir
+                self.escape_lock_timer = 0.5
+            self._reset_chemotaxis_sampling()
+            return (self.target_direction, 'ESCAPE', self.target_direction * 40)
+
+        self.locked_escape_dir = None
+        self.escape_lock_timer = 0
+
+        # 3. KOKU IZI - tablo susuyorsa baskasinin gectigi yerden kacin
+        trail_mem = memory_system.retrieve("trail_prediction")
+        if trail_mem:
+            avoid_dir = MoveDirection.calculate_trail_avoid(self_pos, trail_mem)
+            if avoid_dir and avoid_dir.length() > 0:
+                self.target_direction = avoid_dir
+                self._reset_chemotaxis_sampling()
+                return (self.target_direction, 'TRAIL', avoid_dir * 50)
+
+        # 3.5 Tablo susuyor ama gorulen bir av var: eski sabit takip
+        if prey_dir is not None and getattr(game_settings,
+                                            'PREY_VISION_PRIORITY', 1):
+            self.target_direction = prey_dir
+            self._reset_chemotaxis_sampling()
+            return (self.target_direction, 'HUNT', prey_dir * 45)
 
         # 4. ARAMA: Levy tabanli kesif + kemotaksi egilimi
         #
