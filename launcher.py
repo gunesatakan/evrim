@@ -256,7 +256,8 @@ SETTINGS_SCHEMA = {
         ("DIVISION_MAX_POPULATION", "Nüfus tavanı (0 = sınırsız)"),
     ],
         "KOKU İLE TANIMA": [
-        ("SMELL_RANGE_BASE",        "Koku menzili = bu x kemoreseptör uzunluğu (koni yok, görüşten uzun)"),
+        ("KOKU_YAYIM",              "Koku alaninin gucu: C = bu x koku x (r/(r+d))^2 (menzil buradan DOGAR)"),
+        ("KOKU_DOYUM",              "Tepkinin doydugu derisim/esik orani"),
         ("SIGNATURE_ALLELES",       "Kaç farklı soy imzası olabilir"),
         ("SCENT_WEIGHT_MEMBRANE",   "Zarın koku puanına katkısı"),
         ("SPECTRUM_MUTATION_SIGMA", "Koku eşiklerinin mutasyonda ne kadar kaydığı (0-100 ekseninde)"),

@@ -720,6 +720,10 @@ class Organism(Entity):
         # Gorme organlari onbellegi - organ listesi her degistiginde
         # buradan gecilir, ayrica aranmasi gerekmez.
         self._gozler = [o for o in self.organs if isinstance(o, Photoreceptor)]
+        # KOKU ALICILARI. Koku artik hucre merkezinden degil ALICININ
+        # BULUNDUGU NOKTADAN okundugu icin organlarin kendisi gerekli.
+        self._koku_alicilari = [o for o in self.organs
+                                if isinstance(o, Chemoreceptor)]
 
         boost = self.membrane.logic.calcium_boost if hasattr(self, 'membrane') else 1.0
         # Davranis spektrumunun belirledigi motor eforu ITKIYE dogrusal girer.
@@ -886,14 +890,6 @@ class Organism(Entity):
         return p.logic.range if p else 0.0
 
     @property
-    def smell_range(self):
-        """Koku menzili: kemoreseptor uzadikca uzar. Koni YOK."""
-        c = next((o for o in self.organs if isinstance(o, Chemoreceptor)), None)
-        if c is None:
-            return 0.0
-        return game_settings.SMELL_RANGE_BASE * c.logic.length
-
-    @property
     def scent_value(self):
         """Bu hücre NE KADAR kokuyor: organlarının ağırlıklı toplamı.
 
@@ -927,6 +923,39 @@ class Organism(Entity):
         return self.pos if k is None else k
 
     _koku_kaynak = None
+
+    #: Populasyondaki en guclu koku ve en iri yaricap. Koku menzili artik
+    #  HEDEFE de bagli oldugu icin, hedefin bilinmedigi yerde (uzamsal
+    #  izgara elemesi) en iyimser durum varsayilmali - yoksa hucre
+    #  gercekten duyabilecegi bir kokuyu eleme yuzunden hic gormezdi.
+    en_guclu_koku = 1.0
+    en_iri_yaricap = 20.0
+
+    def koku_menzili(self):
+        """Bu burnun en uzaktan duyabilecegi kaynak ne kadar uzakta olabilir.
+
+        C(d) = YAYIM * koku * (r0/(r0+d))^2 >= esik  cozulur:
+
+            d = r0 * (sqrt(YAYIM * koku / esik) - 1)
+
+        Buna alici ucunun govde disindaki payi eklenir. Yalnizca komsu
+        taramasi icin bir UST SINIRDIR; gercek algi perceive_and_decide'da
+        her hedef icin ayrica hesaplanir.
+        """
+        en_iyi = 0.0
+        sv = max(1e-9, Organism.en_guclu_koku) * game_settings.KOKU_YAYIM
+        r0 = max(1.0, Organism.en_iri_yaricap)
+        for c in getattr(self, '_koku_alicilari', ()):
+            esik = c.logic.scent_sensitivity
+            if esik <= 0.0:
+                continue
+            oran = sv / esik
+            if oran <= 1.0:
+                continue
+            d = r0 * (math.sqrt(oran) - 1.0) + self.radius + c.logic.length
+            if d > en_iyi:
+                en_iyi = d
+        return en_iyi
 
     def koku_kaynak_tazele(self):
         yon = self.hareket_yonu
@@ -1122,14 +1151,27 @@ class Organism(Entity):
         # Menzil 0 ise o kanal KAPALIDIR. `max(1.0, ...)` yazmak, organsiz
         # bir hucreye 1 px'lik bir duyu birakiyordu.
         vrange = self.vision_range
-        srange = self.smell_range
         kulak = next((o.logic for o in self.organs
                       if isinstance(o, Mechanoreceptor)), None)
-        if vrange <= 0.0 and kulak is None and srange <= 0.0:
+        if vrange <= 0.0 and kulak is None and not self._alici_noktalari:
             self.current_response = 0.0
             return bos
 
         my_scent = self.scent_value      # döngü içinde değişmez, bir kez
+        # Alici uclari (konum, esik) - kare basina bir kez hesaplandi.
+        # Bos ise burun yok demektir; koku kanali tamamen kapalidir.
+        alicilar = getattr(self, '_alici_noktalari', ())
+        yayim = game_settings.KOKU_YAYIM
+        # log(esik kati) / log(doyum): esikte 0, doyumda 1.
+        _doyum = math.log(max(1.0001, game_settings.KOKU_DOYUM))
+        # Kaba eleme icin: en hassas esik ve alici ucunun govde
+        # merkezinden en uzak payi. Ikisi de bu hucrenin kendi ozelligi,
+        # kare basina bir kez.
+        if alicilar:
+            esik_min = min(e for _u, e in alicilar)
+            alici_pay = max((u - self.pos).length() for u, _e in alicilar)
+        else:
+            esik_min, alici_pay = 0.0, 0.0
         atak = game_settings.ATAK_ESIGI
         surus = pygame.math.Vector2(0.0, 0.0)
         en_guclu = 0.0
@@ -1189,15 +1231,37 @@ class Organism(Entity):
             # `d`den en fazla surüklenme kadar buyuk/kucuk olur. Bu kaba
             # elemeyi once yapmak, menzil disindaki komsular icin vektor
             # isini tamamen atlar.
-            if srange > 0.0 and d - _kayma_payi <= srange + t.radius:
+            # Kaba eleme HEDEFIN KENDI kokusundan hesaplanir. Populasyon
+            # geneline ait bir ust sinir kullanmak, o sinir bayatladigi an
+            # gercekten duyulan bir kokuyu SESSIZCE kirpardi.
+            #     C(d) = YAYIM*koku*(r0/(r0+d))^2 >= esik
+            #  -> d_max = r0*(sqrt(YAYIM*koku/esik) - 1) + alici payi
+            _koku_var = False
+            if alicilar and esik_min > 0.0:
+                _r0 = max(1.0, t.radius)
+                _sal = yayim * t.scent_value
+                _oran_max = _sal / esik_min
+                if _oran_max > 1.0:
+                    _dmax = _r0 * (math.sqrt(_oran_max) - 1.0) + alici_pay
+                    _koku_var = (d - _kayma_payi <= _dmax)
+            if _koku_var:
                 _kaynak = t.koku_kaynagi()
                 _kfark = _kaynak - self.pos
-                d_koku = _kfark.length()
-                _erim = srange + t.radius
-                if d_koku <= _erim:
-                    # Uzaktan gelen zayif bir koku hafif bir yonelim,
-                    # dibindeki guclu bir koku tam tepki uretir.
-                    _guc = max(0.0, 1.0 - d_koku / max(1.0, _erim))
+                # Derisim HER ALICIDA ayri okunur; koku, en cok molekul
+                # yakalayan aliciya gore alinir. Kokunun ters tarafinda
+                # duran bir burun daha az molekulle karsilasir - organin
+                # nerede durdugu artik gercekten onemli.
+                _en = 0.0
+                for _uc, _esik in alicilar:
+                    _du = max(0.0, (_kaynak - _uc).length() - _r0)
+                    _c = _sal * (_r0 / (_r0 + _du)) ** 2
+                    _o = _c / _esik
+                    if _o > _en:
+                        _en = _o
+                if _en >= 1.0:            # esigi asti: molekul BAGLANDI
+                    # Weber-Fechner: derisim esigin kac katiysa onun
+                    # logaritmasi. Esikte 0, doyumda 1.
+                    _guc = min(1.0, math.log(_en) / _doyum)
                     kin = self.is_kin(t)
                     # Akrabanin ozel sinyali spektrumun onune gecer:
                     # "iri biri" degil, "benden biri".
@@ -1216,8 +1280,7 @@ class Organism(Entity):
                         _rk = self.behavior.respond(
                             'kairomone',
                             BehaviorGenome.kairomone_bin(t.kairomone),
-                            BehaviorGenome.level_bin(
-                                max(0.0, _erim - d_koku), _erim)) * _guc
+                            BehaviorGenome.level_bin(_guc, 1.0)) * _guc
                         if _rk >= atak:
                             self.attack_targets.add(id(t))
                         _kat(_kfark, _rk)
@@ -2365,6 +2428,12 @@ class Organism(Entity):
         # olur ve hucrenin hareketi molekullere HIC yansimazdi.
         self.koku_tazele()
         self.koku_kaynak_tazele()
+        # Alici uclarinin DUNYA konumu ve esikleri. Bunlar hucrenin kendi
+        # konumuna/yonune baglidir, bakilan hedefe degil - kare basina bir
+        # kez cikarilir, yoksa her komsu icin bastan hesaplanirdi.
+        self._alici_noktalari = [
+            (c.touch_probes(self)[1], c.logic.scent_sensitivity)
+            for c in getattr(self, '_koku_alicilari', ())]
         self.molekulleri_guncelle(dt)
         self.onceki_pos = pygame.math.Vector2(self.pos)
         if hasattr(self, 'body'):

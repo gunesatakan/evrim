@@ -116,8 +116,14 @@ class HucreIzgarasi:
 
 
 def algi_menzili(o):
-    """Bu hucrenin bir baskasini fark edebilecegi en uzak mesafe."""
-    return max(o.smell_range, o.sound_radius, o.vision_range,
+    """Bu hucrenin bir baskasini fark edebilecegi en uzak mesafe.
+
+    Koku menzili artik sabit degil, HEDEFE de bagli. Burada hedef henuz
+    bilinmedigi icin en iyimser durum alinir (bkz. koku_menzili). Liste
+    biraz genis kalir; dar kalsaydi hucre gercekten duyabilecegi bir
+    kokuyu izgara elemesi yuzunden hic gormezdi - sessizce yanlis olurdu.
+    """
+    return max(o.koku_menzili(), o.sound_radius, o.vision_range,
                game_settings.TOXIN_RANGE, game_settings.NEMATOCYST_RANGE)
 
 
@@ -330,6 +336,11 @@ class Dunya:
         # tasinan organlardan cikar.
         hepsi = self.optropis + self.kaotropis
         Organism.population_count = len(hepsi)
+        # Koku menzili hedefe de bagli oldugu icin izgara elemesi en
+        # iyimser durumu bilmeli (bkz. Organism.koku_menzili).
+        if hepsi:
+            Organism.en_guclu_koku = max(o.scent_value for o in hepsi)
+            Organism.en_iri_yaricap = max(o.radius for o in hepsi)
         izgara = HucreIzgarasi(hepsi)
         self._hucre_izgara = izgara
         eaten_prey = set()

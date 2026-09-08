@@ -129,7 +129,6 @@
         "PHAGO_COST": 0.08,
         "PHAGO_SIZE_RATIO": 0.7,
         "PHAGO_STUN": 1.0,
-        "SMELL_RANGE_BASE": 20.0,
         "DIVERGENCE_NEW_ORGAN": 5.0,
         "DIVERGENCE_UPGRADE": 1.0,
         "SCENT_WEIGHT_MEMBRANE": 0.5,
@@ -233,7 +232,9 @@
         "TUMBLE_ANGLE_SIGMA": 60.0,
         "LEVY_ALPHA": 1.5,
         "LEVY_MIN_STEP": 0.5,
-        "LEVY_MAX_DURATION": 10.0
+        "LEVY_MAX_DURATION": 10.0,
+        "KOKU_YAYIM": 0.7,
+        "KOKU_DOYUM": 20.0
     },
     "entities": {
         "optropi_0": {

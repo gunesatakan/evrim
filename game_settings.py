@@ -342,19 +342,39 @@ DEFAULT_SETTINGS = {
     # bolunmede aktarilir ve mutasyona ugrar. Silahlar ancak tablo "saldir"
     # dediginde ates eder - aksi halde hucreler kendi turunu vuruyordu.
     # --- KOKU ILE TANIMA ---
-    # Koku menzili = SMELL_RANGE_BASE * kemoreseptor uzunlugu.
     # Kokunun ayirt edici ozelligi: KONI YOK ve gorusten UZUN. Kimyasal
     # sinyal gorus hatti gerektirmez, kosenin arkasindan gelir.
-    # (Olculdu: gorus 15-25 px, ses 10-40 px, kemoreseptor uzunlugu 5-15.)
-    # Koku menzili = SMELL_RANGE_BASE * kemoreseptor uzunlugu.
-    # 8 iken baslangic burnu (uzunluk 6) yalnizca 48 px goruyordu - hucre
-    # yaricapinin iki katindan az. Bir hucrenin baska bir hucreye tepki
-    # verebilmesi icin once onu ALGILAMASI gerekiyor; 48 px'de bu ancak
-    # carpismayla olur, yani kacma ya da saldirma karari verilecek zaman
-    # hic kalmaz. 20 ile baslangic burnu 120 px (yaklasik bes govde capi)
-    # kokluyor: nematosist (50) ve toksin (60) menzilinin otesi, yani
-    # silah kullanmadan once hedefi secebilecek kadar erken.
-    "SMELL_RANGE_BASE": 20.0,
+    # (Olculdu: gorus 15-25 px, ses 10-40 px, koku 120-300 px.)
+    #
+    # Menzil artik bir AYAR DEGIL, bir SONUC - asagidaki alan denkleminden
+    # dogar. Eski SMELL_RANGE_BASE kaldirildi.
+    # KOKU BIR ALANDIR, BIR MENZIL DEGIL.
+    #
+    # Kemoreseptor, uzerine BAGLANAN molekulle koku alir; olculen sey
+    # alicinin BULUNDUGU NOKTADAKI derisimdir. Eskiden mesafe hucre
+    # MERKEZINDEN olculuyordu ve menzil yalnizca ALGILAYANIN ozelligiydi
+    # (SMELL_RANGE_BASE * burun boyu): organin nerede durdugu hicbir sey
+    # ifade etmiyor, hedefin ne kadar koktugu da hesaba girmiyordu -
+    # mis gibi kokan iri bir hucre ile zar zor kokan kucugu TAM AYNI
+    # uzaklikta fark ediliyordu.
+    #
+    # Artik kaynagin cevresinde bir DERISIM ALANI var:
+    #
+    #     C(d) = KOKU_YAYIM * koku_puani * (r0 / (r0 + d))^2
+    #
+    # r0 kaynagin yaricapi, d kaynaktan ALICIYA olan uzaklik. Radyal
+    # seyrelme: molekul sayisi sabit, dagildigi yuzey r^2 ile buyur.
+    # Alici kendi ESIGINI asan bir derisime degerse koku alir. Menzil
+    # boylece iki taraftan birden dogar - kaynak ne kadar kokuyor, burun
+    # ne kadar hassas. Artik bir sayi degil, bir SONUC.
+    #
+    # 0.7: eski kalibrasyon korunsun diye secildi. Tipik degerlerle
+    # (koku 2.9, yaricap 22.5, esik 0.05) menzil ~121 px cikar -
+    # SMELL_RANGE_BASE * 6 ile ayni.
+    "KOKU_YAYIM": 0.7,
+    # Tepkinin doydugu derisim/esik orani: bunun ustunde daha da
+    # yaklasmak tepkiyi artirmaz, alicilar zaten dolmustur.
+    "KOKU_DOYUM": 20.0,
     # --- KOKU KIMLIGI ---
     # Koku artik SUREKLI bir puandir (bkz. systems/signaling/scent_profile).
     # Ayrik sinif kalkti: kucuk genetik degisim puani biraz oynatir,
@@ -787,7 +807,7 @@ if WORLD_SCALE != 1.0:
     # SCENT_CELL_SIZE de bir UZUNLUKTUR. Olceklenmezse koku izgarasi
     # dunya alaniyla buyuyor: olcek 3'te 60 kare 36 saniye suruyordu.
     # Olcekle birlikte buyuyunce izgaradaki HUCRE SAYISI sabit kalir.
-    for _k in ("DRAG_REF_RADIUS", "SMELL_RANGE_BASE", "THRUST_SCALE"):
+    for _k in ("DRAG_REF_RADIUS", "THRUST_SCALE"):
         if _k in globals():
             globals()[_k] = globals()[_k] * WORLD_SCALE
     # Izgara adimi TAM SAYI olmali - dizinlemede kullaniliyor, ondalik
