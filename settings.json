@@ -2,7 +2,7 @@
     "settings": {
         "WORLD_SCALE": 1.0,
         "ARENA_OLCEK": 2.0,
-        "FOOD_COUNT": 310,
+        "FOOD_COUNT": 184,
         "KAOTROPI_COUNT": 1,
         "OPTROPI_COUNT": 1,
         "NOTROPI_COUNT": 1,
@@ -156,34 +156,28 @@
         "FOOD_PATCH_SIGMA": 45.0,
         "HARITA_YAMALARI": [
             [
-                1194.7,
-                801.8,
-                86,
-                275.0
+                590.8,
+                400.9,
+                46,
+                95.0
             ],
             [
-                342.9,
-                271.6,
-                86,
-                115.0
+                1793.4,
+                1205.3,
+                46,
+                95.0
             ],
             [
-                2123.1,
-                1297.6,
-                86,
-                115.0
+                1790.8,
+                403.5,
+                46,
+                95.0
             ],
             [
-                406.2,
-                1268.6,
-                26,
-                55.0
-            ],
-            [
-                2218.0,
-                184.6,
-                26,
-                55.0
+                596.0,
+                1205.3,
+                46,
+                95.0
             ]
         ],
         "FOOD_MAX": 310,
@@ -238,7 +232,8 @@
         "TUMBLE_ANGLE_SIGMA": 60.0,
         "LEVY_ALPHA": 1.5,
         "LEVY_MIN_STEP": 0.5,
-        "LEVY_MAX_DURATION": 10.0
+        "LEVY_MAX_DURATION": 10.0,
+        "CORPSE_TOTAL_MAX": 60
     },
     "entities": {
         "optropi_0": {

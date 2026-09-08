@@ -2,7 +2,7 @@ import pygame
 import random
 import math
 import game_settings
-from entities.entity import Entity, WIDTH, HEIGHT, GREEN
+from entities.entity import Entity, WIDTH, HEIGHT, GREEN, BLUE
 
 class Food(Entity):
     #: Besinin hücreye çekilme süresi (sn).
@@ -22,6 +22,11 @@ class Food(Entity):
         # dokusunu sindirmek metabolik artık sızdırır, avı kendin mi
         # öldürdün yoksa leşini mi buldun fark etmez.
         self.from_corpse = from_corpse
+        # LES MAVIDIR. Yesil besin ile lesten cikan besin ayni renkteydi;
+        # olen bir hucrenin arkasinda bir sey birakip birakmadigi
+        # ekrandan okunamiyordu.
+        if from_corpse:
+            self.color = BLUE
         # --- yutulma durumu ---
         self.yutan = None          # onu çeken hücre
         self.yutma_t = 0.0         # 0..1 ilerleme

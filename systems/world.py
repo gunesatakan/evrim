@@ -131,9 +131,17 @@ def drop_corpse(organism, foods):
     ortama yayilmis sayilir - kimse toplamaya yetismez.
     """
     n = organism.corpse_food_count()
+    # LESIN KENDI TAVANI VAR. FOOD_MAX = FOOD_COUNT (80 = 80) oldugu
+    # icin harita neredeyse hep doluydu ve les HIC dusmuyordu: olen
+    # hucre arkasinda hicbir sey birakmiyordu. Tasma korumasi kaliyor
+    # ama LESE ayri sayiliyor - dogal besin doluyken bile olum gorunur.
+    tavan = int(getattr(game_settings, 'CORPSE_TOTAL_MAX',
+                        game_settings.FOOD_MAX))
+    les_sayisi = sum(1 for f in foods if getattr(f, 'from_corpse', False))
     for _ in range(n):
-        if len(foods) >= game_settings.FOOD_MAX:
+        if les_sayisi >= tavan:
             break
+        les_sayisi += 1
         fx = organism.pos.x + random.uniform(-organism.radius, organism.radius)
         fy = organism.pos.y + random.uniform(-organism.radius, organism.radius)
         foods.append(Food(max(15, min(WIDTH - 15, fx)),
@@ -219,6 +227,8 @@ class Dunya:
 
         # --- olcum ---
         self.olum_nedeni = {}
+        # Bu karede olenler - cizim katmani olum efektini buradan kurar.
+        self.son_olenler = []
         self.silah_olumu = {}      # silah adi -> oldurdugu hucre sayisi
         self.dogum = 0
         self.av_yeme = 0           # hucre yeme olayi (les dahil)
@@ -244,11 +254,15 @@ class Dunya:
 
         # Besin yeniden dogusu - YAMA YAMA.
         if game_settings.FOOD_SPAWN_RATE > 0:
-            if len(foods) < game_settings.FOOD_MAX:
+            # Les ayri tavana sayilir (bkz. drop_corpse); dogal dogus
+            # yalnizca DOGAL besine bakar, yoksa lesler onu bastirirdi.
+            dogal = sum(1 for f in foods if not getattr(f, 'from_corpse', False))
+            if dogal < game_settings.FOOD_MAX:
                 self._food_accum += game_settings.FOOD_SPAWN_RATE * dt
                 yama = max(1, int(game_settings.FOOD_PATCH_SIZE))
                 while (self._food_accum >= yama
-                        and len(foods) < game_settings.FOOD_MAX):
+                        and dogal < game_settings.FOOD_MAX):
+                    dogal += yama
                     self._food_accum -= yama
                     # Onceki karenin hucre izgarasi: hucreler bir karede
                     # kendi yaricaplarinin yuzde biri kadar yer degistirir,
@@ -313,7 +327,8 @@ class Dunya:
         oldu = []
         for o in hepsi:
             if random.random() < game_settings.TRAIL_RATE * dt:
-                trail_manager.add_point(o.pos.x, o.pos.y, o.uid, o.direction, o.radius)
+                trail_manager.add_point(o.pos.x, o.pos.y, o.uid, o.direction,
+                                        o.radius, getattr(o, 'scent_value', 0.0))
 
             menzil = algi_menzili(o) + o.radius + 40.0
             komsu = izgara.yakin(o, menzil)
@@ -355,6 +370,7 @@ class Dunya:
                 self._olum_kaydet(o)
                 if not getattr(o, 'consumed', False):
                     drop_corpse(o, foods)
+        self.son_olenler = list(oldu)
         olu = set(map(id, oldu))
 
         # YAVRULAR. Olenler de taranir: mitoz tamamlandiysa yavrular ayri
@@ -399,6 +415,7 @@ class Dunya:
                 victim.die('yikandi')
                 self._olum_kaydet(victim)
                 victim.consumed = True      # les birakmaz
+                self.son_olenler.append(victim)
             self.optropis = [o for o in self.optropis if not o.dead]
             self.kaotropis = [o for o in self.kaotropis if not o.dead]
 
@@ -410,7 +427,8 @@ class Dunya:
         if len(self._yama_merkezleri) > 64:
             del self._yama_merkezleri[0]
         for _ in range(int(adet)):
-            if len(self.foods) >= game_settings.FOOD_MAX:
+            if sum(1 for f in self.foods
+                   if not getattr(f, 'from_corpse', False)) >= game_settings.FOOD_MAX:
                 return
             for _deneme in range(6):
                 x = min(WIDTH - 15, max(15, random.gauss(cx, sigma)))
@@ -461,7 +479,8 @@ class Dunya:
         if len(self._yama_merkezleri) > 64:
             del self._yama_merkezleri[0]
         for _ in range(adet):
-            if len(self.foods) >= game_settings.FOOD_MAX:
+            if sum(1 for f in self.foods
+                   if not getattr(f, 'from_corpse', False)) >= game_settings.FOOD_MAX:
                 return
             for _deneme in range(6):
                 x = min(WIDTH - 15, max(15, random.gauss(cx, sigma)))

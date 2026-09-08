@@ -209,6 +209,10 @@ DEFAULT_SETTINGS = {
     "STARVE_TIMEOUT": 15.0,
     # Olen hucre yerine besin birakir (les). Ilk varan alir.
     "CORPSE_FOOD_MAX": 24,
+    # Haritadaki TOPLAM les besini tavani. FOOD_MAX'tan ayri sayilir:
+    # dogal besin doluyken de olen hucre arkasinda bir sey birakabilsin,
+    # ama hizli devrilen bir populasyon haritayi lesle bogamasin.
+    "CORPSE_TOTAL_MAX": 60,
     # --- ZAR BUTUNLUGU VE SAVUNMA (savunma = zar ozelligi, organ degil) ---
     # Hasar uc kanaldan gelir: mekanik / kimyasal / yutma. Her savunma yalnizca
     # belirli kanallara ve yalnizca belirli menzillere karsi calisir; matris
