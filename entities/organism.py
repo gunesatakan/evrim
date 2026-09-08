@@ -1579,15 +1579,49 @@ class Organism(Entity):
     def molekulleri_guncelle(self, dt):
         """Molekul fizigi: lab.Molecule'un KENDI update'i calisir.
 
-        Fizik burada yeniden yazilmaz - ayni kod, ayni delikler. Olen
-        molekuller listeden dusurulur.
+        Fizik burada yeniden yazilmaz - ayni kod, ayni delikler.
+
+        TEMIZLENME MUHASEBESI. Liste once 12 saniyede kirpiliyordu, oysa
+        BAGLI molekul lab.py'de 16 saniyede temizlenir (CLEARANCE).
+        Molekul o ana varamadan listeden dusuyor, dolayisiyla
+        `clear_one()` HIC cagrilmiyor ve zarftaki varis sayaci bir daha
+        asla azalmiyordu. Sonuc: toksin omur boyu birikiyordu - bir
+        saldiridan sag cikan hucre sayaci sonsuza dek tasiyor, aylar
+        sonraki zayif bir sizinti onu bir sonraki kademeye ANINDA
+        gecirebiliyordu. Oysa lab.py'nin kendi yorumu tersini soyluyor:
+        "baglanan molekul sonsuza kadar orada durmaz - hucre onarir,
+        pompalar disari atar".
         """
         mols = getattr(self, 'molekuller', None)
         if not mols:
             return
+        import lab as _lab
+        zarf = self.zarf_arayuzu()
+        # Her iki sure de sigsin: bagli molekul 16 sn'de, ucan molekul
+        # 9 sn'de biter. Tavan yalnizca bir emniyet supabi.
+        tavan = _lab.CLEARANCE + _lab.MOLECULE_LIFE
+        kalan = []
         for m in mols:
             m.update(dt)
-        self.molekuller = [m for m in mols if m.state != 'lost' and m.age < 12.0]
+            if m.state in ('lost', 'cleared'):
+                continue
+            if m.state == 'stuck':
+                # lab.Molecule TAKILI molekulun yasini durdurur:
+                # laboratuvarda tek hucre vardir, molekul orada sonsuza
+                # kadar durabilir. Ekosistemde yuzlerce hucre var ve her
+                # biri 240 molekule kadar tasiyor - takilanlar birikirse
+                # tavan dolar ve hucre YENI toksin alamaz hale gelir,
+                # yani takilmis molekuller onu bagisik yapardi. Zar
+                # onarimi bunlari da atar.
+                m.age += dt
+            if m.age >= tavan:
+                # Yine de dusuruyorsak muhasebeyi ELDE kapatiriz;
+                # aksi halde sayac sizar.
+                if m.state == 'arrived':
+                    zarf.clear_one(m.pi)
+                continue
+            kalan.append(m)
+        self.molekuller = kalan
 
     def molekulleri_ciz(self, screen, merkez=None, olcek=1.0):
         """Molekulleri ciz. Kamera olcegi verilirse buyutulur."""

@@ -1898,6 +1898,27 @@ class HedefZarf:
         """Molekul hizlari geometriyle AYNI oranda kuculur."""
         return max(0.05, self.org.radius / 110.0)
 
+    @property
+    def efflux(self):
+        """Pompa + onarim: bagli molekulu ne kadar cabuk atar.
+
+        Molecule.update `self.cell.efflux` okuyor ama HedefZarf bunu HIC
+        sunmuyordu; getattr varsayilani 0.0'a dusuyor ve pompa molekul
+        yolunda OLU kaliyordu. Yani hucre efflux katmanini evrimlestirip
+        bakim giderini oduyor, karsiliginda molekulle gelen toksine karsi
+        hicbir sey almiyordu - oysa savunma tipinin ortaya cikmasi tam da
+        buna bagli.
+
+        Laboratuvarin kendi hucresiyle ayni bilesim (bkz. LabCell:
+        efflux + repair): pompa molekulu disari atar, onarim da baglandigi
+        yeri yeniler.
+        """
+        lg = getattr(getattr(self.org, 'membrane', None), 'logic', None)
+        if lg is None:
+            return 0.0
+        return (float(getattr(lg, 'efflux', 0.0) or 0.0)
+                + float(getattr(lg, 'repair', 0.0) or 0.0))
+
     def active(self):
         return self._g().active()
 
