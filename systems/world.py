@@ -227,6 +227,10 @@ class Dunya:
 
         # --- olcum ---
         self.olum_nedeni = {}
+        # OLUM GUNLUGU: son olumler (zaman, neden, hucre no, tur). Toplam
+        # sayac tek basina "ne oluyor"u soylemez; kimin ne zaman neden
+        # oldugu ekranda okunabilmeli.
+        self.olum_gunlugu = []
         # Bu karede olenler - cizim katmani olum efektini buradan kurar.
         self.son_olenler = []
         self.silah_olumu = {}      # silah adi -> oldurdugu hucre sayisi
@@ -241,6 +245,11 @@ class Dunya:
     def _olum_kaydet(self, o):
         c = getattr(o, 'death_cause', '?')
         self.olum_nedeni[c] = self.olum_nedeni.get(c, 0) + 1
+        self.olum_gunlugu.append((self.gecen_sure, c,
+                                  int(getattr(o, 'index', -1)),
+                                  type(o).__name__))
+        if len(self.olum_gunlugu) > 40:
+            del self.olum_gunlugu[0]
 
     # ------------------------------------------------------------------
     def adim(self, dt):

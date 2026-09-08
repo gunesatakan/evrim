@@ -947,9 +947,12 @@ class RuntimeInspector:
                 if len(self._evrim_gecmis) > 300:
                     del self._evrim_gecmis[0]
         v = self._evrim_onbellek
-        if v is None:
-            return
         g, y0, w, yuk = 12, 62, 252, 152
+        if v is None:
+            # Nufus sifirsa evrim kutusu cizilmez - ama OLUMLER tam o
+            # anda en cok gereken bilgidir: herkes neden oldu?
+            self._draw_olumler(screen, dunya, g, y0, w)
+            return
         yuzey = pygame.Surface((w, yuk), pygame.SRCALPHA)
         yuzey.fill((14, 18, 26, 205))
         screen.blit(yuzey, (g, y0))
@@ -978,6 +981,8 @@ class RuntimeInspector:
             sat(5, "silahlar", " ".join("%s%d" % (a[:3], b) for a, b in ilk),
                 (240, 190, 150))
 
+        self._draw_olumler(screen, dunya, g, y0 + yuk + 6, w)
+
         # Kucuk zaman serisi: silahli (kirmizi) ve katmanli (mavi) oran.
         if len(self._evrim_gecmis) > 2:
             gx, gy, gw, gh = g + 10, y0 + yuk - 24, w - 20, 16
@@ -990,6 +995,64 @@ class RuntimeInspector:
                          for kayit in self._evrim_gecmis]
                 if len(nokta) > 1:
                     pygame.draw.lines(screen, renk, False, nokta, 1)
+
+    #: Olum nedeni -> (etiket, renk). Kod adlari kisa ve Ingilizce
+    #  karisik; ekranda okunur olsun.
+    OLUM_ETIKET = {
+        'aclik':   ('aclik',            (170, 170, 185)),
+        'avlandi': ('avlandi (yendi)',  (240, 150, 120)),
+        'yutuldu': ('yutuldu',          (240, 150, 120)),
+        'toksin':  ('toksin',           (255, 210, 120)),
+        'molekul': ('toksin (molekul)', (255, 210, 120)),
+        'hasar':   ('delinme',          (255, 110, 110)),
+        'yikandi': ('yikandi (seyrelme)', (150, 190, 240)),
+    }
+
+    def _draw_olumler(self, screen, dunya, g, y0, w):
+        """Son olumler ve toplam nedenler.
+
+        Hucreler oluyordu ama NEDEN oldugu hicbir yerde yazmiyordu:
+        dunya nedenleri sayiyor (olum_nedeni), sayac yalnizca kosu
+        bittiginde rapora dokuluyordu. Oyunda "kim, ne zaman, neden"
+        okunabilmeli - yoksa avlanmanin basladigi ya da toksinin ise
+        yaradigi ancak dosyadan anlasilir.
+        """
+        toplam = getattr(dunya, 'olum_nedeni', {}) or {}
+        gunluk = getattr(dunya, 'olum_gunlugu', []) or []
+        nedenler = sorted(toplam.items(), key=lambda kv: -kv[1])[:5]
+        son = list(reversed(gunluk[-6:]))
+        yuk = 26 + 16 * len(nedenler) + (10 + 16 * len(son) if son else 0) + 8
+        yuzey = pygame.Surface((w, yuk), pygame.SRCALPHA)
+        yuzey.fill((14, 18, 26, 205))
+        screen.blit(yuzey, (g, y0))
+        pygame.draw.rect(screen, (60, 80, 110), (g, y0, w, yuk), 1)
+        n_top = sum(toplam.values())
+        screen.blit(self._fnt_l.render("OLUMLER  (%d)" % n_top, True,
+                                       (230, 160, 150)), (g + 10, y0 + 7))
+        yy = y0 + 26
+        if not nedenler:
+            screen.blit(self._fnt_s.render("henuz olum yok", True,
+                                           (130, 145, 170)), (g + 10, yy))
+            return
+        for neden, adet in nedenler:
+            ad, renk = self.OLUM_ETIKET.get(neden, (neden, (200, 200, 210)))
+            screen.blit(self._fnt_s.render(ad, True, renk), (g + 10, yy))
+            t = self._fnt_s.render("%d  (%.0f%%)" % (adet, 100.0 * adet / max(1, n_top)),
+                                   True, (210, 220, 235))
+            screen.blit(t, (g + w - 10 - t.get_width(), yy))
+            yy += 16
+        if son:
+            yy += 6
+            pygame.draw.line(screen, (60, 80, 110), (g + 10, yy), (g + w - 10, yy), 1)
+            yy += 4
+            for t_sn, neden, idx, tur in son:
+                ad, renk = self.OLUM_ETIKET.get(neden, (neden, (200, 200, 210)))
+                sol = self._fnt_s.render("%6.1fs  #%d" % (t_sn, idx), True,
+                                         (130, 145, 170))
+                screen.blit(sol, (g + 10, yy))
+                sag = self._fnt_s.render(ad, True, renk)
+                screen.blit(sag, (g + w - 10 - sag.get_width(), yy))
+                yy += 16
 
     def _draw_selection_ring(self, screen, elapsed):
         o = self.selected
