@@ -1,5 +1,6 @@
 import pygame
 import math
+import random
 import game_settings
 from entities.entity import WIDTH, HEIGHT, FPS, BLACK
 from entities.optropi import Optropi
@@ -126,6 +127,186 @@ def log_diagnostics(f, optropis, elapsed):
         f.write(f"└──────────────────────────────────────────────\n")
 
 # ─── RUNTIME INSPECTOR ───
+
+
+class OlumEfektleri:
+    """Olum, NEDENINE gore gorunur olsun.
+
+    Hucreler bir anda yok oluyordu: oldu mu, yendi mi, yikandi mi, hicbir
+    ipucu yoktu. Laboratuvarda ise olum nedeni gorunur bir olaydi -
+    ozmotik lizisde hucre siser ve patlar, norotoksinde kararir ve durur.
+    Ekosistemde ayni olaylar olup bitiyor ama cizilmiyordu.
+
+    Her neden kendi fizigini tasir:
+      toksin / molekul : SISME -> PATLAMA (ozmotik lizis). Hucre toksin
+                         stoku tasiyorsa stok ortama sacilir: kimyasal
+                         bomba.
+      hasar            : DELINME - sitoplazma delikten fiskirir, zar
+                         parcalari ucar (stilet, harpun, nematosist).
+      aclik            : COKUS - hucre buzusur ve grilesir.
+      avlandi / yutuldu: YUTULMA - hizla kucullur.
+      yikandi          : SEYRELME - akintiyla surunuklenip solar. Bu bir
+                         olum degil, sistemden cikis; o yuzden les de yok.
+    """
+
+    SURE = {'toksin': 3.2, 'molekul': 3.2, 'hasar': 2.6, 'aclik': 3.0,
+            'avlandi': 1.2, 'yutuldu': 1.2, 'yikandi': 2.4}
+    PEMBE = (235, 115, 145)          # lab.py'deki lizis parcaciklari
+    SARI = (255, 220, 120)           # toksin stoku
+    SU = (150, 200, 255)             # sisme halkasi
+
+    def __init__(self):
+        self.efektler = []
+
+    # ------------------------------------------------------------ kurulum
+    def ekle(self, o):
+        neden = getattr(o, 'death_cause', '?')
+        r = float(getattr(o, 'radius', 8.0))
+        e = {
+            'neden': neden, 'pos': pygame.math.Vector2(o.pos), 'r': r,
+            'renk': tuple(int(c) for c in getattr(o, 'color', (200, 200, 200))[:3]),
+            't': 0.0, 'sure': self.SURE.get(neden, 1.5), 'parca': [],
+            'kirik': [], 'patladi': False,
+            'toksin': any(x.__class__.__name__ == 'Toxin'
+                          for x in getattr(o, 'organs', ())),
+            'akinti': pygame.math.Vector2(1, 0).rotate(random.uniform(0, 360)),
+        }
+        k = max(0.35, r / 12.0)      # hiz olcegi: buyuk hucre buyuk patlar
+        if neden == 'hasar':
+            # Delik tek bir yerde acilir: sitoplazma oradan fiskirir.
+            delik = random.uniform(0, 2 * math.pi)
+            for _ in range(36):
+                a = delik + random.gauss(0.0, 0.35)
+                hiz = random.uniform(30, 110) * k
+                e['parca'].append([pygame.math.Vector2(e['pos']),
+                                   pygame.math.Vector2(math.cos(a), math.sin(a)) * hiz,
+                                   random.uniform(1.2, 2.8), e['renk']])
+            for _ in range(6):
+                a = random.uniform(0, 2 * math.pi)
+                hiz = random.uniform(20, 60) * k
+                e['kirik'].append([pygame.math.Vector2(e['pos']),
+                                   pygame.math.Vector2(math.cos(a), math.sin(a)) * hiz,
+                                   a + random.uniform(-0.6, 0.6)])
+        elif neden == 'yikandi':
+            for _ in range(14):
+                v = e['akinti'] * random.uniform(25, 60) * k
+                v = v.rotate(random.gauss(0.0, 12.0))
+                p = e['pos'] + pygame.math.Vector2(random.uniform(-r, r), random.uniform(-r, r))
+                e['parca'].append([p, v, random.uniform(1.0, 2.0), (170, 200, 230)])
+        self.efektler.append(e)
+
+    def _patlat(self, e):
+        """Ozmotik lizis: zar yirtilir, sitoplazma ve stok sacilir."""
+        e['patladi'] = True
+        k = max(0.35, e['r'] / 12.0)
+        for _ in range(90):
+            a = random.uniform(0, 2 * math.pi)
+            hiz = random.uniform(40, 170) * k
+            e['parca'].append([pygame.math.Vector2(e['pos']),
+                               pygame.math.Vector2(math.cos(a), math.sin(a)) * hiz,
+                               random.uniform(1.0, 2.6), self.PEMBE])
+        if e['toksin']:
+            for _ in range(40):
+                a = random.uniform(0, 2 * math.pi)
+                hiz = random.uniform(15, 70) * k
+                e['parca'].append([pygame.math.Vector2(e['pos']),
+                                   pygame.math.Vector2(math.cos(a), math.sin(a)) * hiz,
+                                   random.uniform(1.4, 3.0), self.SARI])
+
+    # ------------------------------------------------------------ zaman
+    def guncelle(self, dt):
+        kalan = []
+        for e in self.efektler:
+            e['t'] += dt
+            if e['neden'] in ('toksin', 'molekul') and not e['patladi'] and e['t'] >= 1.0:
+                self._patlat(e)
+            sonum = max(0.0, 1.0 - 1.6 * dt)
+            for p in e['parca']:
+                p[0] += p[1] * dt
+                p[1] *= sonum
+            for q in e['kirik']:
+                q[0] += q[1] * dt
+                q[1] *= sonum
+            if e['t'] < e['sure']:
+                kalan.append(e)
+        self.efektler = kalan
+
+    # ------------------------------------------------------------ cizim
+    @staticmethod
+    def _daire(screen, pos, r, rgba, width=0):
+        r = int(max(1, r))
+        if rgba[3] >= 255 and width == 0:
+            pygame.draw.circle(screen, rgba[:3], (int(pos[0]), int(pos[1])), r)
+            return
+        yuz = pygame.Surface((r * 2 + 2, r * 2 + 2), pygame.SRCALPHA)
+        pygame.draw.circle(yuz, rgba, (r + 1, r + 1), r, width)
+        screen.blit(yuz, (int(pos[0]) - r - 1, int(pos[1]) - r - 1))
+
+    def ciz(self, screen, donustur=None, olcek=1.0):
+        """donustur: dunya -> ekran (yoksa birebir). olcek: kamera x gorunum."""
+        if not self.efektler:
+            return
+        d = donustur if donustur is not None else (lambda v: (v.x, v.y))
+        k = float(olcek)
+        for e in self.efektler:
+            u = min(1.0, e['t'] / e['sure'])          # 0..1 ilerleme
+            neden = e['neden']
+            r = e['r'] * k
+            m = d(e['pos'])
+            if neden in ('toksin', 'molekul'):
+                if not e['patladi']:
+                    # SISME: zar sizdiriyor, su doluyor, hucre buyuyor
+                    sis = 1.0 + 0.35 * min(1.0, e['t'] / 1.0)
+                    self._daire(screen, m, r * sis, (*e['renk'], 150))
+                    self._daire(screen, m, r * sis + 2, (*self.SU, 220), 2)
+                    for i in range(6):                  # iceri akan su
+                        a = i * math.pi / 3.0 + e['t'] * 1.5
+                        t = (e['t'] * 40.0 + i * 9) % (r * sis)
+                        px = m[0] + math.cos(a) * (r * sis - t)
+                        py = m[1] + math.sin(a) * (r * sis - t)
+                        pygame.draw.circle(screen, self.SU, (int(px), int(py)), 2)
+                else:
+                    tp = (e['t'] - 1.0) / max(1e-6, e['sure'] - 1.0)
+                    # patlama halkasi
+                    self._daire(screen, m, r * (1.0 + 2.2 * tp),
+                                (*self.PEMBE, int(180 * (1.0 - tp))), 2)
+                    if e['toksin']:                     # kimyasal bulut
+                        self._daire(screen, m, r * (1.0 + 3.0 * tp),
+                                    (*self.SARI, int(90 * (1.0 - tp))))
+            elif neden == 'hasar':
+                self._daire(screen, m, r, (*e['renk'], int(170 * (1.0 - u))))
+                self._daire(screen, m, r + 1, (255, 110, 110, int(200 * (1.0 - u))), 2)
+                for q in e['kirik']:
+                    a = q[2]
+                    c = d(q[0])
+                    L = max(2.0, r * 0.45)
+                    pygame.draw.line(screen, (*e['renk'][:3],),
+                                     (int(c[0] - math.cos(a) * L), int(c[1] - math.sin(a) * L)),
+                                     (int(c[0] + math.cos(a) * L), int(c[1] + math.sin(a) * L)), 2)
+            elif neden == 'aclik':
+                gri = tuple(int(c0 + (95 - c0) * u) for c0 in e['renk'])
+                self._daire(screen, m, r * (1.0 - 0.6 * u), (*gri, int(210 * (1.0 - u))))
+                self._daire(screen, m, r * (1.0 - 0.6 * u) + 1, (40, 40, 50, int(220 * (1.0 - u))), 1)
+            elif neden in ('avlandi', 'yutuldu'):
+                self._daire(screen, m, r * (1.0 - u), (*e['renk'], int(190 * (1.0 - u))))
+            elif neden == 'yikandi':
+                kay = e['akinti'] * (e['t'] * 28.0 * max(0.35, e['r'] / 12.0))
+                m2 = d(e['pos'] + kay)
+                self._daire(screen, m2, r * (1.0 + 0.3 * u), (*e['renk'], int(120 * (1.0 - u))))
+                self._daire(screen, m2, r * (1.0 + 0.3 * u) + 1, (200, 225, 255, int(150 * (1.0 - u))), 1)
+            else:
+                self._daire(screen, m, r, (*e['renk'], int(150 * (1.0 - u))))
+            # parcaciklar (her nedende ortak)
+            alfa = 1.0 - u
+            for p in e['parca']:
+                c = d(p[0])
+                boy = max(1, int(p[2] * k))
+                rgb = p[3]
+                pygame.draw.circle(screen, (int(rgb[0] * alfa + 10 * (1 - alfa)),
+                                            int(rgb[1] * alfa + 10 * (1 - alfa)),
+                                            int(rgb[2] * alfa + 16 * (1 - alfa))),
+                                   (int(c[0]), int(c[1])), boy)
+
 
 class RuntimeInspector:
     """Right-side panel showing selected organism's brain/sensory state."""
@@ -951,6 +1132,7 @@ def main(food_count=None, kaotropi_count=None):
     running = True
     # Yakinlastirma katmani bir kez ayrilir, her karede degil.
     _kat_yuzey = None
+    olum_efekt = OlumEfektleri()
     birikim = 0.0     # sabit adim icin biriken gercek sure
     while running:
         real_dt = clock.tick(FPS) / 1000.0    # gercek gecen sure (cizim icin)
@@ -1023,6 +1205,9 @@ def main(food_count=None, kaotropi_count=None):
         _t0 = pygame.time.get_ticks()
         for _ in range(adim_sayisi):
             dunya.adim(dt)
+            for _olen in getattr(dunya, 'son_olenler', ()):
+                olum_efekt.ekle(_olen)
+            olum_efekt.guncelle(dt)
             elapsed_time += dt
             if (pygame.time.get_ticks() - _t0) * 0.001 > kare_butce:
                 break
@@ -1100,6 +1285,7 @@ def main(food_count=None, kaotropi_count=None):
 
             for o in optropis:
                 o.draw(screen)
+            olum_efekt.ciz(screen)
         else:
             # KAMERA GORUNUMU: ayni geometri, buyuk olcekte cizilir.
             # Gorunmeyen sey cizilmez - yakinlasinca kare basina is artmaz.
@@ -1128,6 +1314,7 @@ def main(food_count=None, kaotropi_count=None):
                 _mrk = tuval_konumu(o.pos)
                 _kam_lab.hucreyi_ciz(screen, o, _mrk, _ok)
                 o.molekulleri_ciz(screen, _mrk, _ok)
+            olum_efekt.ciz(screen, tuval_konumu, _z * _gorunum)
             _f = pygame.font.SysFont("consolas", 16)
             screen.blit(_f.render("ZOOM x%.1f  (tekerlek)" % _z, True,
                                   (150, 170, 200)), (14, HEIGHT - 26))
