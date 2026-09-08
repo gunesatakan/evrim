@@ -49,6 +49,7 @@
         "MEMORY_CEVRIM": 0.02,
         "STARVE_TIMEOUT": 15.0,
         "CORPSE_FOOD_MAX": 24,
+        "CORPSE_TOTAL_MAX": 60,
         "MEMBRANE_INTEGRITY_BASE": 100.0,
         "GROW_MEMBRANE_INTEGRITY": 20.0,
         "YENI_KATMAN_YATIRIM": 0.6,
@@ -151,7 +152,7 @@
         "SEPARATION_STRENGTH": 0.5,
         "CYTOSKELETON_AREA": 10.0,
         "FOOD_AREA": 100.0,
-        "FOOD_SPAWN_RATE": 4.89,
+        "FOOD_SPAWN_RATE": 3.0,
         "FOOD_PATCH_SIZE": 26,
         "FOOD_PATCH_SIGMA": 45.0,
         "HARITA_YAMALARI": [
@@ -180,7 +181,7 @@
                 95.0
             ]
         ],
-        "FOOD_MAX": 310,
+        "FOOD_MAX": 200,
         "RIBOSOME_AREA": 20.0,
         "VACUOLE_AREA": 30.0,
         "CILIA_TURN_MULTI": 0.05,
@@ -232,8 +233,7 @@
         "TUMBLE_ANGLE_SIGMA": 60.0,
         "LEVY_ALPHA": 1.5,
         "LEVY_MIN_STEP": 0.5,
-        "LEVY_MAX_DURATION": 10.0,
-        "CORPSE_TOTAL_MAX": 60
+        "LEVY_MAX_DURATION": 10.0
     },
     "entities": {
         "optropi_0": {
