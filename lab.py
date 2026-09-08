@@ -1870,7 +1870,8 @@ class HedefZarf:
     sayisi PAYLOAD_THRESHOLD kademelerini asinca etki uygulanir.
     """
 
-    __slots__ = ('org', '_zarf', '_key', 'arrived', 'tier_of', 'sahip')
+    __slots__ = ('org', '_zarf', '_key', 'arrived', 'tier_of', 'sahip',
+                 'neden')
 
     def __init__(self, org):
         self.org = org
@@ -1879,6 +1880,7 @@ class HedefZarf:
         self.arrived = {}
         self.tier_of = {}
         self.sahip = None          # molekulu atan hucre (hasar sahibi)
+        self.neden = None          # olum nedeni: hangi silah enjekte etti
 
     # ---- geometri (onbellekli) ----
     def _g(self):
@@ -1992,7 +1994,9 @@ class HedefZarf:
         org.membrane.logic.integrity -= hasar
         if org.membrane.logic.integrity <= 0:
             org.membrane.logic.integrity = 0.0
-            org.die('molekul')
+            # Neden, yuku getiren SILAHTIR: 'nematocyst', 'harpoon',
+            # 'stylet' ya da (serbest molekul) 'molekul'.
+            org.die(self.neden or 'molekul')
 
 
 def zarf_orani(zar_logic):

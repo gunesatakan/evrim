@@ -150,6 +150,7 @@ class OlumEfektleri:
     """
 
     SURE = {'toksin': 3.2, 'molekul': 3.2, 'hasar': 2.6, 'aclik': 3.0,
+            'nematocyst': 2.6, 'harpoon': 2.6, 'stylet': 3.0,
             'avlandi': 1.2, 'yutuldu': 1.2, 'yikandi': 2.4}
     PEMBE = (235, 115, 145)          # lab.py'deki lizis parcaciklari
     SARI = (255, 220, 120)           # toksin stoku
@@ -172,7 +173,7 @@ class OlumEfektleri:
             'akinti': pygame.math.Vector2(1, 0).rotate(random.uniform(0, 360)),
         }
         k = max(0.35, r / 12.0)      # hiz olcegi: buyuk hucre buyuk patlar
-        if neden == 'hasar':
+        if neden in ('hasar', 'nematocyst', 'harpoon'):
             # Delik tek bir yerde acilir: sitoplazma oradan fiskirir.
             delik = random.uniform(0, 2 * math.pi)
             for _ in range(36):
@@ -273,7 +274,7 @@ class OlumEfektleri:
                     if e['toksin']:                     # kimyasal bulut
                         self._daire(screen, m, r * (1.0 + 3.0 * tp),
                                     (*self.SARI, int(90 * (1.0 - tp))))
-            elif neden == 'hasar':
+            elif neden in ('hasar', 'nematocyst', 'harpoon'):
                 self._daire(screen, m, r, (*e['renk'], int(170 * (1.0 - u))))
                 self._daire(screen, m, r + 1, (255, 110, 110, int(200 * (1.0 - u))), 2)
                 for q in e['kirik']:
@@ -283,7 +284,7 @@ class OlumEfektleri:
                     pygame.draw.line(screen, (*e['renk'][:3],),
                                      (int(c[0] - math.cos(a) * L), int(c[1] - math.sin(a) * L)),
                                      (int(c[0] + math.cos(a) * L), int(c[1] + math.sin(a) * L)), 2)
-            elif neden == 'aclik':
+            elif neden in ('aclik', 'stylet'):
                 gri = tuple(int(c0 + (95 - c0) * u) for c0 in e['renk'])
                 self._daire(screen, m, r * (1.0 - 0.6 * u), (*gri, int(210 * (1.0 - u))))
                 self._daire(screen, m, r * (1.0 - 0.6 * u) + 1, (40, 40, 50, int(220 * (1.0 - u))), 1)
@@ -1005,6 +1006,9 @@ class RuntimeInspector:
         'toksin':  ('toksin',           (255, 210, 120)),
         'molekul': ('toksin (molekul)', (255, 210, 120)),
         'hasar':   ('delinme',          (255, 110, 110)),
+        'nematocyst': ('nematosist (enjeksiyon)', (255, 110, 110)),
+        'harpoon':    ('harpun (enjeksiyon)',     (255, 110, 110)),
+        'stylet':     ('stilet (emildi)',         (255, 170, 90)),
         'yikandi': ('yikandi (seyrelme)', (150, 190, 240)),
     }
 

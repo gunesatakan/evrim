@@ -235,7 +235,10 @@
         "LEVY_MAX_DURATION": 10.0,
         "KOKU_YAYIM": 0.7,
         "KOKU_DOYUM": 20.0,
-        "KOKU_BULUT": 80.0
+        "KOKU_BULUT": 80.0,
+        "STYLET_EMME": 0.16,
+        "EMME_VERIM": 0.6,
+        "STYLET_EMME_GIDER": 2.0
     },
     "entities": {
         "optropi_0": {

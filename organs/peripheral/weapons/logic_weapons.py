@@ -106,8 +106,21 @@ class WeaponLogic:
         # Menzili 0 olan silah ATILMAZ, DEGDIRILIR; "menzil 0" yazmak
         # bozuk bir deger gibi okunuyordu.
         m = "temas" if self.reach <= 0.0 else "menzil %.0f" % self.reach
-        return [("Guc", min(1.0, n / 10.0),
-                 "hasar %.1f  %s" % (self.damage, m))]
+        # Igneli silah HASAR vermez, YUK tasir: atis basina kac molekul ve
+        # hangi yuk. Alan silahlari (toksin/lizin) molekul yolunu zaten
+        # kullaniyor; "hasar" yalnizca eski gosterimdi.
+        try:
+            import lab as _lab
+            ci = int(getattr(self, 'carrier', 0))
+            pi = int(getattr(self, 'payload', 0))
+            if 0 <= pi < len(_lab.PAYLOADS) and _lab.PAYLOADS[pi][1] is not None:
+                yuk = _lab.PAYLOADS[pi][0]
+                adet = int(round(_lab.CARRIER_EMIT[ci] * self.power)) if 0 <= ci < len(_lab.CARRIER_EMIT) else 0
+                return [("Guc", min(1.0, n / 10.0),
+                         "%s x%d  %s" % (yuk[:12], adet, m))]
+        except Exception:
+            pass
+        return [("Guc", min(1.0, n / 10.0), "yuk yok (mekanik)  %s" % m)]
 
     def grow(self):
         """Silahi gelistir: guc carpani artar (hasar = DAMAGE * power).

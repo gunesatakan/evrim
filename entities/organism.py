@@ -16,7 +16,7 @@ from organs.central.cytoplasm.cytoplasm import Cytoplasm
 from organs.peripheral.membrane.membrane import Membrane
 from organs.central.vacuole.vacuole import Vacuole
 from organs.central.cytoskeleton.cytoskeleton import Cytoskeleton
-from organs.peripheral.weapons.weapons import (BaseWeapon, Toxin, Phagocytosis,
+from organs.peripheral.weapons.weapons import (BaseWeapon, Toxin, Phagocytosis, Stylet,
                                                WEAPON_CLASSES)
 from systems.protein_systems.short_protein_memory.direction_memory import DirectionMemorySystem
 from systems.motor_control.motor_calibration import MotorCalibration
@@ -1361,6 +1361,8 @@ class Organism(Entity):
             self.bound_by.bound_target = None
             self.bound_by = None
         self.bind_timer = 0.0
+        # Emilme ilerlemesi baga aittir: kurtulan av yeniden dolar.
+        self.emilen = 0.0
 
     def update_binding(self, dt):
         """Bağı ilerlet: mesafe koptu mu, av kurtuldu mu, ip bitti mi."""
@@ -1512,6 +1514,15 @@ class Organism(Entity):
                 self.atis_sayisi += 1
                 continue
 
+            # --- STILET EMMESI: bagli oldugu her kare, bekleme suresinden
+            # bagimsiz. Delmek oldurmez; emmek tuketir.
+            if lg.REQUIRES_BIND and self.bound_target is not None:
+                _t = self.bound_target
+                if _t in candidates and isinstance(organ, Stylet):
+                    self._emme(_t, dt, killed)
+                    if _t.dead:
+                        continue
+
             # --- TEK ATIŞLIK SİLAHLAR ---
             if not lg.ready or self.energy < lg.energy_cost:
                 continue
@@ -1536,8 +1547,9 @@ class Organism(Entity):
                 lg.trigger()
                 self.atis_sayisi += 1
                 organ.atis_isaretle(pygame.math.Vector2(t.pos))
-                t.take_damage(lg.damage, lg.CHANNEL, lg.CONTACT,
-                              organ.__class__.__name__.lower(), lg)
+                # Her batista secili yuk iceri gider (varsa). Stiletin asil
+                # isi ise asagida: EMMEK.
+                self._igne_enjekte(t, organ, lg)
                 if t.dead:
                     self.release_binding()
                     killed.append(t)
@@ -1550,8 +1562,10 @@ class Organism(Entity):
                 lg.trigger()
                 self.atis_sayisi += 1
                 organ.atis_isaretle(pygame.math.Vector2(t.pos))
-                t.take_damage(lg.damage, lg.CHANNEL, lg.CONTACT,
-                              organ.__class__.__name__.lower(), lg)
+                # DELMEK OLDURMEZ - delik kapanir. Olduren, varsa YUKTUR:
+                # igne secili yuku sitoplazmaya birakir, dozu esikler
+                # yargilar (lab.PAYLOAD_THRESHOLD). Zirh teslimati kisar.
+                self._igne_enjekte(t, organ, lg)
                 # Nematosist ipi: isabet edince avı bağlar. Saldırgan
                 # serbest kalır - önceden tutunmaz, sonradan tutar.
                 if lg.CREATES_TETHER and not t.dead:
@@ -1581,6 +1595,90 @@ class Organism(Entity):
     #: molekuler tasiyicilar (difuzyon / yonlu bosaltma / fiskirtma).
     #  Igneli tasiyicilar mermi yollar; onlar bu yoldan gecmez.
     MOLEKULER_TASIYICI = (0, 1, 2)
+
+    def _igne_enjekte(self, hedef, organ, lg):
+        """Igneli silah isabet etti: yuku hedefin ICINE birak.
+
+        HP hasari yok. Zardaki delik kapanir; oldurecek olan sey varsa
+        YUKTUR. lab.Shot._emit ile ayni is: tasiyicinin salim sayisi
+        (CARRIER_EMIT) kadar molekul, hedefin sitoplazmasinda dogar ve
+        kendi bandinda baglanir - doz muhasebesi HedefZarf.receive'de,
+        esikler PAYLOAD_THRESHOLD'da, temizlenme CLEARANCE'ta. Toksinle
+        ayni moleküller, ayni kurallar.
+
+        Zirh teslimati kisar: lab.teslimat(tasiyici, yuk, zirh) kac
+        molekulun vardigini soyler (duvar 15+ nematosisti tamamen durdurur).
+        Yuk secilmemisse (saf mekanik) hicbir sey olmaz - delik kapanir.
+
+        Doner: birakilan molekul sayisi.
+        """
+        try:
+            import lab as _lab
+        except Exception:
+            return 0
+        ci = int(getattr(lg, 'carrier', 5))
+        pi = int(getattr(lg, 'payload', 0))
+        if pi <= 0 or pi >= len(_lab.PAYLOADS) or _lab.PAYLOADS[pi][1] is None:
+            return 0
+        if ci < 0 or ci >= len(_lab.CARRIER_EMIT):
+            return 0
+        ad = organ.__class__.__name__.lower()
+        oran = hedef._teslimat_carpani(ad, lg)
+        n = int(round(_lab.CARRIER_EMIT[ci] * oran * max(0.0, lg.power)))
+        if n <= 0:
+            return 0
+        zarf = hedef.zarf_arayuzu()
+        zarf.neden = ad
+        zarf.sahip = self
+        # Igne yuku sitoplazmaya birakir: cekirdek yaricapinin yarisi
+        # icinde rastgele bir nokta. Molekul kendi bandini bulur ve
+        # ilk adimda baglanir (Molecule.update sonu: _arrived_here).
+        r_ic = max(1.0, hedef.radius * 0.5)
+        for _ in range(n):
+            a = random.uniform(0.0, 2.0 * math.pi)
+            rr = random.uniform(0.0, r_ic)
+            pos = pygame.math.Vector2(hedef.pos.x + math.cos(a) * rr,
+                                      hedef.pos.y + math.sin(a) * rr)
+            hiz = random.uniform(0.25, 0.9) * _lab.MOLECULE_SPEED * zarf.hiz_olcegi
+            b = random.uniform(0.0, 2.0 * math.pi)
+            m = _lab.Molecule(zarf, pos, pygame.math.Vector2(math.cos(b), math.sin(b)) * hiz, pi)
+            m.depth = m.band()
+            hedef.molekul_ekle(m)
+            # Ayni karede baglansin ki olum `killed` listesine girsin ve
+            # avci odulunu alsin. update() cagirmak yanlis olurdu: o,
+            # hucrenin kare-ici hareketini onceki_pos'tan supurur ve taze
+            # dogan molekulu disari firlatabilir. Yeni dogmus molekul
+            # icin hareket adimi anlamsiz - lab'in kendi baglanma
+            # yolu dogrudan (Molecule.update'in son satirlariyla ayni).
+            if m._arrived_here(m.depth, False):
+                m._bind(m.depth)
+        return n
+
+    def _emme(self, hedef, dt, killed):
+        """Stilet baglıyken sitoplazma EMER (mizositoz).
+
+        Olum zehirden degil tukenmeden gelir. Ilerleme (emilen, 0..1) baga
+        aittir; avin kalan enerjisi dogrusal olarak cekilir ve emilen
+        1.0'a varinca hucre biter. Emen, cektiginin EMME_VERIM kadarini
+        kazanir ve emis makinesi icin saniyelik gider oder.
+        """
+        g = game_settings
+        if hedef.dead:
+            return
+        onceki = float(getattr(hedef, 'emilen', 0.0))
+        pay = min(1.0 - onceki, g.STYLET_EMME * dt)
+        if pay <= 0.0:
+            return
+        kalan = max(1e-6, 1.0 - onceki)
+        cek = max(0.0, hedef.energy) * (pay / kalan)
+        hedef.energy -= cek
+        hedef.emilen = onceki + pay
+        self.energy += cek * g.EMME_VERIM - g.STYLET_EMME_GIDER * dt
+        if hedef.emilen >= 1.0 - 1e-9:
+            hedef.energy = 0.0
+            hedef.die('stylet')
+            killed.append(hedef)
+            self.release_binding()
 
     def _molekul_birak(self, hedef, lg, dt):
         """Hedefin zarfina molekul sal. Birakildiysa True.

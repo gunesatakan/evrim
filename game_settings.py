@@ -292,6 +292,23 @@ DEFAULT_SETTINGS = {
     "STYLET_ENERGY": 2.0,
     "STYLET_GROW": 0.25,
     "STYLET_COST": 0.05,
+    # IGNELI SILAHLAR HP HASARI VERMEZ.
+    #
+    # Stilet, harpun ve nematosist once `take_damage(40)` ile soyut bir
+    # zar butunlugu puanini dusuruyordu - "40 hasar", RPG. Oysa zardaki
+    # bir delik saniyeler icinde kapanir; delmek tek basina oldurmez.
+    # Bu organlarin isi YUK TASIMAKTIR: igne, secili yuku (T3SS
+    # efektoru, peptit...) dogrudan iceri birakir ve dozu lab.py'deki
+    # esikler (PAYLOAD_THRESHOLD) yargilar - toksinle ayni muhasebe,
+    # ayni molekuller, ayni temizlenme. Zirh, teslimat oranini duşurur
+    # (lab.teslimat), yani kac molekulun vardigini.
+    #
+    # STILET ise oldurmez, EMER (mizositoz - Vampyrella, Pfiesteria
+    # pedunkulu): baglı kaldigi surece sitoplazmayi ceker; olum zehirden
+    # degil TUKENMEDEN gelir. Lab ile ayni kalibrasyon: DRAIN_RATE 0.16.
+    "STYLET_EMME": 0.16,          # saniyede emilen sitoplazma orani (0..1)
+    "EMME_VERIM": 0.6,            # emilen enerjinin emene gecen payi
+    "STYLET_EMME_GIDER": 2.0,     # emis surerken saniyelik enerji gideri
     "HARPOON_DAMAGE": 15.0,
     "HARPOON_RANGE": 6.0,
     "HARPOON_COOLDOWN": 0.3,
