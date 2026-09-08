@@ -52,9 +52,21 @@ class BaseWeapon(BaseOrgan):
         half = math.atan2(target.radius, max(1.0, d))
         return diff <= math.radians(lg.arc) + half
 
+    #: Atis cizgisi ekranda bu kadar kalir. Once `last_target_pos` her
+    #  karede siliniyordu: cizgi tek bir kare (33 ms) yasiyor, yani hic
+    #  gorunmuyordu. Kullanici nematosistin atesledigini hic gormedi.
+    ATIS_GORUNME = 0.35
+
     def update(self, dt, parent=None):
         self.logic.update(dt)
-        self.last_target_pos = None
+        self._atis_sure = getattr(self, '_atis_sure', 0.0) - dt
+        if self._atis_sure <= 0.0:
+            self.last_target_pos = None
+
+    def atis_isaretle(self, hedef_pos):
+        """Atildi: cizgi ATIS_GORUNME saniye boyunca cizilsin."""
+        self.last_target_pos = hedef_pos
+        self._atis_sure = self.ATIS_GORUNME
 
     def grow(self):
         self.logic.grow()
