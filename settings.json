@@ -80,7 +80,7 @@
         "REPAIR_PER_POINT": 1.5,
         "CAPSULE_SPEED_PENALTY": 0.06,
         "WALL_SPEED_PENALTY": 0.04,
-        "GORUNUM_OLCEGI": 0.25,
+        "GORUNUM_OLCEGI": 1.0,
         "MUCUS_SPEED_PENALTY": 0.02,
         "SLAYER_SPEED_PENALTY": 0.03,
         "STYLET_ARC": 18.0,
