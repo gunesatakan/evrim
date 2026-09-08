@@ -152,6 +152,19 @@ class DangerTransmission:
                 self._reset_chemotaxis_sampling()
                 return (self.target_direction, 'TRAIL', avoid_dir * 50)
 
+        # 3b. TAKIP IZI - genom bu izin sahibine "yaklas" diyor. Beslenmeyle
+        # yarisir; yarisin sonucunu yine sosyal_oncelik geni verir.
+        takip_mem = memory_system.retrieve("trail_follow")
+        if takip_mem:
+            _b = getattr(organism, 'behavior', None)
+            if _b is None or _b.sosyali_sec(scent_intensity):
+                _bas, _son = takip_mem
+                _yon = _son - _bas
+                if _yon.length() > 0:
+                    self.target_direction = _yon.normalize()
+                    self._reset_chemotaxis_sampling()
+                    return (self.target_direction, 'HUNT', self.target_direction * 45)
+
         # 3.5 Tablo susuyor ama gorulen bir av var: eski sabit takip
         if prey_dir is not None and getattr(game_settings,
                                             'PREY_VISION_PRIORITY', 1):

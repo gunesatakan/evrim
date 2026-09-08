@@ -2476,13 +2476,51 @@ class Organism(Entity):
                             detected_points.append(p)
                             break
                 detected_points.sort(key=lambda q: q.seq)
+            # IZ DE GENOMDAN GECER.
+            #
+            # Once bulunan HER iz "trail_prediction" olarak yaziliyor ve
+            # iskelet, tablo sustugu anda ondan KACIYORDU. Roller siniftan
+            # cikip herkes herkesin komsusu olunca bu, herkesin herkesin
+            # izinden kacmasi demek oldu: hucreler ayni kutuplu miknatis
+            # gibi birbirini itiyordu. Bu bir davranis degil, koda yazili
+            # bir refleksti - ve genomun soyleyecegi her seyin onune
+            # geciyordu.
+            #
+            # Artik iz, SAHIBININ koku puanini tasir ve bulan hucre ona
+            # kendi koku spektrumuyla bakar: guclu negatif tepki kacis
+            # izidir, guclu pozitif tepki takip izidir, arasi umursanmaz.
+            # Kacis ve takip ayri ayri toplanir; hangisinin agir bastigi
+            # da izlerin yogunlugundan cikar.
+            kac_yon = pygame.math.Vector2(0, 0); kac_mrk = pygame.math.Vector2(0, 0); kac_top = 0.0
+            tak_yon = pygame.math.Vector2(0, 0); tak_mrk = pygame.math.Vector2(0, 0); tak_top = 0.0
             if detected_points:
-                avg_dir, center_pos, total_int = pygame.math.Vector2(0,0), pygame.math.Vector2(0,0), 0
-                for p in detected_points: avg_dir += p.direction * p.current_intensity; center_pos += p.pos * p.current_intensity; total_int += p.current_intensity
-                if total_int > 0:
-                    final_dir = avg_dir.normalize() if avg_dir.length() > 0 else pygame.math.Vector2(1,0)
-                    self.direction_memory.encode("trail_prediction", (center_pos / total_int, (center_pos / total_int) + final_dir * 300))
-            else: self.direction_memory.forget("trail_prediction")
+                _b = getattr(self, 'behavior', None)
+                _genom = _b is not None and getattr(game_settings, 'BEHAVIOR_ENABLED', False)
+                _benim = self.scent_value
+                _kacis = game_settings.KACIS_ESIGI
+                _atak = game_settings.ATAK_ESIGI
+                for p in detected_points:
+                    w = p.current_intensity
+                    if _genom:
+                        tepki = _b.spectrum_response(
+                            BehaviorGenome.relative_position(p.owner_scent, _benim))
+                    else:
+                        tepki = -1.0            # genom kapali: eski refleks
+                    if tepki <= -_kacis:
+                        kac_yon += p.direction * w; kac_mrk += p.pos * w; kac_top += w
+                    elif tepki >= _atak:
+                        tak_yon += p.direction * w; tak_mrk += p.pos * w; tak_top += w
+            if kac_top > 0 and kac_top >= tak_top:
+                final_dir = kac_yon.normalize() if kac_yon.length() > 0 else pygame.math.Vector2(1, 0)
+                self.direction_memory.encode("trail_prediction", (kac_mrk / kac_top, (kac_mrk / kac_top) + final_dir * 300))
+                self.direction_memory.forget("trail_follow")
+            elif tak_top > 0:
+                final_dir = tak_yon.normalize() if tak_yon.length() > 0 else pygame.math.Vector2(1, 0)
+                self.direction_memory.encode("trail_follow", (tak_mrk / tak_top, (tak_mrk / tak_top) + final_dir * 300))
+                self.direction_memory.forget("trail_prediction")
+            else:
+                self.direction_memory.forget("trail_prediction")
+                self.direction_memory.forget("trail_follow")
 
         # DAVRANIŞ GENOMU - görülen hücrelere verilecek tepki
         behave_dir, behave_resp = None, 0.0

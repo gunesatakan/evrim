@@ -13,11 +13,17 @@ class TrailPoint:
 
     __slots__ = ("pos", "owner_uid", "direction", "max_intensity",
                  "decay_per_second", "radius", "timestamp", "life_time",
-                 "seq", "dogum", "_saat", "x", "y", "r2")
+                 "seq", "dogum", "_saat", "x", "y", "r2", "owner_scent")
 
-    def __init__(self, x, y, owner_uid, direction, radius, saat, simdi):
+    def __init__(self, x, y, owner_uid, direction, radius, saat, simdi,
+                 owner_scent=0.0):
         self.pos = pygame.math.Vector2(x, y)
         self.owner_uid = owner_uid
+        # Izi birakanin KOKU PUANI. Iz, sahibinin kim oldugunu tasimali:
+        # bulan hucre buna kendi davranis tablosuyla karar verir - kacar,
+        # takip eder ya da umursamaz. Sahipsiz bir iz yalnizca "biri
+        # gecmis" der ve tek yapilabilecek sey korkmaktir.
+        self.owner_scent = float(owner_scent)
         self.direction = pygame.math.Vector2(direction)
 
         # 1. Koku Yoğunluğu Hesaplama (Hacim Oranı x 10)
@@ -95,9 +101,9 @@ class TrailManager:
         c = self.CELL
         return (int(x // c), int(y // c))
 
-    def add_point(self, x, y, owner_uid, direction, radius):
+    def add_point(self, x, y, owner_uid, direction, radius, owner_scent=0.0):
         p = TrailPoint(x, y, owner_uid, direction, radius,
-                       self._saat, self._saat[0])
+                       self._saat, self._saat[0], owner_scent)
         self.points.append(p)
         self._grid.setdefault(self._cell(x, y), []).append(p)
         if radius > self._max_radius:
