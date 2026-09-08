@@ -160,6 +160,30 @@ class RuntimeInspector:
         'memory_length':    (200, 200, 150),
     }
 
+    # Organ turu -> panel rengi. Genom seridiyle ayni dili konussun diye
+    # gen renkleriyle uyumlu secildi; silahlar tek bir uyari rengiyle
+    # toplanir cunku panelde onemli olan HANGI silah degil, SILAHLI OLMAK.
+    ORGAN_RENK = {
+        'Chemoreceptor':   (100, 255, 100),
+        'Photoreceptor':   (255, 220, 100),
+        'Mechanoreceptor': (255, 150, 150),
+        'Flagella':        (100, 180, 255),
+        'Cilia':           (180, 100, 255),
+        'Membrane':        (120, 230, 220),
+        'Cytoplasm':       (200, 200, 200),
+        'Vacuole':         (150, 200, 255),
+        'Cytoskeleton':    (200, 200, 150),
+        'Ribosome':        (150, 200, 255),
+    }
+    SILAH_RENK = (255, 110, 90)
+
+    # Panelde gorunme sirasi: once DUYU (hucre neyi biliyor), sonra
+    # HAREKET (ne yapabiliyor), sonra SILAH (nasil avlaniyor), en sonda
+    # ic isleyis. Bilinmeyen organlar sona eklenir.
+    ORGAN_SIRA = ('Chemoreceptor', 'Mechanoreceptor', 'Photoreceptor',
+                  'Flagella', 'Cilia', 'Membrane', 'Vacuole',
+                  'Cytoplasm', 'Ribosome', 'Cytoskeleton')
+
     STATE_COLORS = {
         "THREATENED": (255, 60, 60),
         "HUNGRY":     (255, 200, 50),
@@ -180,6 +204,12 @@ class RuntimeInspector:
         self._evrim_onbellek = None
         self._evrim_yas = 1e9
         self._evrim_gecmis = []    # [(t, silahli_oran, katmanli_oran)]
+        # PANEL KAYDIRMASI. Organ listesi eklenince icerik 800 px'lik
+        # panele sigmiyor: cok organli bir hucrede alt bolumler gorunmez
+        # oluyordu. Teker panel uzerindeyken kaydirir, disindayken
+        # kamerayi yakinlastirir.
+        self.panel_kaydirma = 0
+        self._panel_icerik = 0
         self.panel_x = WIDTH - self.PANEL_W
 
         # Fonts (pygame must be init'd before this)
@@ -208,6 +238,8 @@ class RuntimeInspector:
                 d = math.hypot(o.pos.x - mx, o.pos.y - my)
                 if d < o.radius + 15 and d < best_d:
                     best, best_d = o, d
+            if best is not self.selected:
+                self.panel_kaydirma = 0     # yeni hucre bastan gorunsun
             self.selected = best
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_h:
@@ -226,6 +258,17 @@ class RuntimeInspector:
                 self._step_speed(+1)
             elif event.key in (pygame.K_MINUS, pygame.K_KP_MINUS):
                 self._step_speed(-1)
+
+    def tekerlek(self, event, ekran_pos):
+        """Teker paneli mi kaydirsin? Kaydirdiysa True doner.
+
+        Teker yalnizca kamerayi yakinlastiriyordu; panel icerigi ekrandan
+        tastiginda alt bolumlere ulasmanin bir yolu yoktu.
+        """
+        if self.selected is None or ekran_pos[0] < self.panel_x:
+            return False
+        self.panel_kaydirma = max(0, self.panel_kaydirma - event.y * 40)
+        return True
 
     # HIZLANDIRMA ALT-ADIMLA YAPILIR, dt BUYUTULEREK DEGIL.
     #
@@ -350,7 +393,19 @@ class RuntimeInspector:
 
         px = self.panel_x + 12          # left padding
         pw = self.PANEL_W - 24          # usable width
-        y = 10
+
+        # Icerik panele sigmayabilir (organ listesi hucreye gore uzar).
+        # Kirpma alani panele sabitlenir, icerik kaydirma kadar yukari
+        # kayar. Gecen karede olculen yukseklikle sinirlanir.
+        _alt = 28                       # alt ipucu satirina ayrilan yer
+        _gorunur = HEIGHT - _alt - 10
+        self.panel_kaydirma = max(0, min(
+            self.panel_kaydirma, max(0, self._panel_icerik - _gorunur)))
+        _onceki_kirpma = screen.get_clip()
+        screen.set_clip(pygame.Rect(self.panel_x, 0,
+                                    self.PANEL_W, HEIGHT - _alt))
+        _y_bas = 10 - self.panel_kaydirma
+        y = _y_bas
 
         # ── IDENTITY & VITALS ──────────────────────────────
         y = self._header(screen, "IDENTITY & VITALS", y, px, pw)
@@ -378,6 +433,9 @@ class RuntimeInspector:
             y = self._kv(screen, "Shutdown", "YES", y, px,
                          vc=(255, 60, 60))
         y += 6
+
+        # ── ORGANLAR ───────────────────────────────────────
+        y = self._draw_organlar(screen, o, y, px, pw)
 
         # ── SENSORY ECOLOGY ────────────────────────────────
         y = self._header(screen, "SENSORY ECOLOGY (Weber-Fechner)", y, px, pw)
@@ -537,10 +595,119 @@ class RuntimeInspector:
             y = self._kv(screen, "Genome", "Not initialized", y, px,
                          vc=self.COL_LABEL)
 
+        screen.set_clip(_onceki_kirpma)
+        self._panel_icerik = y - _y_bas
+
+        # KAYDIRMA CUBUGU. Icerik tasmiyorsa cizilmez - tasmadigi halde
+        # duran bir cubuk "asagida daha var" der ve yaniltir.
+        if self._panel_icerik > _gorunur:
+            _iz = HEIGHT - _alt
+            _yuk = max(24, int(_iz * _gorunur / self._panel_icerik))
+            _en_cok = max(1, self._panel_icerik - _gorunur)
+            _ust = int((_iz - _yuk) * self.panel_kaydirma / _en_cok)
+            _cx = self.panel_x + self.PANEL_W - 4
+            pygame.draw.rect(screen, self.COL_BAR_BG, (_cx, 0, 3, _iz))
+            pygame.draw.rect(screen, self.COL_HEADER, (_cx, _ust, 3, _yuk))
+
         # Bottom hint
-        hint = self._fnt_s.render("ESC = Deselect   H = Heatmap",
+        hint = self._fnt_s.render("ESC = birak   H = koku   teker = kaydir",
                                   True, (80, 80, 100))
         screen.blit(hint, (self.panel_x + 12, HEIGHT - 22))
+
+    def _draw_organlar(self, screen, o, y, px, pw):
+        """Hucrenin SAHIP OLDUGU organlar ve gelismislik dereceleri.
+
+        Panel simdiye kadar yalnizca GENOMU gosteriyordu - yani
+        torbadaki yukseltme SANSLARINI. Torba hucrenin ne olduğunu
+        soylemez: ayni genomdan biri uc kemoreseptorlu, oteki silahli
+        cikabilir. Organlarin kendisi yalnizca dunyada bir cizim olarak
+        vardi; hangi organin hangi eksende ne kadar gelistigi hicbir
+        yerde yazmiyordu.
+
+        Ayni turden organlar TEK SATIRDA toplanir (x3 gibi) ve cubuklar
+        o turun EN GELISMIS ornegini gosterir - kokuyu, ortalama burun
+        degil EN IYI burun bulur.
+        """
+        y = self._header(screen, "ORGANLAR", y, px, pw)
+        organlar = getattr(o, 'organs', None) or []
+        if not organlar:
+            return self._kv(screen, "Organ", "yok", y, px, vc=self.COL_LABEL)
+
+        try:
+            from organs.peripheral.weapons.weapons import BaseWeapon
+        except Exception:
+            BaseWeapon = ()
+
+        gruplar = {}
+        for org in organlar:
+            gruplar.setdefault(type(org).__name__, []).append(org)
+
+        sira = [a for a in self.ORGAN_SIRA if a in gruplar]
+        sira += sorted(a for a in gruplar if a not in self.ORGAN_SIRA)
+
+        for ad in sira:
+            takim = gruplar[ad]
+            silah = bool(BaseWeapon) and isinstance(takim[0], BaseWeapon)
+            renk = self.SILAH_RENK if silah else self.ORGAN_RENK.get(
+                ad, self.COL_VALUE)
+
+            # Turun EN GELISMIS ornegi: her eksende en yuksek oran.
+            eksenler = []
+            for org in takim:
+                # Once ORGANA, sonra mantigina sorulur. Cogu organda
+                # gelisim mantikta durur; iskelette ise mantik nesnesi
+                # (DangerTransmission) karar makinesidir ve gelismez -
+                # cevabi organin kendisi verir.
+                kaynak = (org if hasattr(org, 'gelisim')
+                          else getattr(org, 'logic', None))
+                if kaynak is None or not hasattr(kaynak, 'gelisim'):
+                    continue
+                try:
+                    raporlar = kaynak.gelisim()
+                except Exception:
+                    continue
+                for i, (eks, oran, metin) in enumerate(raporlar):
+                    oran = max(0.0, min(1.0, float(oran)))
+                    if i < len(eksenler):
+                        if oran > eksenler[i][1]:
+                            eksenler[i] = (eks, oran, metin)
+                    else:
+                        eksenler.append((eks, oran, metin))
+
+            # Baslik satiri: renk kutusu + ad + adet
+            pygame.draw.rect(screen, renk, (px, y + 4, 8, 8))
+            bas = self._fnt_l.render(ad, True, renk)
+            screen.blit(bas, (px + 13, y))
+            if len(takim) > 1:
+                n = self._fnt_l.render("x%d" % len(takim), True,
+                                       self.COL_HIGHLIGHT)
+                screen.blit(n, (px + 15 + bas.get_width(), y))
+            y += bas.get_height() + 2
+
+            if not eksenler:
+                # Yukseltme ekseni olmayan organ (or. iskelet): cubuk
+                # cizmek "gelismemis" demek olurdu, oysa gelisemez.
+                ns = self._fnt_s.render("yukseltme ekseni yok", True,
+                                        self.COL_LABEL)
+                screen.blit(ns, (px + 13, y))
+                y += ns.get_height() + 5
+                continue
+
+            # Ince cubuklar: etiket solda, deger sagda, cubuk altta.
+            for eks, oran, metin in eksenler:
+                es = self._fnt_s.render(eks, True, self.COL_LABEL)
+                ds = self._fnt_s.render(metin, True, self.COL_VALUE)
+                screen.blit(es, (px + 13, y))
+                screen.blit(ds, (px + pw - ds.get_width(), y))
+                y += es.get_height() + 1
+                cw = pw - 13
+                pygame.draw.rect(screen, self.COL_BAR_BG, (px + 13, y, cw, 5))
+                dolu = int(cw * oran)
+                if dolu > 0:
+                    pygame.draw.rect(screen, renk, (px + 13, y, dolu, 5))
+                y += 8
+            y += 3
+        return y + 3
 
     # ── drawing helpers ─────────────────────────────────────
 
@@ -828,6 +995,11 @@ def main(food_count=None, kaotropi_count=None):
                     pygame.FULLSCREEN if tam_ekran else 0)
                 olcek, kayma = _fit()
             elif event.type == pygame.MOUSEWHEEL:
+                # Teker once PANELE sorulur: imlec panelin uzerindeyse
+                # kamera degil, panel icerigi kayar.
+                if inspector.tekerlek(event, ekran_konumu(
+                        pygame.mouse.get_pos())):
+                    continue
                 # Imlecin gosterdigi DUNYA noktasi sabit kalsin: once o
                 # noktayi bul, zoom'u degistir, sonra merkezi geri hesapla.
                 _m = ekran_konumu(pygame.mouse.get_pos())

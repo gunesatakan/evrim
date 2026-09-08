@@ -71,6 +71,35 @@ class MechanoreceptorLogic:
         """
         return (1.0 - min(1.0, max(0.0, self.kapsama))) * 180.0
 
+    def gelisim(self):
+    # GELISIM RAPORU
+    #
+    # Organin ne kadar gelistigini SORAN yer, organin ICINI bilmemeli.
+    # Denetim paneli her organ turu icin ayri bir dal tutsaydi, yeni bir
+    # organ eklemek paneli de duzenlemeyi gerektirirdi. Organ kendi
+    # gelisimini kendi anlatir.
+    #
+    # Doner: [(eksen adi, 0..1 oran, gosterilecek metin)]
+    #
+    # ORAN yalnizca cubuk icindir. Gercek tavani olan eksenlerde
+    # (kazanc, kapsama) gercek orandir; tavansiz eksenlerde (uzunluk,
+    # guc) 10 yukseltme tam cubuk sayilir - METIN her zaman gercek
+    # degeri tasir, cubuk yalnizca bir bakista fikir verir.
+        g = game_settings
+        taban = g.GURULTU_REF / (g.SES_MENZIL_OLCEGI ** 2)
+        alt = g.MECHANO_ESIK_MIN
+        # Esik CARPARAK duser, yani gelisim logaritmiktir; oran da oyle
+        # olculur ki cubuk esit adimlarla ilerlesin.
+        oran = 0.0
+        if taban > alt and self.esik > 0.0:
+            oran = math.log(taban / self.esik) / math.log(taban / alt)
+        menzil = math.sqrt(g.GURULTU_REF / max(1e-9, self.esik))
+        ktab = g.MECHANO_KAPSAMA_TABAN
+        return [("Duyarlilik", max(0.0, min(1.0, oran)),
+                 "menzil %.0f px" % menzil),
+                ("Kapsama", (self.kapsama - ktab) / max(1e-6, 1.0 - ktab),
+                 "yon +-%.0f der" % self.yon_hatasi())]
+
     def grow(self):
         """ESIK gelisimi: daha kucuk titresimleri duyar (menzil buyur)."""
         self.esik = max(game_settings.MECHANO_ESIK_MIN,

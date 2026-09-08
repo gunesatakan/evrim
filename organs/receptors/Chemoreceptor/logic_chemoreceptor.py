@@ -74,6 +74,32 @@ class ChemoreceptorLogic:
         self.pencere = min(game_settings.CHEMO_PENCERE_MAX,
                            self.pencere + game_settings.GROW_CHEMO_PENCERE)
 
+    def gelisim(self):
+    # GELISIM RAPORU
+    #
+    # Organin ne kadar gelistigini SORAN yer, organin ICINI bilmemeli.
+    # Denetim paneli her organ turu icin ayri bir dal tutsaydi, yeni bir
+    # organ eklemek paneli de duzenlemeyi gerektirirdi. Organ kendi
+    # gelisimini kendi anlatir.
+    #
+    # Doner: [(eksen adi, 0..1 oran, gosterilecek metin)]
+    #
+    # ORAN yalnizca cubuk icindir. Gercek tavani olan eksenlerde
+    # (kazanc, kapsama) gercek orandir; tavansiz eksenlerde (uzunluk,
+    # guc) 10 yukseltme tam cubuk sayilir - METIN her zaman gercek
+    # degeri tasir, cubuk yalnizca bir bakista fikir verir.
+        g = game_settings
+        n = max(0.0, (self.length - 5.0) / max(1e-6, g.GROW_SMELL))
+        out = [("Uzunluk", min(1.0, n / 10.0),
+                "%.0f px  esik %.3f" % (self.length, self.scent_sensitivity))]
+        ktab, kmax = g.CHEMO_GAIN_TABAN, g.CHEMO_GAIN_MAX
+        out.append(("Kazanc", (self.kazanc - ktab) / max(1e-6, kmax - ktab),
+                    "%.0f / %.0f" % (self.kazanc, kmax)))
+        ptab, pmax = g.CHEMO_SAMPLE_INTERVAL, g.CHEMO_PENCERE_MAX
+        out.append(("Pencere", (self.pencere - ptab) / max(1e-6, pmax - ptab),
+                    "%.2f s" % self.pencere))
+        return out
+
     def grow(self):
         self.length += game_settings.GROW_SMELL
 

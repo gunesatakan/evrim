@@ -54,6 +54,28 @@ class CytoplasmLogic:
     def update(self, dt):
         return self.enzyme.process(dt, self.food_queue)
 
+    def gelisim(self):
+    # GELISIM RAPORU
+    #
+    # Organin ne kadar gelistigini SORAN yer, organin ICINI bilmemeli.
+    # Denetim paneli her organ turu icin ayri bir dal tutsaydi, yeni bir
+    # organ eklemek paneli de duzenlemeyi gerektirirdi. Organ kendi
+    # gelisimini kendi anlatir.
+    #
+    # Doner: [(eksen adi, 0..1 oran, gosterilecek metin)]
+    #
+    # ORAN yalnizca cubuk icindir. Gercek tavani olan eksenlerde
+    # (kazanc, kapsama) gercek orandir; tavansiz eksenlerde (uzunluk,
+    # guc) 10 yukseltme tam cubuk sayilir - METIN her zaman gercek
+    # degeri tasir, cubuk yalnizca bir bakista fikir verir.
+        g = game_settings
+        n = max(0.0, (self.size - 2.0) / max(1e-6, g.GROW_BODY))
+        sd = self.enzyme.base_digestion_time
+        # Sindirim SURESI dusuyor: gelisim ters yonde okunur.
+        so = (g.DIGESTION_TIME - sd) / max(1e-6, g.DIGESTION_TIME - 1.0)
+        return [("Boyut", min(1.0, n / 20.0), "%.2f" % self.size),
+                ("Sindirim", max(0.0, min(1.0, so)), "%.1f s" % sd)]
+
     def grow_enzyme(self):
         self.enzyme.grow()
 

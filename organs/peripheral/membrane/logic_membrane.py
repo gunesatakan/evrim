@@ -255,6 +255,43 @@ class MembraneLogic:
         """Mekanoreseptörden gelen aciliyet sinyalini uygula."""
         self.calcium_boost = urgency_level
 
+    KATMAN_ADI = (('wall', 'Duvar'), ('outer', 'Dis zar'),
+                  ('capsule', 'Kapsul'), ('slayer', 'S-tabaka'),
+                  ('mucus', 'Mukus'), ('efflux', 'Pompa'),
+                  ('repair', 'Onarim'), ('slip', 'Kayganlik'))
+
+    def gelisim(self):
+    # GELISIM RAPORU
+    #
+    # Organin ne kadar gelistigini SORAN yer, organin ICINI bilmemeli.
+    # Denetim paneli her organ turu icin ayri bir dal tutsaydi, yeni bir
+    # organ eklemek paneli de duzenlemeyi gerektirirdi. Organ kendi
+    # gelisimini kendi anlatir.
+    #
+    # Doner: [(eksen adi, 0..1 oran, gosterilecek metin)]
+    #
+    # ORAN yalnizca cubuk icindir. Gercek tavani olan eksenlerde
+    # (kazanc, kapsama) gercek orandir; tavansiz eksenlerde (uzunluk,
+    # guc) 10 yukseltme tam cubuk sayilir - METIN her zaman gercek
+    # degeri tasir, cubuk yalnizca bir bakista fikir verir.
+        g = game_settings
+        ni = max(0.0, (self.max_integrity - g.MEMBRANE_INTEGRITY_BASE)
+                 / max(1e-6, g.GROW_MEMBRANE_INTEGRITY))
+        ne = max(0.0, (self.etc.efficiency - g.ENERGY_REGEN_BASE)
+                 / max(1e-6, g.GROW_ENERGY_REGEN))
+        out = [("Butunluk", min(1.0, ni / 10.0),
+                "%.0f / %.0f" % (self.integrity, self.max_integrity)),
+               ("ETC verimi", min(1.0, ne / 10.0),
+                "x%.2f" % self.etc.efficiency)]
+        # SAVUNMA KATMANLARI. Yalnizca VAR OLANLAR listelenir: sifir
+        # kalinliktaki bir katmani gostermek "kapsulu var ama zayif"
+        # izlenimi verirdi - oysa katman hic dogmamistir.
+        for alan, ad in self.KATMAN_ADI:
+            d = float(getattr(self, alan, 0.0) or 0.0)
+            if d > 0.0:
+                out.append((ad, min(1.0, d / 5.0), "%.1f" % d))
+        return out
+
     def grow_etc(self):
         self.etc.grow()
 

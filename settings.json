@@ -2,8 +2,9 @@
     "settings": {
         "WORLD_SCALE": 1.0,
         "ARENA_OLCEK": 2.0,
-        "FOOD_COUNT": 80,
+        "FOOD_COUNT": 205,
         "KAOTROPI_COUNT": 1,
+        "OPTROPI_COUNT": 1,
         "NOTROPI_COUNT": 1,
         "PREY_BIOMASS_YIELD": 0.5,
         "PREY_NEW_ORGAN_CHANCE": 0.25,
@@ -153,7 +154,39 @@
         "FOOD_SPAWN_RATE": 4.89,
         "FOOD_PATCH_SIZE": 26,
         "FOOD_PATCH_SIGMA": 45.0,
-        "FOOD_MAX": 80,
+        "HARITA_YAMALARI": [
+            [
+                358.7,
+                226.8,
+                31,
+                105.0
+            ],
+            [
+                1862.0,
+                1200.0,
+                31,
+                105.0
+            ],
+            [
+                1993.8,
+                253.2,
+                31,
+                105.0
+            ],
+            [
+                348.1,
+                1189.5,
+                31,
+                105.0
+            ],
+            [
+                1091.9,
+                677.8,
+                81,
+                275.0
+            ]
+        ],
+        "FOOD_MAX": 205,
         "RIBOSOME_AREA": 20.0,
         "VACUOLE_AREA": 30.0,
         "CILIA_TURN_MULTI": 0.05,
@@ -179,7 +212,7 @@
         "SCENT_HEATMAP_INTERVAL": 0.05,
         "SCENT_SENSITIVITY_BASE": 0.3,
         "DIVISION_MODE": true,
-        "DIVISION_MAX_POPULATION": 120,
+        "DIVISION_MAX_POPULATION": 100,
         "ORGAN_GAIN_RATE": 0.02,
         "ORGAN_LOSS_RATE": 0.02,
         "ORGAN_ANGLE_RATE": 0.1,
@@ -205,8 +238,7 @@
         "TUMBLE_ANGLE_SIGMA": 60.0,
         "LEVY_ALPHA": 1.5,
         "LEVY_MIN_STEP": 0.5,
-        "LEVY_MAX_DURATION": 10.0,
-        "OPTROPI_COUNT": 1
+        "LEVY_MAX_DURATION": 10.0
     },
     "entities": {
         "optropi_0": {

@@ -94,5 +94,15 @@ class Cytoskeleton(BaseOrgan):
         # FtsZ benzeri bolunme halkasi - govdenin ortasinda ince bir cember
         pygame.draw.circle(screen, ton, (int(cx), int(cy)), int(r * 0.5), 1)
 
+    def gelisim(self):
+        """Iskeletin gelisme ekseni YOKTUR.
+
+        grow() bos: iskelet buyuyup kucullmez, karar makinesidir. Bos
+        liste dondurmek panele "bu organ var ama yukseltilemez" dedirtir;
+        gelisim() hic tanimlamamak ise "bilmiyorum" demek olurdu ve
+        ikisi ayni sey degil.
+        """
+        return []
+
     def grow(self):
         pass

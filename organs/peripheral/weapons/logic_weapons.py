@@ -88,6 +88,27 @@ class WeaponLogic:
     def trigger(self):
         self.cooldown_timer = self.cooldown
 
+    def gelisim(self):
+    # GELISIM RAPORU
+    #
+    # Organin ne kadar gelistigini SORAN yer, organin ICINI bilmemeli.
+    # Denetim paneli her organ turu icin ayri bir dal tutsaydi, yeni bir
+    # organ eklemek paneli de duzenlemeyi gerektirirdi. Organ kendi
+    # gelisimini kendi anlatir.
+    #
+    # Doner: [(eksen adi, 0..1 oran, gosterilecek metin)]
+    #
+    # ORAN yalnizca cubuk icindir. Gercek tavani olan eksenlerde
+    # (kazanc, kapsama) gercek orandir; tavansiz eksenlerde (uzunluk,
+    # guc) 10 yukseltme tam cubuk sayilir - METIN her zaman gercek
+    # degeri tasir, cubuk yalnizca bir bakista fikir verir.
+        n = max(0.0, (self.power - 1.0) / max(1e-6, self._s("GROW")))
+        # Menzili 0 olan silah ATILMAZ, DEGDIRILIR; "menzil 0" yazmak
+        # bozuk bir deger gibi okunuyordu.
+        m = "temas" if self.reach <= 0.0 else "menzil %.0f" % self.reach
+        return [("Guc", min(1.0, n / 10.0),
+                 "hasar %.1f  %s" % (self.damage, m))]
+
     def grow(self):
         """Silahi gelistir: guc carpani artar (hasar = DAMAGE * power).
 

@@ -25,6 +25,29 @@ class PhotoreceptorLogic:
         self.angle += delta_angle
         self._update_visual_levels()
 
+    def gelisim(self):
+    # GELISIM RAPORU
+    #
+    # Organin ne kadar gelistigini SORAN yer, organin ICINI bilmemeli.
+    # Denetim paneli her organ turu icin ayri bir dal tutsaydi, yeni bir
+    # organ eklemek paneli de duzenlemeyi gerektirirdi. Organ kendi
+    # gelisimini kendi anlatir.
+    #
+    # Doner: [(eksen adi, 0..1 oran, gosterilecek metin)]
+    #
+    # ORAN yalnizca cubuk icindir. Gercek tavani olan eksenlerde
+    # (kazanc, kapsama) gercek orandir; tavansiz eksenlerde (uzunluk,
+    # guc) 10 yukseltme tam cubuk sayilir - METIN her zaman gercek
+    # degeri tasir, cubuk yalnizca bir bakista fikir verir.
+        g = game_settings
+        nr = max(0.0, (self.range - g.VISION_RANGE_BASE)
+                 / max(1e-6, g.GROW_VISION_RANGE))
+        na = max(0.0, (self.angle - g.VISION_ANGLE_BASE)
+                 / max(1e-6, g.GROW_VISION_ANGLE))
+        return [("Menzil", min(1.0, nr / 10.0), "%.0f px" % self.range),
+                ("Gorus acisi", min(1.0, na / 10.0),
+                 "%.0f der" % math.degrees(self.angle))]
+
     def grow(self, type='range'):
         if type == 'range':
             self.range += game_settings.GROW_VISION_RANGE

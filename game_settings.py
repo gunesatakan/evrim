@@ -554,7 +554,7 @@ DEFAULT_SETTINGS = {
     #     120 -> ~16  ms -> ~2.1x         45 ->  5.6 ms -> 6.00x
     # Makine zorlaniyorsa launcher'dan dusurulebilir; buyutmek cesitliligi
     # ve secilim gucunu artirir.
-    "DIVISION_MAX_POPULATION": 120,
+    "DIVISION_MAX_POPULATION": 100,
 
     # --- ORGAN MUTASYONU ---
     #

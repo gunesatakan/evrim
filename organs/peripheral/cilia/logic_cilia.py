@@ -197,3 +197,23 @@ class CiliaLogic:
     def grow(self):
         self.length += game_settings.GROW_CILIA
         self.recalculate_boosts()
+
+    def gelisim(self):
+    # GELISIM RAPORU
+    #
+    # Organin ne kadar gelistigini SORAN yer, organin ICINI bilmemeli.
+    # Denetim paneli her organ turu icin ayri bir dal tutsaydi, yeni bir
+    # organ eklemek paneli de duzenlemeyi gerektirirdi. Organ kendi
+    # gelisimini kendi anlatir.
+    #
+    # Doner: [(eksen adi, 0..1 oran, gosterilecek metin)]
+    #
+    # ORAN yalnizca cubuk icindir. Gercek tavani olan eksenlerde
+    # (kazanc, kapsama) gercek orandir; tavansiz eksenlerde (uzunluk,
+    # guc) 10 yukseltme tam cubuk sayilir - METIN her zaman gercek
+    # degeri tasir, cubuk yalnizca bir bakista fikir verir.
+        n = max(0.0, (self.length - 3.0)
+                / max(1e-6, game_settings.GROW_CILIA))
+        return [("Uzunluk", min(1.0, n / 10.0), "%.0f px  itki %.1f"
+                 % (self.length,
+                    getattr(self, "base_thrust_magnitude", 0.0)))]
