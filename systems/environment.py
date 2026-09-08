@@ -251,18 +251,25 @@ class ScentEnvironment:
     def _ramp(t):
         """Koku yoğunluğu (0..1) -> (r, g, b, a) renk geçişi.
 
-        Koyu lacivert (zayıf) -> teal -> yeşil -> sarı (yoğun).
+        Koyu lacivert (zayıf) -> mor -> magenta -> turuncu (yoğun).
+
+        Rampa once teal -> YESIL -> sari idi. Kokunun tepesi tam besinin
+        oldugu yerdir (besin yayar) ve besin de yesildir: en yogun koku
+        besinle AYNI TONA oturuyor, besin bulutun icinde kayboluyordu.
+        Cizim sirasi dogruydu (koku altta, besin ustte) - sorun kontrast.
+        Yesil hic kullanilmayinca yesil besin de mavi les de bulutun
+        ustunde okunur. Tepe alfasi da dusuruldu: 200 -> 160.
         """
         if t < 0.33:
             k = t / 0.33
-            r, g, b = 5 + 5 * k, 25 + 85 * k, 60 + 50 * k
+            r, g, b = 10 + 40 * k, 12 + 8 * k, 60 + 90 * k
         elif t < 0.66:
             k = (t - 0.33) / 0.33
-            r, g, b = 10 + 40 * k, 110 + 90 * k, 110 - 50 * k
+            r, g, b = 50 + 130 * k, 20 + 20 * k, 150 - 20 * k
         else:
             k = (t - 0.66) / 0.34
-            r, g, b = 50 + 205 * k, 200 + 55 * k, 60 - 10 * k
-        return int(r), int(g), int(b), int(25 + 175 * t)
+            r, g, b = 180 + 75 * k, 40 + 120 * k, 130 - 110 * k
+        return int(r), int(g), int(b), int(20 + 140 * t)
 
     def draw_debug(self, screen):
         """Koku alanını yumuşak bir ısı haritası olarak çizer.
