@@ -2120,6 +2120,33 @@ class Organism(Entity):
         other.log_enabled = False
         other.debug_motor = False
 
+        # MIDE DE IKIYE BOLUNUR.
+        #
+        # deepcopy sitoplazmadaki besin kuyrugunu ve o an sindirilmekte
+        # olan besini OLDUGU GIBI kopyaliyordu: iki yavru da tam mideyle
+        # doguyor, yani her bolunme mideyi ikiye KATLIYORDU - yoktan
+        # enerji. Enerji ve kairomon yariya bolunurken mide bolunmuyordu.
+        #
+        # Kuyruk sirayla paylasilir. Islenmekte olan besin ilerlemesiyle
+        # birlikte tek yavruda kalir; o yavru kuyrugun kucuk yarisini
+        # alir ki pay adil olsun.
+        _g1 = getattr(getattr(self, 'body', None), 'logic', None)
+        _g2 = getattr(getattr(other, 'body', None), 'logic', None)
+        if _g1 is not None and _g2 is not None:
+            kuyruk = list(_g1.food_queue)
+            if _g1.enzyme.current_food is not None:
+                _g1.food_queue = kuyruk[1::2]
+                _g2.food_queue = kuyruk[0::2]
+            else:
+                _g1.food_queue = kuyruk[0::2]
+                _g2.food_queue = kuyruk[1::2]
+            _g2.enzyme.current_food = None
+            _g2.enzyme.progress = 0.0
+        # Sarmalanmakta olan besin dunyadaki TEK bir nesnedir; kopyasi
+        # hayalet olurdu. Yalnizca bolunen taraf tutmaya devam eder.
+        if getattr(other, 'yutulan_besin', None) is not None:
+            other.yutulan_besin = None
+
         # Sayacı hemen artır: aynı karede birden fazla hücre bölünebilir ve
         # hepsi kare başında okunan aynı nüfus değerini görürse tavan aşılır.
         Organism.population_count += 1
