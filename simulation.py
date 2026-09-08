@@ -1047,8 +1047,10 @@ class RuntimeInspector:
             yy += 4
             for t_sn, neden, idx, tur in son:
                 ad, renk = self.OLUM_ETIKET.get(neden, (neden, (200, 200, 210)))
-                sol = self._fnt_s.render("%6.1fs  #%d" % (t_sn, idx), True,
-                                         (130, 145, 170))
+                # Indeks TURE gore sayilir: Optropi #0 ile Kaotropi #0
+                # ayni "#0" gorunuyordu. Tur kisaltmasi ayirt eder.
+                sol = self._fnt_s.render("%6.1fs  %s#%d" % (t_sn, tur[:3], idx),
+                                         True, (130, 145, 170))
                 screen.blit(sol, (g + 10, yy))
                 sag = self._fnt_s.render(ad, True, renk)
                 screen.blit(sag, (g + w - 10 - sag.get_width(), yy))
