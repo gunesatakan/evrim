@@ -934,9 +934,9 @@ class Organism(Entity):
     def koku_menzili(self):
         """Bu burnun en uzaktan duyabilecegi kaynak ne kadar uzakta olabilir.
 
-        C(d) = YAYIM * koku * (r0/(r0+d))^2 >= esik  cozulur:
+        C(d) = YAYIM * koku * exp(-d/BULUT) >= esik  cozulur:
 
-            d = r0 * (sqrt(YAYIM * koku / esik) - 1)
+            d = BULUT * ln(YAYIM * koku / esik)
 
         Buna alici ucunun govde disindaki payi eklenir. Yalnizca komsu
         taramasi icin bir UST SINIRDIR; gercek algi perceive_and_decide'da
@@ -952,7 +952,8 @@ class Organism(Entity):
             oran = sv / esik
             if oran <= 1.0:
                 continue
-            d = r0 * (math.sqrt(oran) - 1.0) + self.radius + c.logic.length
+            d = (max(1.0, game_settings.KOKU_BULUT) * math.log(oran)
+                 + r0 + self.radius + c.logic.length)
             if d > en_iyi:
                 en_iyi = d
         return en_iyi
@@ -1024,6 +1025,18 @@ class Organism(Entity):
         else:
             for organ in self.organs:
                 organ.draw(screen, self)
+
+        # NEMATOSIST IPI. Vurulan hucre 2.5 sn tutulur; once bunun hicbir
+        # gorsel izi yoktu - hucre "birine yapisip oylece duruyor" gibi
+        # gorunuyordu. Ip, tutandan tutulana gerilir ve suresi dolarken
+        # solar.
+        _tut = getattr(self, 'tether_from', None)
+        if self.tether_timer > 0.0 and _tut is not None and not _tut.dead:
+            _k = self.tether_timer / max(1e-6, game_settings.NEMATOCYST_TETHER_TIME)
+            _renk = (int(120 + 135 * _k), int(200 * _k) + 40, 90)
+            pygame.draw.line(screen, _renk, _tut.pos, self.pos, 2)
+            pygame.draw.circle(screen, _renk, (int(self.pos.x), int(self.pos.y)),
+                               max(2, int(self.radius * 0.35)), 1)
 
         if self.current_trail_escape_vector:
             end = self.pos + self.current_trail_escape_vector
@@ -1162,6 +1175,7 @@ class Organism(Entity):
         # Bos ise burun yok demektir; koku kanali tamamen kapalidir.
         alicilar = getattr(self, '_alici_noktalari', ())
         yayim = game_settings.KOKU_YAYIM
+        bulut = max(1.0, game_settings.KOKU_BULUT)
         # log(esik kati) / log(doyum): esikte 0, doyumda 1.
         _doyum = math.log(max(1.0001, game_settings.KOKU_DOYUM))
         # Kaba eleme icin: en hassas esik ve alici ucunun govde
@@ -1234,15 +1248,15 @@ class Organism(Entity):
             # Kaba eleme HEDEFIN KENDI kokusundan hesaplanir. Populasyon
             # geneline ait bir ust sinir kullanmak, o sinir bayatladigi an
             # gercekten duyulan bir kokuyu SESSIZCE kirpardi.
-            #     C(d) = YAYIM*koku*(r0/(r0+d))^2 >= esik
-            #  -> d_max = r0*(sqrt(YAYIM*koku/esik) - 1) + alici payi
+            #     C(d) = YAYIM*koku*exp(-d/BULUT) >= esik
+            #  -> d_max = BULUT*ln(YAYIM*koku/esik) + r0 + alici payi
             _koku_var = False
             if alicilar and esik_min > 0.0:
                 _r0 = max(1.0, t.radius)
                 _sal = yayim * t.scent_value
                 _oran_max = _sal / esik_min
                 if _oran_max > 1.0:
-                    _dmax = _r0 * (math.sqrt(_oran_max) - 1.0) + alici_pay
+                    _dmax = bulut * math.log(_oran_max) + _r0 + alici_pay
                     _koku_var = (d - _kayma_payi <= _dmax)
             if _koku_var:
                 _kaynak = t.koku_kaynagi()
@@ -1254,7 +1268,12 @@ class Organism(Entity):
                 _en = 0.0
                 for _uc, _esik in alicilar:
                     _du = max(0.0, (_kaynak - _uc).length() - _r0)
-                    _c = _sal * (_r0 / (_r0 + _du)) ** 2
+                    # USSEL seyrelme: her BULUT px'de x0.37. Weber-Fechner
+                    # ile algilanan siddet mesafeyle DOGRUSAL duser -
+                    # kemotaksinin izleyebilecegi sabit bir egim. 1/r^2 ile
+                    # egim yakinda dik, uzakta duzdu; uzaktaki her sey ayni
+                    # siddette "vardi" ve hepsi birbirine karisiyordu.
+                    _c = _sal * math.exp(-_du / bulut)
                     _o = _c / _esik
                     if _o > _en:
                         _en = _o
@@ -1423,7 +1442,7 @@ class Organism(Entity):
                         lg.trigger()
                         self.atis_sayisi += 1
                         self.stun_timer = game_settings.PHAGO_STUN
-                        organ.last_target_pos = t.pos
+                        organ.atis_isaretle(pygame.math.Vector2(t.pos))
                         t.die('yutuldu')
                         self.consume_prey(t)
                         killed.append(t)
@@ -1516,7 +1535,7 @@ class Organism(Entity):
                 self.energy -= lg.energy_cost
                 lg.trigger()
                 self.atis_sayisi += 1
-                organ.last_target_pos = t.pos
+                organ.atis_isaretle(pygame.math.Vector2(t.pos))
                 t.take_damage(lg.damage, lg.CHANNEL, lg.CONTACT,
                               organ.__class__.__name__.lower(), lg)
                 if t.dead:
@@ -1530,7 +1549,7 @@ class Organism(Entity):
                 self.energy -= lg.energy_cost
                 lg.trigger()
                 self.atis_sayisi += 1
-                organ.last_target_pos = t.pos
+                organ.atis_isaretle(pygame.math.Vector2(t.pos))
                 t.take_damage(lg.damage, lg.CHANNEL, lg.CONTACT,
                               organ.__class__.__name__.lower(), lg)
                 # Nematosist ipi: isabet edince avı bağlar. Saldırgan
@@ -1539,6 +1558,8 @@ class Organism(Entity):
                     res = t.binding_resistance
                     if random.random() < lg.power / (lg.power + res + 1e-6):
                         t.tether_timer = game_settings.NEMATOCYST_TETHER_TIME
+                        # Ip gorunsun: hedef, kendisini kimin tuttugunu bilir.
+                        t.tether_from = self
                 if t.dead:
                     killed.append(t)
                 break

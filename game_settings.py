@@ -351,26 +351,31 @@ DEFAULT_SETTINGS = {
     # KOKU BIR ALANDIR, BIR MENZIL DEGIL.
     #
     # Kemoreseptor, uzerine BAGLANAN molekulle koku alir; olculen sey
-    # alicinin BULUNDUGU NOKTADAKI derisimdir. Eskiden mesafe hucre
-    # MERKEZINDEN olculuyordu ve menzil yalnizca ALGILAYANIN ozelligiydi
-    # (SMELL_RANGE_BASE * burun boyu): organin nerede durdugu hicbir sey
-    # ifade etmiyor, hedefin ne kadar koktugu da hesaba girmiyordu -
-    # mis gibi kokan iri bir hucre ile zar zor kokan kucugu TAM AYNI
-    # uzaklikta fark ediliyordu.
+    # alicinin BULUNDUGU NOKTADAKI derisimdir. Kaynagin cevresinde bir
+    # derisim alani vardir:
     #
-    # Artik kaynagin cevresinde bir DERISIM ALANI var:
+    #     C(d) = KOKU_YAYIM * koku_puani * exp(-d / KOKU_BULUT)
     #
-    #     C(d) = KOKU_YAYIM * koku_puani * (r0 / (r0 + d))^2
+    # d, kaynagin YUZEYINDEN aliciya olan uzaklik. USSEL seyrelme: sabit
+    # kaynak + birinci derece bozunma (buharlasma, hidroliz) ile difuzyon
+    # tam bu profili verir; KOKU_BULUT = sqrt(D/k) bulutun karakteristik
+    # boyudur (bkz. systems/environment.py, besin kokusu icin ayni fizik).
     #
-    # r0 kaynagin yaricapi, d kaynaktan ALICIYA olan uzaklik. Radyal
-    # seyrelme: molekul sayisi sabit, dagildigi yuzey r^2 ile buyur.
+    # Neden ussel, neden 1/r^2 degil: bulut hucreden COK BUYUK olmali -
+    # gercek bir bakteriyi komsusunun bulutu bastan sona sarar, alicinin
+    # hangi tarafta durdugu derisimi az degistirir. Ama buyuk bulutlar
+    # birbirine girer; uzak kaynaklarin toplami yakin kaynagi bogar.
+    # Ussel profil ikisini birden verir: erim genis (~KOKU_BULUT x
+    # ln(YAYIM*koku/esik) ~ 300 px), seyrelme keskin (her KOKU_BULUT px'de
+    # x0.37). Weber-Fechner ile birlesince algilanan siddet mesafeyle
+    # DOGRUSAL duser - kemotaksinin izleyebilecegi sabit bir egim.
+    # 1/r^2 ile bu egim yakinda dik, uzakta duz kaliyordu: uzaktaki her
+    # sey ayni siddette "vardi" ve hepsi birbirine karisiyordu.
+    #
     # Alici kendi ESIGINI asan bir derisime degerse koku alir. Menzil
-    # boylece iki taraftan birden dogar - kaynak ne kadar kokuyor, burun
-    # ne kadar hassas. Artik bir sayi degil, bir SONUC.
-    #
-    # 0.7: eski kalibrasyon korunsun diye secildi. Tipik degerlerle
-    # (koku 2.9, yaricap 22.5, esik 0.05) menzil ~121 px cikar -
-    # SMELL_RANGE_BASE * 6 ile ayni.
+    # bir ayar degil, iki taraftan dogan bir SONUC: kaynak ne kadar
+    # kokuyor, burun ne kadar hassas.
+    "KOKU_BULUT": 80.0,
     "KOKU_YAYIM": 0.7,
     # Tepkinin doydugu derisim/esik orani: bunun ustunde daha da
     # yaklasmak tepkiyi artirmaz, alicilar zaten dolmustur.

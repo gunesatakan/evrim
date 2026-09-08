@@ -234,7 +234,8 @@
         "LEVY_MIN_STEP": 0.5,
         "LEVY_MAX_DURATION": 10.0,
         "KOKU_YAYIM": 0.7,
-        "KOKU_DOYUM": 20.0
+        "KOKU_DOYUM": 20.0,
+        "KOKU_BULUT": 80.0
     },
     "entities": {
         "optropi_0": {

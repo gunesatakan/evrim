@@ -256,7 +256,8 @@ SETTINGS_SCHEMA = {
         ("DIVISION_MAX_POPULATION", "Nüfus tavanı (0 = sınırsız)"),
     ],
         "KOKU İLE TANIMA": [
-        ("KOKU_YAYIM",              "Koku alaninin gucu: C = bu x koku x (r/(r+d))^2 (menzil buradan DOGAR)"),
+        ("KOKU_YAYIM",              "Koku alaninin gucu: C = bu x koku x exp(-d/KOKU_BULUT) (menzil buradan DOGAR)"),
+        ("KOKU_BULUT",              "Bulutun karakteristik boyu (px): her bu kadar mesafede derisim x0.37"),
         ("KOKU_DOYUM",              "Tepkinin doydugu derisim/esik orani"),
         ("SIGNATURE_ALLELES",       "Kaç farklı soy imzası olabilir"),
         ("SCENT_WEIGHT_MEMBRANE",   "Zarın koku puanına katkısı"),
