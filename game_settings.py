@@ -567,11 +567,28 @@ DEFAULT_SETTINGS = {
     # aktarimi ve mutasyon yoluyla - yani hucrenin ne yaptigindan BAGIMSIZ
     # olarak - kazanilir. Ustelik bedeli pesin odenir: organ enerji yer,
     # surtunme artirir. Ise yaramazsa tasiyani eler.
-    "ORGAN_GAIN_RATE": 0.02,     # bolunme basina yeni organ olasiligi
+    # ORAN 0.02 -> 0.10, AMA IKISI BIRDEN.
+    #
+    # Yalnizca kazanci 5 katlamak dengeyi bozardi. Butun zar katmanlari
+    # kazanildiktan sonra kazanc HEP organ secer; kayip ise once katman
+    # mi organ mi diye kura ceker ve organa ancak 11/(11+4) = %73
+    # ihtimalle duser. Bolunme basina net suruklenme:
+    #
+    #     %2  / %2   ->  0.020 - 0.0146 = +0.005   (neredeyse denge)
+    #     %10 / %2   ->  0.100 - 0.0146 = +0.085   (16 kat)
+    #     %10 / %10  ->  0.100 - 0.0730 = +0.027   (denge korunur)
+    #
+    # Ikisini birlikte yukseltmek DEVIR HIZINI artirir, sisirmez: organ
+    # daha sik denenir ve ise yaramayan daha sik birakilir. Kimin neye
+    # sahip olacagina yine secilim karar verir - uzmanlasma ancak boyle
+    # korunur. Yalnizca kazanc buyuseydi herkes her seyi kazanir, ortada
+    # TIP kalmazdi ve "savunma turu hucrelerin ortaya cikmasi" olcutu
+    # olculemez hale gelirdi.
+    "ORGAN_GAIN_RATE": 0.10,     # bolunme basina yeni organ olasiligi
     # Kayip da en az kazanc kadar gercek. Islevsiz bir organ enerji
     # yakmaya devam eder; onu yitiren yavru ucuza yasar. Indirgeyici
     # evrim buradan cikar - ve savunma tipinin silahlarini birakmasi da.
-    "ORGAN_LOSS_RATE": 0.02,
+    "ORGAN_LOSS_RATE": 0.10,
     # VUCUT PLANI DA EVRIMLESIR. Organin takilma acisi bir kez rastgele
     # atanip sonsuza kadar oyle kaliyordu; ise yaramayan bir yerlesim
     # duzeltilemiyordu. Kucuk kaymalar secilime tirmanacak bir egim verir.

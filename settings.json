@@ -2,7 +2,7 @@
     "settings": {
         "WORLD_SCALE": 1.0,
         "ARENA_OLCEK": 2.0,
-        "FOOD_COUNT": 205,
+        "FOOD_COUNT": 310,
         "KAOTROPI_COUNT": 1,
         "OPTROPI_COUNT": 1,
         "NOTROPI_COUNT": 1,
@@ -156,37 +156,37 @@
         "FOOD_PATCH_SIGMA": 45.0,
         "HARITA_YAMALARI": [
             [
-                358.7,
-                226.8,
-                31,
-                105.0
-            ],
-            [
-                1862.0,
-                1200.0,
-                31,
-                105.0
-            ],
-            [
-                1993.8,
-                253.2,
-                31,
-                105.0
-            ],
-            [
-                348.1,
-                1189.5,
-                31,
-                105.0
-            ],
-            [
-                1091.9,
-                677.8,
-                81,
+                1194.7,
+                801.8,
+                86,
                 275.0
+            ],
+            [
+                342.9,
+                271.6,
+                86,
+                115.0
+            ],
+            [
+                2123.1,
+                1297.6,
+                86,
+                115.0
+            ],
+            [
+                406.2,
+                1268.6,
+                26,
+                55.0
+            ],
+            [
+                2218.0,
+                184.6,
+                26,
+                55.0
             ]
         ],
-        "FOOD_MAX": 205,
+        "FOOD_MAX": 310,
         "RIBOSOME_AREA": 20.0,
         "VACUOLE_AREA": 30.0,
         "CILIA_TURN_MULTI": 0.05,
@@ -213,8 +213,8 @@
         "SCENT_SENSITIVITY_BASE": 0.3,
         "DIVISION_MODE": true,
         "DIVISION_MAX_POPULATION": 100,
-        "ORGAN_GAIN_RATE": 0.02,
-        "ORGAN_LOSS_RATE": 0.02,
+        "ORGAN_GAIN_RATE": 0.1,
+        "ORGAN_LOSS_RATE": 0.1,
         "ORGAN_ANGLE_RATE": 0.1,
         "ORGAN_ANGLE_SIGMA": 18.0,
         "RENK_MUTASYON": 0.06,
