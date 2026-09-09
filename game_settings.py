@@ -335,6 +335,28 @@ DEFAULT_SETTINGS = {
     "URETICI_YUK_MUTATION": 0.02,   # uretici organin yuk tipi degisir
     "STICKY_TIME": 2.5,             # glutinant: yuzey bu kadar sure yapiskan
     "IZORIZA_HIZ": 160.0,           # izoriza: saldirgan kendini bu hizla ceker
+    # DOZ KADEMELERININ ETKISI - lab.EFFECT_CLASS ile AYNI MEKANIZMA.
+    #
+    # Once her kademe zar butunlugunu dusuruyordu (%12/%30/%120): felc de
+    # yoktu, yavaslama da, duvar incelmesi de. Oysa laboratuvarda her yuk
+    # sinifi baska bir sey yapar ve evrimi sekillendiren tam da bu:
+    #   1. kademe (her yuk)     : yavaslama 8 sn (hiz x0.30)
+    #   2. kademe norotoksin    : FELC - motorlar durur
+    #              gozenek acici: ozmotik SISME (+%18 yaricap) + 12 sn yavas
+    #              lizozim      : DUVAR INCELIR (%35'e) - delici silaha kapi
+    #              T3SS         : ic makine durur 15 sn
+    #   3. kademe              : olum - gozenek acici PATLATIR (stok sacilir),
+    #                            otekiler cokerterek oldurur
+    "DOZ_YAVASLAMA_1": 8.0,
+    "DOZ_YAVASLAMA_SISME": 12.0,
+    "DOZ_FELC": 12.0,
+    "DOZ_DURMA": 15.0,
+    "DOZ_DUVAR_ORANI": 0.35,
+    "DOZ_SISME_YARICAP": 1.18,
+    "DOZ_HIZ_CARPANI": 0.30,
+    # Stilet emmesi: emilen sitoplazma orani kadar cekirdek kuculur
+    # (lab: core_r x (1 - 0.72 x drained)).
+    "EMME_KUCULME": 0.72,
     "HARPOON_DAMAGE": 15.0,
     "HARPOON_RANGE": 6.0,
     "HARPOON_COOLDOWN": 0.3,

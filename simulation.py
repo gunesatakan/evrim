@@ -162,6 +162,13 @@ class OlumEfektleri:
     # ------------------------------------------------------------ kurulum
     def ekle(self, o):
         neden = getattr(o, 'death_cause', '?')
+        # Olumun SEKLI mekanizmadan gelir: gozenek acici doz patlatir
+        # (lizis), oteki dozlar cokertir. Neden etiketi ayni kalir.
+        _sekil = getattr(o, 'olum_sekli', None)
+        if _sekil == 'patlama':
+            neden = 'toksin'
+        elif _sekil == 'cokme':
+            neden = 'aclik'
         r = float(getattr(o, 'radius', 8.0))
         e = {
             'neden': neden, 'pos': pygame.math.Vector2(o.pos), 'r': r,

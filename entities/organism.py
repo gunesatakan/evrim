@@ -351,6 +351,12 @@ class Organism(Entity):
         self.tether_from = None     # ipi kim attı (cizim icin)
         self.yapiskan = 0.0         # glutinant: yuzeyim yapiskan (sn)
         self.atislar = []           # BANA atilan mermiler (lab.Shot)
+        # DOZ ETKILERI (lab EFFECT_CLASS): sureli bayraklar
+        self.yavaslama_t = 0.0      # hiz x DOZ_HIZ_CARPANI
+        self.felc_t = 0.0           # motorlar durur (norotoksin / sabotaj)
+        self.sisme_t = 0.0          # ozmotik sisme: yaricap x DOZ_SISME_YARICAP
+        self.emilen = 0.0           # stilet: emilen sitoplazma orani (0..1)
+        self.olum_sekli = None      # 'patlama' | 'cokme' (olum efekti icin)
         self.consumed = False       # leşi biri aldı mı (çift ödülü önler)
 
     def add_organ(self, organ):
@@ -719,6 +725,14 @@ class Organism(Entity):
                 self.radius = cek * _l.zarf_orani(zar)
             except Exception:
                 self.radius = cek
+            # OZMOTIK SISME (gozenek acici, 2. kademe): hucre buyur,
+            # surtunme artar. STILET EMMESI: emilen sitoplazma kadar
+            # kuculur. Ikisi de labdaki oranlar.
+            if getattr(self, 'sisme_t', 0.0) > 0.0:
+                self.radius *= game_settings.DOZ_SISME_YARICAP
+            _em = getattr(self, 'emilen', 0.0)
+            if _em > 0.0:
+                self.radius *= max(0.2, 1.0 - game_settings.EMME_KUCULME * _em)
 
         # Gorme organlari onbellegi - organ listesi her degistiginde
         # buradan gecilir, ayrica aranmasi gerekmez.
@@ -1354,7 +1368,8 @@ class Organism(Entity):
         # (volvent) ya da yuzeyi yapiskan (glutinant) av cok daha kolay
         # tutulur. Laboratuvardaki "fagositoz yapan hucre bu silahlarla
         # avi yakalayip sabitler" davranisi buradan gelir.
-        if target.is_restrained or getattr(target, 'yapiskan', 0.0) > 0.0:
+        if (target.is_restrained or getattr(target, 'yapiskan', 0.0) > 0.0
+                or getattr(target, 'felc_t', 0.0) > 0.0):
             grip = grip * 3.0
         if random.random() > grip / (grip + res + 1e-6):
             return False
@@ -1604,6 +1619,48 @@ class Organism(Entity):
     #  Igneli tasiyicilar mermi yollar; onlar bu yoldan gecmez.
     MOLEKULER_TASIYICI = (0, 1, 2)
 
+    def doz_etkisi(self, tier, mech, neden):
+        """Bir yuk kademe esigini asti: mekanizmaya gore etki uygula.
+
+        Lab ile ayni tablo (EFFECT_CLASS):
+          1. kademe        -> yavaslama
+          2. kademe        -> paralyze: felc | swell: sisme + yavas |
+                              weaken: duvar %35'e iner | halt: durma
+          3. kademe        -> olum; gozenek acici PATLATIR (stok sacilir)
+        """
+        import lab as _lab
+        g = game_settings
+        if tier == _lab.TIER_SLOW:
+            self.yavaslama_t = max(self.yavaslama_t, g.DOZ_YAVASLAMA_1)
+            return
+        if tier == _lab.TIER_MID:
+            if mech == 'paralyze':
+                self.felc_t = max(self.felc_t, g.DOZ_FELC)
+            elif mech == 'swell':
+                self.sisme_t = max(self.sisme_t, g.DOZ_YAVASLAMA_SISME)
+                self.yavaslama_t = max(self.yavaslama_t, g.DOZ_YAVASLAMA_SISME)
+                self.recalculate_physics()
+            elif mech == 'weaken':
+                # Duvar incelir: mekanik savunma duser, delici silaha kapi
+                # acilir. Yeniden kalinlasmasi gen yatirimi ister.
+                zar = getattr(getattr(self, 'membrane', None), 'logic', None)
+                if zar is not None and zar.katman_var('wall'):
+                    zar.wall = zar.wall * g.DOZ_DUVAR_ORANI
+                    self.zarf_nesli = getattr(self, 'zarf_nesli', 0) + 1
+                    self.recalculate_physics()
+            else:
+                self.felc_t = max(self.felc_t, g.DOZ_DURMA)
+            return
+        if tier == _lab.TIER_LETHAL:
+            if mech == 'weaken':
+                zar = getattr(getattr(self, 'membrane', None), 'logic', None)
+                if zar is not None and zar.katman_var('wall'):
+                    zar.wall = 0.0
+            self.olum_sekli = 'patlama' if mech == 'swell' else 'cokme'
+            if hasattr(self, 'membrane'):
+                self.membrane.logic.integrity = 0.0
+            self.die(neden)
+
     def _uretici_bul(self, hedef=None):
         """Yuk verebilecek uretici organ: stoklu ve (varsa) hedefin bagisik
         olmadigi. Yoksa None - igne yuksuz gider."""
@@ -1741,6 +1798,7 @@ class Organism(Entity):
         cek = max(0.0, hedef.energy) * (pay / kalan)
         hedef.energy -= cek
         hedef.emilen = onceki + pay
+        hedef.recalculate_physics()         # kuculme
         self.energy += cek * g.EMME_VERIM - g.STYLET_EMME_GIDER * dt
         if hedef.emilen >= 1.0 - 1e-9:
             hedef.energy = 0.0
@@ -2898,6 +2956,16 @@ class Organism(Entity):
                 _o.update(dt, self)
         if self.stun_timer > 0:
             self.stun_timer -= dt
+        # Doz etkileri soner
+        _sisiyordu = self.sisme_t > 0.0
+        if self.yavaslama_t > 0.0:
+            self.yavaslama_t = max(0.0, self.yavaslama_t - dt)
+        if self.felc_t > 0.0:
+            self.felc_t = max(0.0, self.felc_t - dt)
+        if self.sisme_t > 0.0:
+            self.sisme_t = max(0.0, self.sisme_t - dt)
+            if self.sisme_t <= 0.0 and _sisiyordu:
+                self.recalculate_physics()     # sisme indi, yaricap eski
         # Kairomon temizlenmesi: sızıntı kalıcı değil, metabolizma onu yavaşça
         # atar. Bu yüzden "yakında avlanmış" ile "aç" ayırt edilebilir kalır.
         if self.kairomone > 0.0:
@@ -3009,8 +3077,11 @@ class Organism(Entity):
         # Hareketsizlik: yutma sersemliği, tutulmak (bound_by / ip) ya da
         # birini TUTMAK. Saldırmak artık taahhüt: tutan da kıpırdayamaz.
         immobile = (self.stun_timer > 0 or self.is_restrained
-                    or self.bound_target is not None)
+                    or self.bound_target is not None
+                    or self.felc_t > 0.0)          # felc / ic durma
         move_dist = 0.0 if immobile else self.speed * dt
+        if self.yavaslama_t > 0.0:
+            move_dist *= game_settings.DOZ_HIZ_CARPANI
         # Koku bulutunun nereye surukelendigini bilmek icin GERCEK hareket
         # yonu saklanir (yon vektoru degil - kurek fiziginde ikisi ayrilir).
         self.hareket_yonu = pygame.math.Vector2(0, 0) if immobile else move_dir

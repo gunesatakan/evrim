@@ -244,7 +244,15 @@
         "TASIYICI_VARYANT_MUTATION": 0.03,
         "URETICI_YUK_MUTATION": 0.02,
         "STICKY_TIME": 2.5,
-        "IZORIZA_HIZ": 160.0
+        "IZORIZA_HIZ": 160.0,
+        "DOZ_YAVASLAMA_1": 8.0,
+        "DOZ_YAVASLAMA_SISME": 12.0,
+        "DOZ_FELC": 12.0,
+        "DOZ_DURMA": 15.0,
+        "DOZ_DUVAR_ORANI": 0.35,
+        "DOZ_SISME_YARICAP": 1.18,
+        "DOZ_HIZ_CARPANI": 0.3,
+        "EMME_KUCULME": 0.72
     },
     "entities": {
         "optropi_0": {

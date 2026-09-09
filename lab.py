@@ -2084,31 +2084,22 @@ class HedefZarf:
             self._etki(pi, tier)
 
     def _etki(self, pi, tier):
-        """Kademe yukseldi: hasari organizmaya uygula.
+        """Kademe yukseldi: LABORATUVARLA AYNI MEKANIZMA.
 
-        Laboratuvarda etki katmanlari dogrudan degistiriyor (duvar erir,
-        hucre siser); oyunda karsiligi zar butunlugudur. Kademe basina
-        hasar sabit degil, YUKUN kendi gucune bagli.
+        Eskiden her kademe zar butunlugunu dusuruyordu; felc, sisme,
+        duvar incelmesi oyunda yoktu. Simdi yukun sinifi (EFFECT_CLASS)
+        ne diyorsa o olur - uygulama Organism.doz_etkisi'nde, cunku
+        etkiler hucrenin motoruna, zarina ve yaricapina dokunur.
         """
         org = self.org
         if getattr(org, 'dead', False):
             return
         nm = PAYLOADS[pi][0]
-        esik = PAYLOAD_THRESHOLD.get(nm)
-        if esik is None:
+        if PAYLOAD_THRESHOLD.get(nm) is None:
             return
-        pay = {TIER_SLOW: 0.12, TIER_MID: 0.30, TIER_LETHAL: 1.20}.get(tier, 0.0)
-        if pay <= 0:
-            return
-        hasar = max(1.0, org.membrane.logic.max_integrity * pay)
-        # Teslimat kapisi BURADA yok: molekul zaten fiziksel olarak vardi.
-        # Ikinci kez zirh uygulamak ayni engeli iki kez saymak olurdu.
-        org.membrane.logic.integrity -= hasar
-        if org.membrane.logic.integrity <= 0:
-            org.membrane.logic.integrity = 0.0
-            # Neden, yuku getiren SILAHTIR: 'nematocyst', 'harpoon',
-            # 'stylet' ya da (serbest molekul) 'molekul'.
-            org.die(self.neden or 'molekul')
+        cls = effect_class(pi)
+        mech = EFFECT_CLASS[cls][1] if cls in EFFECT_CLASS else 'halt'
+        org.doz_etkisi(tier, mech, self.neden or 'molekul')
 
 
 def zarf_orani(zar_logic):
