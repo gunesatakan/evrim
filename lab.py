@@ -2016,7 +2016,10 @@ class HedefZarf:
     def sinir_icinde(self, pos):
         # Mermi hedefin cevresinde bir yerde olmali; dunya siniri degil,
         # hedefe gore uzaklik. Cok uzaga gitmis mermi bosa gitmistir.
-        return pos.distance_to(self.org.pos) <= self.outer_r + 900.0
+        # Menzil zaten atis aninda sinanmis; hedefi iskalayan mermi
+        # birkac hucre boyu sonra biter. 900 px, iskalayan mermiyi
+        # saniyelerce yasatiyordu.
+        return pos.distance_to(self.org.pos) <= self.outer_r + 130.0
 
     @property
     def tethered(self):

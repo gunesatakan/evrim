@@ -1655,21 +1655,27 @@ class Organism(Entity):
         zarf.neden = ad
         zarf.sahip = self
         namlu = organ.get_absolute_position(self.pos, self.direction, self.radius)
-        yon = hedef.pos - namlu
-        if yon.length() < 1e-6:
-            yon = pygame.math.Vector2(self.direction)
-        # IGNE UCU HEDEFIN YUZEYINDEN BASLAR. Temas halindeki hucrelerde
-        # namlu, hedefin ZARFININ icinde kaliyordu (zarf dis yaricapi
-        # temas yaricapindan buyuk): mermi daha ilk adimda sitoplazmada
-        # doguyor, kenetlenmesi gereken belirtec bile yuku iceri
-        # birakiyordu. Zarfin disina, giris dogrultusunda cekilir.
-        _dis = zarf.outer_r + 0.5
-        if namlu.distance_to(hedef.pos) < _dis:
-            _n = namlu - hedef.pos
-            if _n.length() < 1e-6:
-                _n = -yon
-            namlu = hedef.pos + _n.normalize() * _dis
-            yon = hedef.pos - namlu
+        # MERMI ORGANIN BAKIS YONUNDE UCAR - hedefin merkezine "nisanlanmaz".
+        # Laboratuvarda igne saldirganin bakis yonunde gider; carpma acisi
+        # geometriden dogar (merkeze denk gelirse dik, kenara denk gelirse
+        # egik) ve sekme buna baglidir: kaygan mukus egik gelen igneyi
+        # savurur. Merkeze nisanlaninca her atis 0 derece geliyor,
+        # surtunme konisi hic calismiyordu - mukus bos bir katmandi.
+        _a = organ.aim_angle(self)
+        yon = pygame.math.Vector2(math.cos(_a), math.sin(_a))
+        # IGNE UCU HEDEFIN ZARFININ DISINDAN BASLAR. Temas halindeki
+        # hucrelerde namlu zarfin icinde kalabiliyor (zarf dis yaricapi
+        # temas yaricapindan buyuk); atis dogrultusunda GERI cekilir.
+        # Isin hedef daireyi kesmiyorsa mermi bosa gider - o da bir atistir.
+        _R = zarf.outer_r + 0.5
+        _m = namlu - hedef.pos
+        if _m.length() < _R:
+            # |m - t*u| = R cozumu (t > 0: geriye)
+            _b = _m.dot(yon)
+            _c = _m.length_squared() - _R * _R
+            _disk = _b * _b - _c
+            _t = _b + math.sqrt(max(0.0, _disk))
+            namlu = namlu - yon * _t
         shot = _lab.Shot(zarf, namlu, yon, _lab.CARRIERS[ci], _lab.PAYLOADS[pi],
                          _lab.MARKERS[mi], ci)
         shot.sahip = self
