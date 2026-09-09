@@ -867,7 +867,7 @@ class Shot:
             return
         if self.cyto_travel is not None:
             # Sitoplazmada viskoz yavaslama
-            if self.cyto_travel <= 0.5 or self.speed < 12.0:
+            if self.cyto_travel <= 0.5 * self.vs or self.speed < 12.0:
                 self.dead = True
                 self._emit()
                 return
@@ -894,7 +894,7 @@ class Shot:
             # Sabit carpanla yavaslatmak hedefe VARMADAN hizi sifirliyordu -
             # mermi kalinligin %60'ina girecekken %10'unda kaliyordu.
             remaining = self.pos.distance_to(self.cell.center) - self.embed_r
-            if remaining <= 0.6:
+            if remaining <= 0.6 * self.vs:
                 self.dead = True
                 self._emit()
                 return
@@ -1072,7 +1072,7 @@ class Shot:
         self._pending = False
         for _ in range(CARRIER_EMIT[self.ci]):
             a = random.uniform(0, 2 * math.pi)
-            sp = random.uniform(0.25, 0.9) * MOLECULE_SPEED
+            sp = random.uniform(0.25, 0.9) * MOLECULE_SPEED * self.vs
             v = pygame.math.Vector2(math.cos(a), math.sin(a)) * sp
             m = Molecule(self.cell, self.pos, v, self._pi)
             m.depth = m.band()
@@ -1581,6 +1581,11 @@ class Molecule:
     def _angle_at(pos, c):
         return math.atan2(pos.y - c.y, pos.x - c.x) % (2 * math.pi)
 
+    def _olcek(self):
+        """Zarfin piksel olcegi (lab hucresi = 1). Son piksel sabiti olan
+        0.4 px'lik tutunma payi da geometriyle birlikte kuculsun."""
+        return getattr(self.cell, 'pore_px', PORE_PX) / PORE_PX
+
     def _hug_step(self, c, dt):
         """Yüzeye tutunmuş: teğet süpürerek delik arar.
 
@@ -1606,7 +1611,7 @@ class Molecule:
         # cikiyor, duvar HERKESE kapaniyordu - peptit bile gecemiyordu.
         dia_px = self.dia * getattr(self.cell, 'pore_px', PORE_PX)
         # yuzey boyunca kay - BULUNDUGU tarafta kalarak
-        yuzey = self.hug_r + self.hug_side * (dia_px * 0.5 + 0.4)
+        yuzey = self.hug_r + self.hug_side * (dia_px * 0.5 + 0.4 * self._olcek())
         self.pos = c + (n * yuzey + tang * self.vel.length() * dt)
         self.pos = c + (self.pos - c).normalize() * yuzey
         if sh.opening_for(self._angle_at(self.pos, c), dia_px):
@@ -1668,7 +1673,7 @@ class Molecule:
         # irakliyor, yani tam da gecemedigi tabakadan gecmis oluyordu.
         # Elek boylece tek yonlu kaliyordu: disaridan iceri hicbir sey
         # giremiyor ama sitoplazmadaki her sey disari sizabiliyordu.
-        self.pos = c + n * (rr + side * (dia_px * 0.5 + 0.4))
+        self.pos = c + n * (rr + side * (dia_px * 0.5 + 0.4 * self._olcek()))
         self.hug_t = HUG_TIME
         self.hug_r = rr
         self.hug_side = side
