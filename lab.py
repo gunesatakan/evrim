@@ -1509,7 +1509,11 @@ class Molecule:
         d0 = self.pos.distance_to(self.cell.prev_center)
         nxt = self.pos + (self.vel + self.jig) * dt
         d1 = nxt.distance_to(c)
-        dia_px = self.dia * PORE_PX
+        # Molekul capi, HEDEF ZARFIN gozenek olceginde: zarf kuculunce
+        # delikler de kuculur (Zarf.pore_px); cap global PORE_PX ile
+        # alininca oyun hucresinde her molekul delikten 5 kat buyuk
+        # cikiyor, duvar HERKESE kapaniyordu - peptit bile gecemiyordu.
+        dia_px = self.dia * getattr(self.cell, 'pore_px', PORE_PX)
         # HANGI TARAFTAN geliyor? Bunu karedeki hareket yonunden turetmek
         # yanlisti: sitoplazmada zipzip gezen bir molekul bazi karelerde
         # iceri dogru gider ve "disaridan geliyor" sayilirdi. Dogru olcut
@@ -1596,7 +1600,11 @@ class Molecule:
         tang = pygame.math.Vector2(-n.y, n.x)
         if self.vel.dot(tang) < 0:
             tang = -tang
-        dia_px = self.dia * PORE_PX
+        # Molekul capi, HEDEF ZARFIN gozenek olceginde: zarf kuculunce
+        # delikler de kuculur (Zarf.pore_px); cap global PORE_PX ile
+        # alininca oyun hucresinde her molekul delikten 5 kat buyuk
+        # cikiyor, duvar HERKESE kapaniyordu - peptit bile gecemiyordu.
+        dia_px = self.dia * getattr(self.cell, 'pore_px', PORE_PX)
         # yuzey boyunca kay - BULUNDUGU tarafta kalarak
         yuzey = self.hug_r + self.hug_side * (dia_px * 0.5 + 0.4)
         self.pos = c + (n * yuzey + tang * self.vel.length() * dt)
@@ -1953,6 +1961,11 @@ class HedefZarf:
     def hiz_olcegi(self):
         """Molekul hizlari geometriyle AYNI oranda kuculur."""
         return max(0.05, self.org.radius / 110.0)
+
+    @property
+    def pore_px(self):
+        """Gozenek/molekul cap olcegi - zarfin kendi olcegi."""
+        return self._g().pore_px
 
     @property
     def efflux(self):
