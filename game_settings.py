@@ -309,6 +309,32 @@ DEFAULT_SETTINGS = {
     "STYLET_EMME": 0.16,          # saniyede emilen sitoplazma orani (0..1)
     "EMME_VERIM": 0.6,            # emilen enerjinin emene gecen payi
     "STYLET_EMME_GIDER": 2.0,     # emis surerken saniyelik enerji gideri
+    # SILAH = TASIYICI + YUK + BELIRTEC; UCU AYRI GEN.
+    #
+    # Laboratuvarda kurulan sistem: yuk (toksin) hedef bolgesine
+    # VARABILIRSE etki eder - zar yuzeyine etki eden bir toksin harpunla
+    # zar yuzeyine birakilirsa tam etki, sitoplazmaya birakilirsa hic,
+    # duvara birakilirsa duvardan gecebilen kadar. Belirtec ignenin
+    # nerede duracagini belirler; lumen, yukun igneden gecip
+    # gecemeyecegini. Hicbiri kodlanmis bir "hasar" degil, geometri.
+    #
+    # Oyunda bu uclu ayri ayri kalitilir ve mutasyona ugrar:
+    #   TASIYICI : silah organinin kendisi (nematosistte varyant geni -
+    #              penetrant/volvent/glutinant/izoriza; toksin/lizinde
+    #              difuzyon/yonlu/fiskirtma)
+    #   YUK      : URETICI organ (Toksin, Lizin) - sentezler, STOK tutar,
+    #              yuk tipi geni mutasyonla degisir. Igneli silah dogustan
+    #              YUKSUZDUR; ancak hucrede stoklu bir uretici varsa onun
+    #              yukunu yukler. Toksinsiz nematosist yalnizca deler,
+    #              delik kapanir.
+    #   BELIRTEC : tasiyici uzerinde ayri gen, 0 (balistik) dogar.
+    # Birlikte isleyen bir uclunun bir araya gelmesi sansa baglidir.
+    "YUK_SENTEZ_OLCEK": 0.1,        # lab payload_cost x bu = molekul basina enerji
+    "MARKER_MUTATION": 0.03,        # bolunmede belirtec degisme olasiligi
+    "TASIYICI_VARYANT_MUTATION": 0.03,
+    "URETICI_YUK_MUTATION": 0.02,   # uretici organin yuk tipi degisir
+    "STICKY_TIME": 2.5,             # glutinant: yuzey bu kadar sure yapiskan
+    "IZORIZA_HIZ": 160.0,           # izoriza: saldirgan kendini bu hizla ceker
     "HARPOON_DAMAGE": 15.0,
     "HARPOON_RANGE": 6.0,
     "HARPOON_COOLDOWN": 0.3,

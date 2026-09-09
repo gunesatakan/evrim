@@ -37,14 +37,87 @@ class WeaponLogic:
     # ayri ayri secilebiliyor. Sabit esleme yalnizca VARSAYILAN.
     VARSAYILAN_TASIYICI = 2      # Fiskirtma
     VARSAYILAN_YUK = 1           # Norotoksin
+    # URETICI: yuku SENTEZLEYEN organ (Toksin, Lizin). Yalnizca ureticiler
+    # stok tutar. Igneli silahlar uretmez, hucrenin ureticisinden yukler.
+    URETICI = False
+    # Bu tasiyicinin evrimde gecebilecegi varyantlar (lab CARRIERS indeksi)
+    VARYANTLAR = ()
 
     def __init__(self, power=1.0):
         self.power = power        # gelişim çarpanı (gen ile artar)
         self.cooldown_timer = 0.0
-        # Hangi yapiyla, neyi, nereye birakiyor
-        self.carrier = self.VARSAYILAN_TASIYICI
-        self.payload = self.VARSAYILAN_YUK
+        # UC AYRI GEN: tasiyici (bu organ), yuk, belirtec.
+        # Igneli silah YUKSUZ dogar - yuk hucrenin ureticisinden gelir.
+        # Uretici kendi yukuyle dogar: o zaten "ben bunu sentezlerim" genidir.
+        self.carrier = (random.choice(self.VARYANTLAR) if self.VARYANTLAR
+                        else self.VARSAYILAN_TASIYICI)
+        self.payload = self.VARSAYILAN_YUK if self.URETICI else 0
         self.marker = 0           # 0 = belirtec yok (balistik)
+        # STOK: ureticinin govdesinde fiilen tasinan molekul sayisi.
+        self.stok = 0.0
+        self._sentez = 0.0
+
+    # ------------------------------------------------------------ YUK
+    def sentezle(self, dt, hucre):
+        """Uretici yukunu sentezler ve stoklar; her molekul enerji ister.
+
+        lab.STOCK_REGEN hizinda, lab.payload_cost bedeliyle (sentez +
+        katalitik yuklerde bagisiklik proteini). YUK_SENTEZ_OLCEK oyunun
+        enerji olcegine indirger; oranlar labdaki gibi kalir - T3SS
+        efektoru norotoksinden 16 kat pahalidir.
+        """
+        if not self.URETICI:
+            return
+        try:
+            import lab as _lab
+        except Exception:
+            return
+        pi = int(self.payload)
+        if pi <= 0 or pi >= len(_lab.PAYLOADS) or _lab.PAYLOADS[pi][1] is None:
+            return
+        if self.stok >= _lab.STOCK_MAX:
+            return
+        synth, imm = _lab.payload_cost(_lab.PAYLOADS[pi])
+        bedel = (synth + imm) * game_settings.YUK_SENTEZ_OLCEK
+        self._sentez += _lab.STOCK_REGEN * dt
+        while self._sentez >= 1.0 and self.stok < _lab.STOCK_MAX:
+            if hucre.energy < bedel:
+                break
+            hucre.energy -= bedel
+            self.stok += 1.0
+            self._sentez -= 1.0
+
+    def yuk_cek(self, n):
+        """Atis icin stoktan n molekul cek. Yetmezse atis YUKSUZ gider."""
+        if self.stok + 1e-9 < n:
+            return False
+        self.stok -= n
+        return True
+
+    # ------------------------------------------------------- MUTASYON
+    def belirtec_mutasyonu(self, rng=random):
+        import lab as _lab
+        secim = [i for i in range(len(_lab.MARKERS)) if i != self.marker]
+        self.marker = rng.choice(secim)
+        return self.marker
+
+    def varyant_mutasyonu(self, rng=random):
+        if len(self.VARYANTLAR) < 2:
+            return None
+        secim = [c for c in self.VARYANTLAR if c != self.carrier]
+        self.carrier = rng.choice(secim)
+        return self.carrier
+
+    def yuk_mutasyonu(self, rng=random):
+        """Uretici baska bir yuk sentezlemeye baslar; eski stok gider."""
+        if not self.URETICI:
+            return None
+        import lab as _lab
+        secim = [i for i in range(1, len(_lab.PAYLOADS))
+                 if i != self.payload and _lab.PAYLOADS[i][1] is not None]
+        self.payload = rng.choice(secim)
+        self.stok = 0.0
+        return self.payload
 
     # --- ayarlardan okunan temel değerler ---
     def _s(self, field):
@@ -106,21 +179,23 @@ class WeaponLogic:
         # Menzili 0 olan silah ATILMAZ, DEGDIRILIR; "menzil 0" yazmak
         # bozuk bir deger gibi okunuyordu.
         m = "temas" if self.reach <= 0.0 else "menzil %.0f" % self.reach
-        # Igneli silah HASAR vermez, YUK tasir: atis basina kac molekul ve
-        # hangi yuk. Alan silahlari (toksin/lizin) molekul yolunu zaten
-        # kullaniyor; "hasar" yalnizca eski gosterimdi.
+        # UCLU: tasiyici varyanti, belirtec, (ureticide) yuk ve stok.
         try:
             import lab as _lab
             ci = int(getattr(self, 'carrier', 0))
-            pi = int(getattr(self, 'payload', 0))
-            if 0 <= pi < len(_lab.PAYLOADS) and _lab.PAYLOADS[pi][1] is not None:
-                yuk = _lab.PAYLOADS[pi][0]
-                adet = int(round(_lab.CARRIER_EMIT[ci] * self.power)) if 0 <= ci < len(_lab.CARRIER_EMIT) else 0
-                return [("Guc", min(1.0, n / 10.0),
-                         "%s x%d  %s" % (yuk[:12], adet, m))]
+            mi = int(getattr(self, 'marker', 0))
+            tas = _lab.CARRIERS[ci][0].split('. ', 1)[-1][:14] if 0 <= ci < len(_lab.CARRIERS) else '?'
+            bel = _lab.MARKERS[mi][0][:12] if 0 <= mi < len(_lab.MARKERS) else '?'
+            out = [("Guc", min(1.0, n / 10.0), "%s  %s" % (tas, m)),
+                   ("Belirtec", 0.0 if mi == 0 else 1.0, bel)]
+            if self.URETICI:
+                pi = int(getattr(self, 'payload', 0))
+                yuk = _lab.PAYLOADS[pi][0][:12] if 0 < pi < len(_lab.PAYLOADS) else 'yok'
+                out.append(("Yuk / stok", min(1.0, self.stok / max(1.0, _lab.STOCK_MAX)),
+                            "%s  %d/%d" % (yuk, int(self.stok), int(_lab.STOCK_MAX))))
+            return out
         except Exception:
-            pass
-        return [("Guc", min(1.0, n / 10.0), "yuk yok (mekanik)  %s" % m)]
+            return [("Guc", min(1.0, n / 10.0), m)]
 
     def grow(self):
         """Silahi gelistir: guc carpani artar (hasar = DAMAGE * power).
@@ -175,6 +250,9 @@ class NematocystLogic(WeaponLogic):
     Bedeli uzun yeniden dolum ve yüksek enerji.
     """
     KEY = "NEMATOCYST"; CHANNEL = 'mechanical'; CONTACT = False; CREATES_TETHER = True
+    # Dort nematosist tipi: yalnizca penetrant (5) yuk tasir; volvent (6)
+    # sarar, glutinant (7) yapistirir, izoriza (8) kendini ceker.
+    VARYANTLAR = (5, 6, 7, 8)
 
 
 class ToxinLogic(WeaponLogic):
@@ -202,6 +280,8 @@ class ToxinLogic(WeaponLogic):
     doğduğunda üreticisi akrabalarının bağışıklığını yitirir.
     """
     KEY = "TOXIN"; CHANNEL = 'chemical'; CONTACT = False; CONTINUOUS = True
+    URETICI = True
+    VARYANTLAR = (0, 1, 2)      # difuzyon / yonlu bosaltma / fiskirtma
 
     def __init__(self, power=1.0):
         super().__init__(power)
@@ -238,6 +318,8 @@ class LysinLogic(WeaponLogic):
         bakterilerin "dost ateşi" sorunu birebir budur.
     """
     KEY = "LYSIN"; CHANNEL = 'chemical'; CONTACT = True; CONTINUOUS = True
+    URETICI = True
+    VARYANTLAR = (0, 1, 2)
 
 
 class PhagocytosisLogic(WeaponLogic):

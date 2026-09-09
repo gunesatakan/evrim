@@ -777,6 +777,12 @@ class Shot:
 
         self.e0 = self.pen.energy
         self.speed = self._v(self.pen.energy)
+        # HIZ OLCEGI. Mermi hizi laboratuvar hucresi (cekirdek 110 px)
+        # icin secildi: 560 px/sn = karede 18.7 px. Oyun hucresi 22 px
+        # yaricapli - mermi bir karede hucrenin obur tarafindan cikip
+        # yuku DISARIDA birakiyordu. Molekuller zaten geometriyle ayni
+        # oranda yavasliyordu (hiz_olcegi); mermi de oyle.
+        self.vs = float(getattr(cell, 'hiz_olcegi', 1.0))
         self.layer_idx = -1
         self.log = []
         self.dead = False
@@ -825,6 +831,15 @@ class Shot:
     def _v(e):
         return 40.0 + 26.0 * math.sqrt(max(0.0, e))
 
+    def _band_kalinlik(self, idx):
+        """Bandin piksel kalinligi - ZARFIN olceginden (boundaries).
+        `layer.t * PX_PER_UNIT` oyun hucresinde bes kat fazlaydi."""
+        bounds = self.cell.boundaries()
+        if idx < 0 or idx >= len(bounds):
+            return 0.0
+        inner = bounds[idx + 1] if idx + 1 < len(bounds) else self.cell.core_r
+        return max(0.0, bounds[idx] - inner)
+
     def _geometric_angle(self):
         """Çarpma açısı GEOMETRİDEN: hız ile yüzey normali arasındaki açı.
 
@@ -856,10 +871,21 @@ class Shot:
                 self.dead = True
                 self._emit()
                 return
-            step = self.speed * dt
+            step = self.speed * self.vs * dt
             self.cyto_travel -= step
             self.speed *= 0.965
             self.pos += self.dir * step
+            # TASMA KORUMASI: sitoplazmada ilerleyen mermi hucreden
+            # CIKAMAZ. Kare adimi cekirdege gore buyukse obur taraftan
+            # firlayip yuku disarida birakiyordu; cekirdek sinirinda durur.
+            _r = self.pos.distance_to(self.cell.center)
+            if _r > self.cell.core_r * 0.9:
+                _n = (self.pos - self.cell.center)
+                if _n.length() > 1e-6:
+                    self.pos = self.cell.center + _n.normalize() * self.cell.core_r * 0.9
+                self.dead = True
+                self._emit()
+                return
             if len(self.trail) < 500:
                 self.trail.append(pygame.math.Vector2(self.pos))
             return
@@ -873,11 +899,11 @@ class Shot:
                 self._emit()
                 return
             self.speed = max(18.0, remaining * 5.0)
-            self.pos += self.dir * self.speed * dt
+            self.pos += self.dir * self.speed * self.vs * dt
             if len(self.trail) < 500:
                 self.trail.append(pygame.math.Vector2(self.pos))
             return
-        self.pos += self.dir * self.speed * dt
+        self.pos += self.dir * self.speed * self.vs * dt
         if len(self.trail) < 500:
             self.trail.append(pygame.math.Vector2(self.pos))
 
@@ -887,7 +913,7 @@ class Shot:
         if nxt < len(bounds) and d <= bounds[nxt]:
             self._enter(nxt)
 
-        if not (0 < self.pos.x < VIEW_W and 0 < self.pos.y < HEIGHT):
+        if not self.cell.sinir_icinde(self.pos):
             self._deliver(max(0, self.layer_idx + (0 if self.glanced else 1)))
             self.dead = True
 
@@ -905,7 +931,7 @@ class Shot:
             self.layer_idx = 0
             self.delivered = 0
             bounds = self.cell.boundaries()
-            self.embed_r = bounds[0] - 0.35 * layer.t * PX_PER_UNIT
+            self.embed_r = bounds[0] - 0.35 * self._band_kalinlik(0)
             if self.ci == VOLVENT:
                 self.cell.tethered = True
             elif self.ci == GLUTINANT:
@@ -918,7 +944,11 @@ class Shot:
         # kurulmasi kalis suresi ister. Mermi cok hizliysa (enerjisi tutunma
         # gucunu asiyorsa) bag kurulmadan kopar ve mermi devam eder - yalnizca
         # basarisiz denemenin isi kadar yavaslayarak.
-        if self.marker_target == idx and idx > 0:
+        # idx > 0 sarti vardi: laboratuvar hucresinin hep >= 2 katmani
+        # oldugu icin fark edilmemisti. Oyunda cogu hucre CIPLAKTIR - zar
+        # 0. katmandir - ve kolesterol belirteci hicbir zaman
+        # kenetlenemiyordu. Tanima temasla olur; en dis katman da tanınır.
+        if self.marker_target == idx and idx >= 0:
             # BELL MODELI. Yorumda zaten "bagin omru kuvvetle USTEL azalir"
             # yaziyordu ama uygulama sert bir esikti: enerji <= guc ise
             # kesin tutar, bir birim fazlaysa hic tutmaz. Sonucu, kenetlenme
@@ -937,7 +967,7 @@ class Shot:
                 self.docked = True
                 self._deliver(idx)
                 bounds = self.cell.boundaries()
-                self.embed_r = bounds[idx] - 0.5 * layer.t * PX_PER_UNIT
+                self.embed_r = bounds[idx] - 0.5 * self._band_kalinlik(idx)
                 return
             # Tutunamadi: bag koptu, bir miktar enerji goturdu
             self.grip_failed = True
@@ -1000,7 +1030,7 @@ class Shot:
             # Delemedi ama YUZEYDE DURMAZ: enerjisi oraninda gomulur.
             bounds = self.cell.boundaries()
             outer = bounds[idx]
-            self.embed_r = outer - step.penetration * layer.t * PX_PER_UNIT
+            self.embed_r = outer - step.penetration * self._band_kalinlik(idx)
             self._deliver(idx)
 
     def _deliver(self, depth_reached):
@@ -1238,7 +1268,8 @@ class Molecule:
                  'state', 'age', 'surface', 'need', 'mode', 'blocked_by',
                  'bounces', 'jig', 'tumble', 'hug_t', 'hug_r', 'hug_sh',
                  'hug_bi', 'gen', 'rad', 'hug_side',
-                 'anch_ang', 'anch_bi', 'anch_frac', 'side', 'insert_fail')
+                 'anch_ang', 'anch_bi', 'anch_frac', 'side', 'insert_fail',
+                 'disarida')
 
     def __init__(self, cell, pos, vel, pi, depth=-1):
         # HIZ OLCEGI en basta atanmali: jig daha ilk satirlarda kuruluyor.
@@ -1284,35 +1315,48 @@ class Molecule:
         self.hedef_yok = _n is None
         self.need = len(act) if _n is None else _n
         self.mode = ZONE_MODE[zone] if zone else 'enaz'
+        # KOKEN: hedef bandin DISINDAN mi geliyor (ya da tam o bantta mi
+        # birakildi), yoksa daha ICERIDE mi dogdu? Yuzey toksini (side
+        # 'dis') yalnizca dis yuzden etki eder: sitoplazmaya enjekte
+        # edilmis norotoksin zar bandina surtundugunde "disaridan geldi"
+        # sayilmamali. `depth < need` olcutu bunu ayirt edemiyordu - tek
+        # katmanli hucrede need = 0 ve iceriden zara varan her molekul
+        # bagl aniyordu. Kokene bakmak durumu degil TARIHI sorar.
+        self.disarida = self.band() <= self.need
 
     # -------------------------------------------------------------- konum
     def band(self):
-        """Su an kacinci katmanin icinde? -1 = disarida, N = sitoplazma."""
+        """Su an kacinci katmanin icinde? -1 = disarida, N = sitoplazma.
+
+        Bant yaricaplari ZARFIN kendi olcegiyle (boundaries) okunur.
+        Eskiden `l.t * PX_PER_UNIT` ile hesaplaniyordu - laboratuvar
+        hucresinde (cekirdek 110 px) ayni sey, ama oyun hucresinde
+        (22 px) bantlar bes kat kalin saniliyordu: sitoplazmanin dibindeki
+        molekul "duvar bandinda" cikiyor ve orada baglaniyordu.
+        """
         d = self.pos.distance_to(self.cell.center)
-        r = self.cell.outer_r
-        for i, l in enumerate(self.cell.active()):
-            inner = r - l.t * PX_PER_UNIT
-            if d > r:
-                return -1
+        bounds = self.cell.boundaries()
+        if not bounds:
+            return -1 if d > self.cell.outer_r else 0
+        if d > bounds[0]:
+            return -1
+        core = self.cell.core_r
+        for i, outer in enumerate(bounds):
+            inner = bounds[i + 1] if i + 1 < len(bounds) else core
             if d >= inner:
                 return i
-            r = inner
-        return len(self.cell.active())
+        return len(bounds)
 
     def _band_radii(self, bi):
         """Bir bandın [iç, dış] yarıçapı - GUNCEL geometriye göre."""
-        act = self.cell.active()
+        bounds = self.cell.boundaries()
         if bi < 0:
             return self.cell.outer_r, self.cell.outer_r * 2.0
-        if bi >= len(act):
+        if bi >= len(bounds):
             return 0.0, self.cell.core_r
-        r = self.cell.outer_r
-        for i, l in enumerate(act):
-            inner = r - l.t * PX_PER_UNIT
-            if i == bi:
-                return inner, r
-            r = inner
-        return 0.0, self.cell.core_r
+        outer = bounds[bi]
+        inner = bounds[bi + 1] if bi + 1 < len(bounds) else self.cell.core_r
+        return inner, outer
 
     def _anchor(self):
         """Bağlı molekülü hücreye KİLİTLE.
@@ -1471,7 +1515,7 @@ class Molecule:
         # iceri dogru gider ve "disaridan geliyor" sayilirdi. Dogru olcut
         # su an HANGI BANTTA oldugu - hedef banttan disaridaysa dis yuze,
         # icerideyse ic yuze denk gelir.
-        dis_taraf = self.depth < self.need
+        dis_taraf = self.disarida
 
         if d1 != d0:
             # Elek CIFT YONLUDUR. Once yalnizca iceri girisi test ediyordum;
@@ -1520,7 +1564,13 @@ class Molecule:
         b = self.band()
         if b != self.depth and b >= -1:
             self.depth = b
-        if self._arrived_here(self.depth, dis_taraf):
+        # Koken guncellenir: hucreden cikan artik DISARIDADIR, hedef
+        # bandi asip iceri gecen artik ICERIDEDIR.
+        if b == -1:
+            self.disarida = True
+        elif b > self.need:
+            self.disarida = False
+        if self._arrived_here(self.depth, self.disarida):
             self._bind(self.depth)
 
     @staticmethod
@@ -1871,7 +1921,7 @@ class HedefZarf:
     """
 
     __slots__ = ('org', '_zarf', '_key', 'arrived', 'tier_of', 'sahip',
-                 'neden')
+                 'neden', 'feeder', 'alarm', 'pulling')
 
     def __init__(self, org):
         self.org = org
@@ -1881,6 +1931,10 @@ class HedefZarf:
         self.tier_of = {}
         self.sahip = None          # molekulu atan hucre (hasar sahibi)
         self.neden = None          # olum nedeni: hangi silah enjekte etti
+        # lab.Shot'un yazdigi alanlar (mermi fizigi bunlari okur/yazar)
+        self.feeder = None
+        self.alarm = 0.0
+        self.pulling = None        # izoriza: kendini ceken mermi
 
     # ---- geometri (onbellekli) ----
     def _g(self):
@@ -1950,6 +2004,43 @@ class HedefZarf:
     def generation(self):
         # Geometri degisince ucustaki molekuller emekli olsun
         return getattr(self.org, 'zarf_nesli', 0)
+
+    # ---- lab.Shot arayuzu ----
+    # Mermi fizigi (delme, kenetlenme, lumen, yakalama) laboratuvarla
+    # AYNI kod: Shot bir hucrede su alanlari okur/yazar. Burada hepsi
+    # oyun hucresine baglanir; fizik ikinci kez yazilmaz.
+    @property
+    def motion(self):
+        return self.org.pos - getattr(self.org, 'onceki_pos', self.org.pos)
+
+    def sinir_icinde(self, pos):
+        # Mermi hedefin cevresinde bir yerde olmali; dunya siniri degil,
+        # hedefe gore uzaklik. Cok uzaga gitmis mermi bosa gitmistir.
+        return pos.distance_to(self.org.pos) <= self.outer_r + 900.0
+
+    @property
+    def tethered(self):
+        return getattr(self.org, 'tether_timer', 0.0) > 0.0
+
+    @tethered.setter
+    def tethered(self, v):
+        # VOLVENT: iplik ava sarilir, kacamaz. Oyunda karsiligi ip suresi.
+        if v:
+            import game_settings as _g
+            self.org.tether_timer = _g.NEMATOCYST_TETHER_TIME
+            self.org.tether_from = self.sahip
+
+    @property
+    def sticky(self):
+        return getattr(self.org, 'yapiskan', 0.0) > 0.0
+
+    @sticky.setter
+    def sticky(self, v):
+        # GLUTINANT: yuzey yapiskan - sonraki mermiler sekmez, tutunma
+        # kolaylasir (fagositoz).
+        if v:
+            import game_settings as _g
+            self.org.yapiskan = _g.STICKY_TIME
 
     # ---- sitostom yok: oyunda yutma ayri bir akista ----
     def agza_girdi(self, pos):
@@ -3277,6 +3368,15 @@ class LabCell:
                 px, py = cx + math.cos(a) * rr, cy + math.sin(a) * rr
                 pygame.draw.line(s, (220, 130, 255),
                                  (px - 6, py - 6), (px + 6, py + 6), 2)
+
+
+def _labcell_sinir_icinde(self, pos):
+    """Laboratuvarda mermi pencereden cikinca biter. Oyun hucresi
+    (HedefZarf) kendi sinirini koyar - dunya 2400x1600, pencere degil."""
+    return 0 < pos.x < VIEW_W and 0 < pos.y < HEIGHT
+
+
+LabCell.sinir_icinde = _labcell_sinir_icinde
 
 
 class Attacker:

@@ -238,7 +238,13 @@
         "KOKU_BULUT": 80.0,
         "STYLET_EMME": 0.16,
         "EMME_VERIM": 0.6,
-        "STYLET_EMME_GIDER": 2.0
+        "STYLET_EMME_GIDER": 2.0,
+        "YUK_SENTEZ_OLCEK": 0.1,
+        "MARKER_MUTATION": 0.03,
+        "TASIYICI_VARYANT_MUTATION": 0.03,
+        "URETICI_YUK_MUTATION": 0.02,
+        "STICKY_TIME": 2.5,
+        "IZORIZA_HIZ": 160.0
     },
     "entities": {
         "optropi_0": {

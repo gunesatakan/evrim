@@ -348,6 +348,9 @@ class Organism(Entity):
         self.bound_by = None        # beni tutan hucre (hedef tarafi)
         self.bind_timer = 0.0       # ne kadar suredir tutuyorum
         self.tether_timer = 0.0     # nematosist ipiyle tutuluyorum
+        self.tether_from = None     # ipi kim attı (cizim icin)
+        self.yapiskan = 0.0         # glutinant: yuzeyim yapiskan (sn)
+        self.atislar = []           # BANA atilan mermiler (lab.Shot)
         self.consumed = False       # leşi biri aldı mı (çift ödülü önler)
 
     def add_organ(self, organ):
@@ -1022,6 +1025,8 @@ class Organism(Entity):
             _g = getattr(game_settings, 'GORUNUM_OLCEGI', 1.0)
             _lab.hucreyi_ciz(screen, self, self.pos, _g)
             self.molekulleri_ciz(screen, olcek=_g)
+            for _sh in self.atislar:        # bana gelen mermiler
+                _sh.draw(screen)
         else:
             for organ in self.organs:
                 organ.draw(screen, self)
@@ -1345,6 +1350,12 @@ class Organism(Entity):
         if target.bound_by is not None or self.bound_target is not None:
             return False
         res = target.binding_resistance
+        # Yakalayici nematosistler fagositozun onunu acar: ipe sarilmis
+        # (volvent) ya da yuzeyi yapiskan (glutinant) av cok daha kolay
+        # tutulur. Laboratuvardaki "fagositoz yapan hucre bu silahlarla
+        # avi yakalayip sabitler" davranisi buradan gelir.
+        if target.is_restrained or getattr(target, 'yapiskan', 0.0) > 0.0:
+            grip = grip * 3.0
         if random.random() > grip / (grip + res + 1e-6):
             return False
         self.bound_target = target
@@ -1549,7 +1560,7 @@ class Organism(Entity):
                 organ.atis_isaretle(pygame.math.Vector2(t.pos))
                 # Her batista secili yuk iceri gider (varsa). Stiletin asil
                 # isi ise asagida: EMMEK.
-                self._igne_enjekte(t, organ, lg)
+                self._igne_atisi(t, organ, lg)
                 if t.dead:
                     self.release_binding()
                     killed.append(t)
@@ -1565,15 +1576,12 @@ class Organism(Entity):
                 # DELMEK OLDURMEZ - delik kapanir. Olduren, varsa YUKTUR:
                 # igne secili yuku sitoplazmaya birakir, dozu esikler
                 # yargilar (lab.PAYLOAD_THRESHOLD). Zirh teslimati kisar.
-                self._igne_enjekte(t, organ, lg)
-                # Nematosist ipi: isabet edince avı bağlar. Saldırgan
-                # serbest kalır - önceden tutunmaz, sonradan tutar.
-                if lg.CREATES_TETHER and not t.dead:
-                    res = t.binding_resistance
-                    if random.random() < lg.power / (lg.power + res + 1e-6):
-                        t.tether_timer = game_settings.NEMATOCYST_TETHER_TIME
-                        # Ip gorunsun: hedef, kendisini kimin tuttugunu bilir.
-                        t.tether_from = self
+                self._igne_atisi(t, organ, lg)
+                # Nematosist ipi artik LAB FIZIGINDEN gelir: yalnizca
+                # VOLVENT tipi (Shot._enter -> cell.tethered) ava sarilir,
+                # glutinant yapistirir, izoriza ceker, penetrant deler.
+                # Once her nematosist isabeti 2.5 sn tutuyordu - bu,
+                # "yapisip oylece duruyorlar" gorunumunun kaynagiydi.
                 if t.dead:
                     killed.append(t)
                 break
@@ -1596,63 +1604,117 @@ class Organism(Entity):
     #  Igneli tasiyicilar mermi yollar; onlar bu yoldan gecmez.
     MOLEKULER_TASIYICI = (0, 1, 2)
 
-    def _igne_enjekte(self, hedef, organ, lg):
-        """Igneli silah isabet etti: yuku hedefin ICINE birak.
+    def _uretici_bul(self, hedef=None):
+        """Yuk verebilecek uretici organ: stoklu ve (varsa) hedefin bagisik
+        olmadigi. Yoksa None - igne yuksuz gider."""
+        for o in self.organs:
+            lg = getattr(o, 'logic', None)
+            if lg is None or not getattr(lg, 'URETICI', False):
+                continue
+            if lg.stok < 1.0 or int(lg.payload) <= 0:
+                continue
+            if hedef is not None and hedef.is_immune_to_toxin(lg):
+                continue
+            return lg
+        return None
 
-        HP hasari yok. Zardaki delik kapanir; oldurecek olan sey varsa
-        YUKTUR. lab.Shot._emit ile ayni is: tasiyicinin salim sayisi
-        (CARRIER_EMIT) kadar molekul, hedefin sitoplazmasinda dogar ve
-        kendi bandinda baglanir - doz muhasebesi HedefZarf.receive'de,
-        esikler PAYLOAD_THRESHOLD'da, temizlenme CLEARANCE'ta. Toksinle
-        ayni moleküller, ayni kurallar.
+    def _igne_atisi(self, hedef, organ, lg):
+        """Igneli silah atesledi: GERCEK bir lab.Shot yola cikar.
 
-        Zirh teslimati kisar: lab.teslimat(tasiyici, yuk, zirh) kac
-        molekulun vardigini soyler (duvar 15+ nematosisti tamamen durdurur).
-        Yuk secilmemisse (saf mekanik) hicbir sey olmaz - delik kapanir.
+        Laboratuvarda kurulan sistem oldugu gibi calisir - fizik ikinci
+        kez yazilmaz. Mermi katmanlari delmeye calisir (cross_layer),
+        belirtec varsa tanidigi katmana kenetlenir (Bell modeli), yuk
+        lumenden gecemiyorsa igne YUKSUZ gider, yakalayici nematosistler
+        delmez (sarar / yapistirir / ceker). Yuk merminin DURDUGU yerde
+        molekul olarak birakilir ve oradan sonrasini molekulun kendi
+        fizigi belirler: zar yuzeyine etki eden bir toksin sitoplazmaya
+        birakilirsa hicbir sey yapmaz, duvara birakilirsa duvardan
+        gecebilen kadari etki eder.
 
-        Doner: birakilan molekul sayisi.
+        UC AYRI GEN: tasiyici bu organ, belirtec bu organin geni, yuk ise
+        hucrenin URETICISINDEN cekilir - uretici yoksa ya da stogu yoksa
+        mermi yuksuzdur. Delik kapanir.
         """
         try:
             import lab as _lab
         except Exception:
-            return 0
+            return None
         ci = int(getattr(lg, 'carrier', 5))
-        pi = int(getattr(lg, 'payload', 0))
-        if pi <= 0 or pi >= len(_lab.PAYLOADS) or _lab.PAYLOADS[pi][1] is None:
-            return 0
-        if ci < 0 or ci >= len(_lab.CARRIER_EMIT):
-            return 0
+        mi = int(getattr(lg, 'marker', 0))
+        if not (0 <= ci < len(_lab.CARRIERS)):
+            return None
+        mi = mi if 0 <= mi < len(_lab.MARKERS) else 0
+        # YUK: ureticiden, stoktan. CARRIER_EMIT kadar molekul cekilir.
+        pi = 0
+        ur = self._uretici_bul(hedef)
+        gerek = _lab.CARRIER_EMIT[ci]
+        if ur is not None and gerek > 0 and ur.yuk_cek(gerek):
+            pi = int(ur.payload)
         ad = organ.__class__.__name__.lower()
-        oran = hedef._teslimat_carpani(ad, lg)
-        n = int(round(_lab.CARRIER_EMIT[ci] * oran * max(0.0, lg.power)))
-        if n <= 0:
-            return 0
         zarf = hedef.zarf_arayuzu()
         zarf.neden = ad
         zarf.sahip = self
-        # Igne yuku sitoplazmaya birakir: cekirdek yaricapinin yarisi
-        # icinde rastgele bir nokta. Molekul kendi bandini bulur ve
-        # ilk adimda baglanir (Molecule.update sonu: _arrived_here).
-        r_ic = max(1.0, hedef.radius * 0.5)
-        for _ in range(n):
-            a = random.uniform(0.0, 2.0 * math.pi)
-            rr = random.uniform(0.0, r_ic)
-            pos = pygame.math.Vector2(hedef.pos.x + math.cos(a) * rr,
-                                      hedef.pos.y + math.sin(a) * rr)
-            hiz = random.uniform(0.25, 0.9) * _lab.MOLECULE_SPEED * zarf.hiz_olcegi
-            b = random.uniform(0.0, 2.0 * math.pi)
-            m = _lab.Molecule(zarf, pos, pygame.math.Vector2(math.cos(b), math.sin(b)) * hiz, pi)
-            m.depth = m.band()
-            hedef.molekul_ekle(m)
-            # Ayni karede baglansin ki olum `killed` listesine girsin ve
-            # avci odulunu alsin. update() cagirmak yanlis olurdu: o,
-            # hucrenin kare-ici hareketini onceki_pos'tan supurur ve taze
-            # dogan molekulu disari firlatabilir. Yeni dogmus molekul
-            # icin hareket adimi anlamsiz - lab'in kendi baglanma
-            # yolu dogrudan (Molecule.update'in son satirlariyla ayni).
-            if m._arrived_here(m.depth, False):
-                m._bind(m.depth)
-        return n
+        namlu = organ.get_absolute_position(self.pos, self.direction, self.radius)
+        yon = hedef.pos - namlu
+        if yon.length() < 1e-6:
+            yon = pygame.math.Vector2(self.direction)
+        # IGNE UCU HEDEFIN YUZEYINDEN BASLAR. Temas halindeki hucrelerde
+        # namlu, hedefin ZARFININ icinde kaliyordu (zarf dis yaricapi
+        # temas yaricapindan buyuk): mermi daha ilk adimda sitoplazmada
+        # doguyor, kenetlenmesi gereken belirtec bile yuku iceri
+        # birakiyordu. Zarfin disina, giris dogrultusunda cekilir.
+        _dis = zarf.outer_r + 0.5
+        if namlu.distance_to(hedef.pos) < _dis:
+            _n = namlu - hedef.pos
+            if _n.length() < 1e-6:
+                _n = -yon
+            namlu = hedef.pos + _n.normalize() * _dis
+            yon = hedef.pos - namlu
+        shot = _lab.Shot(zarf, namlu, yon, _lab.CARRIERS[ci], _lab.PAYLOADS[pi],
+                         _lab.MARKERS[mi], ci)
+        shot.sahip = self
+        shot.olum_t = 0.0
+        hedef.atislar.append(shot)
+        return shot
+
+    def atislari_guncelle(self, dt):
+        """Bana atilmis mermileri ilerlet; biraktiklari yuku zarfima al."""
+        if not self.atislar:
+            return
+        kalan = []
+        zarf = self.zarf_arayuzu()
+        for sh in self.atislar:
+            sh.update(dt)
+            if sh.released:
+                for m in sh.released:
+                    self.molekul_ekle(m)
+                sh.released = []
+            # IZORIZA: avlanma degil hareket - saldirgan kendini ceker.
+            if zarf.pulling is sh:
+                atk = getattr(sh, 'sahip', None)
+                if atk is None or atk.dead:
+                    zarf.pulling = None
+                else:
+                    fark = self.pos - atk.pos
+                    d = fark.length()
+                    hedef_d = self.radius + atk.radius + 2.0
+                    if d > hedef_d + 1.0:
+                        adim = min(game_settings.IZORIZA_HIZ * dt, d - hedef_d)
+                        atk.pos += fark.normalize() * adim
+                    else:
+                        zarf.pulling = None
+            # Emen stilet (mizositoz) bag surdukce yerinde kalir.
+            if sh.feeding:
+                atk = getattr(sh, 'sahip', None)
+                if atk is None or atk.dead or atk.bound_target is not self:
+                    sh.feeding = False
+                    sh.dead = True
+            if sh.dead:
+                sh.olum_t = getattr(sh, 'olum_t', 0.0) + dt
+                if sh.olum_t > 0.35 and not sh.released:
+                    continue            # cizim payi bitti
+            kalan.append(sh)
+        self.atislar = kalan
 
     def _emme(self, hedef, dt, killed):
         """Stilet baglıyken sitoplazma EMER (mizositoz).
@@ -1702,8 +1764,12 @@ class Organism(Entity):
         birikim = getattr(lg, '_mol_birikim', 0.0) + dt * (4.0 + 3.0 * ci)
         n = int(birikim)
         lg._mol_birikim = birikim - n
+        # YUK STOKTAN CIKAR: uretici sentezlemediyse puskurtecek bir sey
+        # yoktur. Eskiden molekul yoktan geliyordu.
+        n = min(n, int(getattr(lg, 'stok', 0.0)))
         if n <= 0:
             return True          # tasiyici molekuler; bu karede sira gelmedi
+        lg.stok -= n
         yon = hedef.pos - self.pos
         if yon.length() < 1e-6:
             yon = pygame.math.Vector2(1, 0)
@@ -2378,6 +2444,22 @@ class Organism(Entity):
             if random.random() < game_settings.ORGAN_LOSS_RATE:
                 if daughter.yapi_kaybet() is not None:
                     changes += game_settings.DIVERGENCE_NEW_ORGAN
+            # SILAH UCLUSU AYRI AYRI EVRIMLESIR: belirtec, tasiyici varyanti,
+            # ureticinin yuk tipi. Uyumlu bir uclunun bir araya gelmesi
+            # sansa baglidir - kodda bir esleme yoktur.
+            for _o in daughter.organs:
+                _lg = getattr(_o, 'logic', None)
+                if _lg is None or not hasattr(_lg, 'belirtec_mutasyonu'):
+                    continue
+                if random.random() < game_settings.MARKER_MUTATION:
+                    _lg.belirtec_mutasyonu()
+                    changes += game_settings.DIVERGENCE_UPGRADE
+                if random.random() < game_settings.TASIYICI_VARYANT_MUTATION:
+                    if _lg.varyant_mutasyonu() is not None:
+                        changes += game_settings.DIVERGENCE_UPGRADE
+                if random.random() < game_settings.URETICI_YUK_MUTATION:
+                    if _lg.yuk_mutasyonu() is not None:
+                        changes += game_settings.DIVERGENCE_UPGRADE
             # Vucut plani da evrimlesir: organin acisi kayar.
             if random.random() < game_settings.ORGAN_ANGLE_RATE:
                 if daughter.organ_acisi_mutasyonu() is not None:
@@ -2553,6 +2635,14 @@ class Organism(Entity):
         self._alici_noktalari = [
             (c.touch_probes(self)[1], c.logic.scent_sensitivity)
             for c in getattr(self, '_koku_alicilari', ())]
+        # Ureticiler yuk sentezler (stok); glutinant yapiskanligi soner.
+        for _o in self.organs:
+            _lg = getattr(_o, 'logic', None)
+            if _lg is not None and getattr(_lg, 'URETICI', False):
+                _lg.sentezle(dt, self)
+        if self.yapiskan > 0.0:
+            self.yapiskan = max(0.0, self.yapiskan - dt)
+        self.atislari_guncelle(dt)
         self.molekulleri_guncelle(dt)
         self.onceki_pos = pygame.math.Vector2(self.pos)
         if hasattr(self, 'body'):
