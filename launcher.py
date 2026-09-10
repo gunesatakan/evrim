@@ -639,18 +639,10 @@ class ModernLauncher:
             return base_width + organ.logic.length * 0.3
         elif isinstance(organ, Cilia):
             return base_width + organ.logic.length * 0.2
-        elif organ.__class__.__name__ in WEAPON_CLASSES:
-            # SILAHIN GERCEK ATIS YAYI. Editor her organa sus bir genislik
-            # ciziyordu; nematosistin 30 derecelik dar yayi ile toksinin
-            # 180 derecelik yonsuz salimi ayni gorunuyordu. Kullanici
-            # silahi yana takip "neden atmiyor" diyordu - hucre ava onden
-            # gider, yana bakan dar bir silah hedefe nadiren bakar
-            # (olculdu: onde 67 atis, yanda 46, arkada 35). Yay artik
-            # can_hit'in kullandigi acinin kendisi.
-            try:
-                return max(base_width, 2.0 * float(organ.logic.arc))
-            except Exception:
-                return base_width
+        # Silahlar: AYAK IZI base_width kalir. Atis yayi ayri bir seydir
+        # (nerede ates edebilir) ve ayrica cizilir - bir kez ayak izi
+        # yerine yay kullanilinca 180 derecelik toksin butun zari
+        # "kapliyor" sayildi ve editor toksin/lizin eklemeyi reddetti.
 
         return base_width
 
@@ -1443,6 +1435,30 @@ class ModernLauncher:
 
             # Editor modunda tüm organların pozisyonlarını göster
             if self.organ_editor_mode:
+                # ATIS YAYI (yalnizca silahlar): organin nereye ates
+                # EDEBILECEGI. Ayak izinden ayri: nematosistin dar 30
+                # derecelik yayi ile toksinin 180 derecelik yonsuz salimi
+                # burada gorunur. Hucre ava onden gider; yana takili dar
+                # bir silah hedefe nadiren bakar (olculdu: onde 67 atis,
+                # yanda 46, arkada 35). Yay can_hit'in acisinin kendisi.
+                _lg = getattr(organ, 'logic', None)
+                if organ_name in WEAPON_CLASSES and _lg is not None and hasattr(_lg, 'arc'):
+                    try:
+                        _yay = math.radians(float(_lg.arc))
+                    except Exception:
+                        _yay = 0.0
+                    if 0.0 < _yay < math.pi:
+                        _r_yay = scaled_radius + 22
+                        _yay_rect = pygame.Rect(int(center_x - _r_yay), int(center_y - _r_yay),
+                                                int(_r_yay * 2), int(_r_yay * 2))
+                        _yay_renk = tuple(min(255, c // 2 + 40) for c in organ_color)
+                        pygame.draw.arc(self.screen, _yay_renk, _yay_rect,
+                                        -(angle + _yay), -(angle - _yay), 1)
+                        for _kenar in (angle - _yay, angle + _yay):
+                            pygame.draw.line(self.screen, _yay_renk,
+                                             (int(pos_x), int(pos_y)),
+                                             (int(center_x + math.cos(_kenar) * _r_yay),
+                                              int(center_y + math.sin(_kenar) * _r_yay)), 1)
                 # Açısal genişlik yayı
                 width_deg = self.get_organ_angular_width(organ)
                 width_rad = math.radians(width_deg)
