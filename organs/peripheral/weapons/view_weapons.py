@@ -25,8 +25,36 @@ def _lab_markers():
         return None
 
 
+def _yuk_bilgisi(payload):
+    """(renk, stok tavani) - yukun KENDI rengi. Yoksa (None, 44)."""
+    try:
+        import lab
+        pi = int(payload)
+        if 0 < pi < len(lab.PAYLOADS) and lab.PAYLOADS[pi][1] is not None:
+            return lab.PAYLOADS[pi][5], float(lab.STOCK_MAX)
+        return None, float(lab.STOCK_MAX)
+    except Exception:
+        return None, 44.0
+
+
+def _kese(screen, P, W, dx, dy, r, dolu, renk):
+    """Ureticinin DEPO KESESI: doluluk orani gorunur.
+
+    Salgi kesesi (vezikul) hucrenin icinde gercekten durur ve dolduk ca
+    sisirir. Ekranda bunun karsiligi yoktu; kullanici organin kac
+    molekul biriktirdigini yalnizca paneldeki sayidan gorebiliyordu.
+    """
+    if renk is None:
+        return
+    pygame.draw.circle(screen, (40, 46, 56), P(dx, dy), W(r))
+    if dolu > 0.0:
+        pygame.draw.circle(screen, renk, P(dx, dy), max(1, W(r * (dolu ** 0.5))))
+    pygame.draw.circle(screen, (90, 100, 115), P(dx, dy), W(r), max(1, W(1.5)))
+
+
 def draw_weapon(screen, name, pos, outward, length, ready, firing_at=None,
-                olcek=1.0, carrier=None, marker=0, recoil=0.0, merkez=None):
+                olcek=1.0, carrier=None, marker=0, recoil=0.0, merkez=None,
+                stok=0.0, payload=0):
     """Silahi govde uzerinde ciz - LABORATUVARLA AYNI SEKILLER.
 
     lab.Attacker._draw_weapon her tasiyiciyi kendi yapisiyla cizer: T6SS
@@ -84,16 +112,38 @@ def draw_weapon(screen, name, pos, outward, length, ready, firing_at=None,
                            pos - perp * agiz, tip - perp * agiz * 0.55], 2)
         return
 
+    # GORULEN MOLEKUL = STOKTAKI MOLEKUL.
+    #
+    # Uretici tasiyicilarin (0-2) cevresine sabit sayida sus noktasi
+    # ciziliyordu: bos bir organ da tikabasa dolu bir organ da ayni
+    # gorunuyor, hatta hic uretmemis bir hucre puskurtuyormus gibi
+    # duruyordu. Cizilen nokta sayisi artik organin FIILEN tasidigi
+    # molekul sayisi, rengi de o molekulun kendi rengi. Bos organ bos
+    # gorunur; stok dolarken noktalar cogalir.
+    _yuk_renk, _stok_max = _yuk_bilgisi(payload)
+    _stok = max(0.0, float(stok))
+    _dolu = min(1.0, _stok / max(1.0, _stok_max))
+
+    def _nokta_sayisi(en_fazla):
+        """Stokun kac molekulu bu cizimde gosterilir."""
+        if _yuk_renk is None or _stok < 1.0:
+            return 0
+        return max(1, int(round(en_fazla * _dolu)))
+
     if ci == 0:
         # DIFUZYON: silah yok, molekuller hucrenin her yanindan sizip
         # yayilir - lab'daki gibi hucre cevresinde nokta halkasi
         c = pygame.math.Vector2(merkez) if merkez is not None else pygame.math.Vector2(pos)
         R = c.distance_to(pos)
-        for k in range(18):
+        # Depo kesesi difuzyonda da vardir: salgi once vezikulde birikir,
+        # sonra zardan sizar.
+        _kese(screen, P, W, 0, 0, 14, _dolu, _yuk_renk)
+        _n = _nokta_sayisi(18)
+        for k in range(_n):
             a = (k / 18.0) * 2 * math.pi
             d = R + (14 + (k % 3) * 11) * s
             q = c + pygame.math.Vector2(math.cos(a), math.sin(a)) * d
-            pygame.draw.circle(screen, (150, 160, 175), (int(q.x), int(q.y)), W(3))
+            pygame.draw.circle(screen, _yuk_renk, (int(q.x), int(q.y)), W(3))
     elif ci == 1:
         # YONLU BOSALTMA: hedefe dogru acilmis kese (yay), molekuller onunde
         yay = []
@@ -101,16 +151,18 @@ def draw_weapon(screen, name, pos, outward, length, ready, firing_at=None,
             a = -1.1 + 2.2 * k / 12.0
             yay.append(P(5 + 23 * math.cos(a), 26 * math.sin(a)))
         pygame.draw.lines(screen, (170, 185, 195), False, yay, W(4))
-        for k in range(10):
+        _kese(screen, P, W, 5, 0, 20, _dolu, _yuk_renk)
+        for k in range(_nokta_sayisi(10)):
             dy = -22 + k * 5
-            pygame.draw.circle(screen, (150, 165, 185), P(20 + (k % 4) * 9, dy), W(3))
+            pygame.draw.circle(screen, _yuk_renk, P(20 + (k % 4) * 9, dy), W(3))
     elif ci == 2:
         # FILAMENT: esnek boru, ucundan fiskirtma
         pts = [P(-4 + i * 9, 7 * math.sin(i * 0.9)) for i in range(9)]
         pygame.draw.lines(screen, (185, 175, 205), False, pts, W(7))
         pygame.draw.lines(screen, (110, 100, 130), False, pts, W(2))
-        for k in range(6):
-            pygame.draw.circle(screen, (200, 190, 220),
+        _kese(screen, P, W, -4, 0, 16, _dolu, _yuk_renk)
+        for k in range(_nokta_sayisi(6)):
+            pygame.draw.circle(screen, _yuk_renk,
                                P(tipx + 6 + k * 7, (k % 3 - 1) * 5), W(3))
     elif ci == 3:
         # T6SS: kasilmali kilif + ic tup + mizrak ucu

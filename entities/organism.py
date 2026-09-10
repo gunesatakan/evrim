@@ -2070,7 +2070,11 @@ class Organism(Entity):
         taban = math.atan2(yon.y, yon.x)
         yari = math.radians(_lab.CARRIER_SPREAD[ci])
         v0 = _lab.CARRIER_REACH[ci] * _lab._DRAG_K * (hedef.radius / 110.0)
-        for _ in range(min(n, 6)):
+        # STOKTAN DUSEN HER MOLEKUL GERCEKTEN OLUSUR. Once kare basina
+        # en fazla alti tane ciziliyor ama stoktan n tanesi dusuluyordu;
+        # fark hicbir yerde olmayan, yoktan harcanmis maddeydi. Cikan
+        # sey uretilen seydir - eksigi de fazlasi da yok.
+        for _ in range(n):
             a = taban + random.uniform(-yari, yari)
             hiz = v0 * random.uniform(0.8, 1.2)
             v = pygame.math.Vector2(math.cos(a), math.sin(a)) * hiz

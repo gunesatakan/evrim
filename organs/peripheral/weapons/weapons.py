@@ -188,7 +188,10 @@ class BaseWeapon(BaseOrgan):
                     self.logic.ready, self.last_target_pos, olcek=k,
                     carrier=int(ci), marker=int(getattr(self.logic, 'marker', 0)),
                     recoil=float(getattr(self, 'geri_tepme', 0.0)),
-                    merkez=parent.pos)
+                    merkez=parent.pos,
+                    # Cizilen molekuller organin FIILEN tasidigi stok.
+                    stok=float(getattr(self.logic, 'stok', 0.0)),
+                    payload=int(getattr(self.logic, 'payload', 0)))
 
 
 class Stylet(BaseWeapon):
