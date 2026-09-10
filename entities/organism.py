@@ -1887,20 +1887,36 @@ class Organism(Entity):
         yon = pygame.math.Vector2(math.cos(_a), math.sin(_a))
         # IGNE UCU HEDEFIN ZARFININ DISINDAN BASLAR. Temas halindeki
         # hucrelerde namlu zarfin icinde kalabiliyor (zarf dis yaricapi
-        # temas yaricapindan buyuk); atis dogrultusunda GERI cekilir.
-        # Isin hedef daireyi kesmiyorsa mermi bosa gider - o da bir atistir.
+        # temas yaricapindan buyuk) ve lab.Shot disaridan girmeyi bekler
+        # (layer_idx = -1); icerde baslayan mermi hicbir katmani kesmez.
+        #
+        # ONCE ATIS DOGRULTUSUNDA GERI CEKILIYORDU ve bu, kokun hucrenin
+        # OBUR TARAFINA gecmesine yol aciyordu: arkaya takili bir
+        # nematosist, ust uste binen bir hedefte namlusunu 48 px oteye,
+        # hucrenin ONUNE atiyordu. Olculdu.
+        #
+        # Dogrusu ORGANIN BULUNDUGU YONDE disari itmek: namlu hedefin
+        # zarfina en yakin noktadan, silahin TAKILI OLDUGU taraftan cikar.
         _R = zarf.outer_r + 0.5
         _m = namlu - hedef.pos
         if _m.length() < _R:
-            # |m - t*u| = R cozumu (t > 0: geriye)
-            _b = _m.dot(yon)
-            _c = _m.length_squared() - _R * _R
-            _disk = _b * _b - _c
-            _t = _b + math.sqrt(max(0.0, _disk))
-            namlu = namlu - yon * _t
+            _d = _m
+            if _d.length() < 1e-6:
+                # Organ tam hedefin merkezinde: taraf bilgisi organin
+                # govdeye TAKILDIGI yonden gelir.
+                _d = namlu - self.pos
+            if _d.length() < 1e-6:
+                _d = -yon
+            namlu = hedef.pos + _d.normalize() * _R
         shot = _lab.Shot(zarf, namlu, yon, _lab.CARRIERS[ci], _lab.PAYLOADS[pi],
                          _lab.MARKERS[mi], ci)
         shot.sahip = self
+        # KOK ORGANDA DURUR. T6SS tupu ve stilet govdeye BAGLI yapilardir,
+        # nematosist ipi de kapsulden cikar; ucu ilerlerken kokleri
+        # saldirganla birlikte hareket eder. `origin` bir kez yazilip
+        # birakilinca kok atesin edildigi noktada asili kaliyordu -
+        # hucre yuzup gidiyor, tup bosluga bagli duruyordu.
+        shot.organ = organ
         shot.olum_t = 0.0
         hedef.atislar.append(shot)
         return shot
@@ -1912,6 +1928,13 @@ class Organism(Entity):
         kalan = []
         zarf = self.zarf_arayuzu()
         for sh in self.atislar:
+            # KOKU TAZELE: silah govdeye bagli, saldirgan hareket ediyor.
+            _org = getattr(sh, 'organ', None)
+            _sahip = getattr(sh, 'sahip', None)
+            if (_org is not None and _sahip is not None
+                    and not getattr(_sahip, 'dead', False)):
+                sh.origin = _org.get_absolute_position(
+                    _sahip.pos, _sahip.direction, _sahip.radius)
             sh.update(dt)
             if sh.released:
                 for m in sh.released:
