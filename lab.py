@@ -1078,9 +1078,23 @@ class Shot:
             m.depth = m.band()
             self.released.append(m)
 
-    def draw(self, s):
-        """Her tasiyici KENDI mermisiyle cizilir - hepsi ayni nokta degil."""
-        p = (int(self.pos.x), int(self.pos.y))
+    def draw(self, s, donustur=None, olcek=1.0):
+        """Her tasiyici KENDI mermisiyle cizilir - hepsi ayni nokta degil.
+
+        `donustur` verilirse dunya konumlari ekrana onunla tasinir (oyunun
+        kamera gorunumu), `olcek` cizgi kalinligi/yaricap carpani. Lab
+        ikisini de vermez - orada birebir eski cizim.
+        """
+        sv = float(getattr(self, 'vs', 1.0))     # mermi olcegi (hedef zarfina gore)
+        ks = float(olcek) * sv                   # ekran olcegi
+        def T(v):
+            if donustur is None:
+                return (int(v.x), int(v.y))
+            q = donustur(v)
+            return (int(q[0]), int(q[1]))
+        def L(n):
+            return max(1, int(round(n * ks)))
+        p = T(self.pos)
         pcol = self.payload[5]
         dead = self.dead
         col = ((255, 150, 210) if self.docked else
@@ -1090,21 +1104,22 @@ class Shot:
         if len(self.trail) > 1 and ci not in (3, 4):
             # 3-4 govdeye BAGLI uzayan yapilar; ayrica iz cizmeye gerek yok
             pygame.draw.lines(s, (85, 95, 125), False,
-                              [(int(q.x), int(q.y)) for q in self.trail], 2)
+                              [T(q) for q in self.trail], L(2))
 
         ang = math.atan2(self.dir.y, self.dir.x)
         cs, sn = math.cos(ang), math.sin(ang)
 
         def rot(dx, dy):
-            return (int(self.pos.x + dx * cs - dy * sn),
-                    int(self.pos.y + dx * sn + dy * cs))
+            # lab piksel ofsetleri mermi olcegiyle (vs) ve kamerayla kuculur
+            return T(pygame.math.Vector2(self.pos.x + (dx * cs - dy * sn) * sv,
+                                         self.pos.y + (dx * sn + dy * cs) * sv))
 
         if ci == 0:
             # DIFUZYON: dagilmis molekul bulutu
             rnd = random.Random(int(self.pos.x) // 7)
             for _ in range(9):
-                s.set_at((p[0] + rnd.randint(-11, 11), p[1] + rnd.randint(-11, 11)), pcol)
-            pygame.draw.circle(s, pcol, p, 3)
+                s.set_at((p[0] + int(rnd.randint(-11, 11) * ks), p[1] + int(rnd.randint(-11, 11) * ks)), pcol)
+            pygame.draw.circle(s, pcol, p, L(3))
         elif ci == 1:
             # YONLU BOSALTMA: parfum gibi. Cikistan itibaren genisleyen bir
             # KONI, seyrelerek dagilir - fiskirtma degil, sikma.
@@ -1118,7 +1133,7 @@ class Shot:
                 fade = int(70 + 150 * (1.0 - t))
                 cc = (min(255, pcol[0] * fade // 220), min(255, pcol[1] * fade // 220),
                       min(255, pcol[2] * fade // 220))
-                pygame.draw.circle(s, cc, rot(dx, dy), 2)
+                pygame.draw.circle(s, cc, rot(dx, dy), L(2))
         elif ci == 2:
             # FISKIRTMA: molekulleri hedefe DOGRU firlatir. Bagli boru YOK -
             # dar, hizli, derisik bir jet. Yonlu bosaltmadan farki: dagilmiyor.
@@ -1128,25 +1143,25 @@ class Shot:
                 t = rnd.random()
                 dx = -travelled * t
                 dy = rnd.uniform(-1, 1) * (3 + t * 5)
-                pygame.draw.circle(s, pcol, rot(dx, dy), 3)
-            pygame.draw.circle(s, (245, 240, 255), p, 4)
+                pygame.draw.circle(s, pcol, rot(dx, dy), L(3))
+            pygame.draw.circle(s, (245, 240, 255), p, L(4))
         elif ci == 3:
             # T6SS: tup FIRLATILMAZ, kilifa bagli kalir - piston gibi.
             # Govdeye bagli govde + uc. Temas sartinin sebebi bu.
-            o = (int(self.origin.x), int(self.origin.y))
-            pygame.draw.line(s, (140, 158, 175), o, p, 9)
-            pygame.draw.line(s, (75, 90, 105), o, p, 2)
+            o = T(self.origin)
+            pygame.draw.line(s, (140, 158, 175), o, p, L(9))
+            pygame.draw.line(s, (75, 90, 105), o, p, L(2))
             pygame.draw.polygon(s, (215, 220, 225),
                                 [rot(12, 0), rot(-6, -7), rot(-6, 7)])
             pygame.draw.polygon(s, (90, 105, 120),
-                                [rot(12, 0), rot(-6, -7), rot(-6, 7)], 2)
+                                [rot(12, 0), rot(-6, -7), rot(-6, 7)], L(2))
         elif ci == 4:
             # STILET: FIRLATILMAZ, UZATILIR. Vampyrella ve Pfiesteria
             # pedunkulu gibi hucre iskeletiyle itilen, govdeye BAGLI bir yapi.
             # Menzili = uzayabildigi boy.
-            o = (int(self.origin.x), int(self.origin.y))
-            pygame.draw.line(s, (215, 208, 185), o, p, 5)
-            pygame.draw.line(s, (120, 114, 98), o, p, 1)
+            o = T(self.origin)
+            pygame.draw.line(s, (215, 208, 185), o, p, L(5))
+            pygame.draw.line(s, (120, 114, 98), o, p, L(1))
             pygame.draw.polygon(s, (245, 240, 220),
                                 [rot(14, 0), rot(2, -4), rot(2, 4)])
         elif ci == VOLVENT:
@@ -1154,35 +1169,35 @@ class Shot:
             for k in range(7):
                 t = k / 6.0
                 pygame.draw.circle(s, (235, 225, 170),
-                                   rot(-22 * t, 9 * math.sin(t * 7)), 3)
-            pygame.draw.circle(s, (245, 240, 200), p, 5)
+                                   rot(-22 * t, 9 * math.sin(t * 7)), L(3))
+            pygame.draw.circle(s, (245, 240, 200), p, L(5))
         elif ci == GLUTINANT:
             # GLUTINANT: yapiskan damla, arkasinda uzayan tel
-            pygame.draw.line(s, (170, 210, 120), rot(-26, 0), p, 3)
-            pygame.draw.circle(s, (200, 235, 140), p, 8)
-            pygame.draw.circle(s, (90, 130, 60), p, 8, 2)
+            pygame.draw.line(s, (170, 210, 120), rot(-26, 0), p, L(3))
+            pygame.draw.circle(s, (200, 235, 140), p, L(8))
+            pygame.draw.circle(s, (90, 130, 60), p, L(8), L(2))
         elif ci == ISORHIZA:
             # IZORIZA: tutunma kancasi - avlanma degil, HAREKET
-            pygame.draw.line(s, (180, 200, 235), rot(-24, 0), p, 2)
+            pygame.draw.line(s, (180, 200, 235), rot(-24, 0), p, L(2))
             pygame.draw.polygon(s, (200, 220, 245),
                                 [rot(9, 0), rot(0, -7), rot(0, 7)])
-            pygame.draw.line(s, (200, 220, 245), rot(0, -7), rot(-8, -10), 2)
-            pygame.draw.line(s, (200, 220, 245), rot(0, 7), rot(-8, 10), 2)
+            pygame.draw.line(s, (200, 220, 245), rot(0, -7), rot(-8, -10), L(2))
+            pygame.draw.line(s, (200, 220, 245), rot(0, 7), rot(-8, 10), L(2))
         else:
             # PENETRANT: dikenli tup + sarmal iz
-            pygame.draw.line(s, (205, 195, 140), rot(10, 0), rot(-22, 0), 5)
+            pygame.draw.line(s, (205, 195, 140), rot(10, 0), rot(-22, 0), L(5))
             for k in range(3):
                 bx = -4 - k * 7
-                pygame.draw.line(s, (225, 215, 165), rot(bx, 0), rot(bx - 5, -7), 2)
-                pygame.draw.line(s, (225, 215, 165), rot(bx, 0), rot(bx - 5, 7), 2)
+                pygame.draw.line(s, (225, 215, 165), rot(bx, 0), rot(bx - 5, -7), L(2))
+                pygame.draw.line(s, (225, 215, 165), rot(bx, 0), rot(bx - 5, 7), L(2))
             pygame.draw.polygon(s, (240, 230, 180),
                                 [rot(14, 0), rot(4, -5), rot(4, 5)])
 
         # yuk gostergesi: mermi ne tasiyor
         if self.payload[4] and not self.lumen_blocked and ci >= 2:
-            pygame.draw.circle(s, pcol, rot(-2, 0), 4)
+            pygame.draw.circle(s, pcol, rot(-2, 0), L(4))
         if dead and ci >= 3:
-            pygame.draw.circle(s, col, p, 8, 2)
+            pygame.draw.circle(s, col, p, L(8), L(2))
 
 
 class Kese:

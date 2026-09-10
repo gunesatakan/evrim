@@ -1391,6 +1391,7 @@ def main(food_count=None, kaotropi_count=None):
                 _mrk = tuval_konumu(o.pos)
                 _kam_lab.hucreyi_ciz(screen, o, _mrk, _ok)
                 o.molekulleri_ciz(screen, _mrk, _ok)
+                o.atislari_ciz(screen, _mrk, _ok)
             olum_efekt.ciz(screen, tuval_konumu, _z * _gorunum)
             _f = pygame.font.SysFont("consolas", 16)
             screen.blit(_f.render("ZOOM x%.1f  (tekerlek)" % _z, True,

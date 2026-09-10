@@ -1039,8 +1039,7 @@ class Organism(Entity):
             _g = getattr(game_settings, 'GORUNUM_OLCEGI', 1.0)
             _lab.hucreyi_ciz(screen, self, self.pos, _g)
             self.molekulleri_ciz(screen, olcek=_g)
-            for _sh in self.atislar:        # bana gelen mermiler
-                _sh.draw(screen)
+            self.atislari_ciz(screen, olcek=_g)
         else:
             for organ in self.organs:
                 organ.draw(screen, self)
@@ -2007,6 +2006,24 @@ class Organism(Entity):
                 continue
             kalan.append(m)
         self.molekuller = kalan
+
+    def atislari_ciz(self, screen, merkez=None, olcek=1.0):
+        """Bana atilmis mermileri ciz (lab.Shot.draw). Kamera olcegi
+        verilirse dunya konumlari merkeze gore buyutulur - uzayan T6SS
+        tupu, stilet, nematosist ipligi yakinlastirmada da gorunur."""
+        atislar = getattr(self, 'atislar', None)
+        if not atislar:
+            return
+        if merkez is None and olcek == 1.0:
+            for sh in atislar:
+                sh.draw(screen)
+            return
+        mx, my = (merkez if merkez is not None else self.pos)
+        px, py = self.pos.x, self.pos.y
+        def _don(v):
+            return (mx + (v.x - px) * olcek, my + (v.y - py) * olcek)
+        for sh in atislar:
+            sh.draw(screen, _don, olcek)
 
     def molekulleri_ciz(self, screen, merkez=None, olcek=1.0):
         """Molekulleri ciz. Kamera olcegi verilirse buyutulur."""

@@ -10,7 +10,7 @@ import pygame
 from organs.base_organ import BaseOrgan
 from .logic_weapons import (StyletLogic, HarpoonLogic, NematocystLogic,
                             ToxinLogic, LysinLogic, PhagocytosisLogic)
-from .view_weapons import draw_weapon
+from .view_weapons import draw_weapon, LAB_BOY
 
 
 class BaseWeapon(BaseOrgan):
@@ -57,16 +57,23 @@ class BaseWeapon(BaseOrgan):
     #  gorunmuyordu. Kullanici nematosistin atesledigini hic gormedi.
     ATIS_GORUNME = 0.35
 
+    #: Ates edince silah geriye tepiyor (lab: 14 px, 60 px/sn ile doner).
+    GERI_TEPME = 14.0
+    #: Lab tasiyicisi (0-8) olan silahlar lab sekilleriyle, lab olcegiyle cizilir.
+    LAB_TASIYICI = True
+
     def update(self, dt, parent=None):
         self.logic.update(dt)
         self._atis_sure = getattr(self, '_atis_sure', 0.0) - dt
         if self._atis_sure <= 0.0:
             self.last_target_pos = None
+        self.geri_tepme = max(0.0, getattr(self, 'geri_tepme', 0.0) - dt * 60.0)
 
     def atis_isaretle(self, hedef_pos):
-        """Atildi: cizgi ATIS_GORUNME saniye boyunca cizilsin."""
+        """Atildi: cizgi ATIS_GORUNME saniye boyunca cizilsin; geri tepme."""
         self.last_target_pos = hedef_pos
         self._atis_sure = self.ATIS_GORUNME
+        self.geri_tepme = self.GERI_TEPME
 
     def grow(self):
         self.logic.grow()
@@ -95,11 +102,28 @@ class BaseWeapon(BaseOrgan):
         # ayni boyda kaliyordu (dunya gorunumunde hucreden buyuk, kesitte
         # kayip). Cizim olcegi konaktan okunur.
         k = float(getattr(parent, 'ciz_olcegi', 1.0))
-        length = self.DISPLAY_LENGTH * self.logic.power * k
+        ad = self.__class__.__name__
+        ci = getattr(self.logic, 'carrier', None) if self.LAB_TASIYICI else None
+        if ci is None:
+            length = self.DISPLAY_LENGTH * self.logic.power * k
+            if not self.is_deployed(parent):
+                length *= self.RETRACTED_RATIO
+            draw_weapon(screen, ad, pos, outward, length,
+                        self.logic.ready, self.last_target_pos, olcek=k)
+            return
+        # LAB OLCEGI: lab sekilleri 110 px yaricapli hucre icin cizildi
+        # (weapon_len tablosu). Organ, hucre yaricapiyla ORANLI cizilir -
+        # mermi fizigi de ayni oranla calisir (hiz_olcegi = r/110).
+        # Yakinlastirmada hucreyi_ciz yaricapi zaten buyutmus olur.
+        birim = float(parent.radius) / 110.0 * self.logic.power
         if not self.is_deployed(parent):
-            length *= self.RETRACTED_RATIO
-        draw_weapon(screen, self.__class__.__name__, pos, outward, length,
-                    self.logic.ready, self.last_target_pos, olcek=k)
+            birim *= self.RETRACTED_RATIO
+        length = LAB_BOY.get(int(ci), 46.0) * birim
+        draw_weapon(screen, ad, pos, outward, length,
+                    self.logic.ready, self.last_target_pos, olcek=k,
+                    carrier=int(ci), marker=int(getattr(self.logic, 'marker', 0)),
+                    recoil=float(getattr(self, 'geri_tepme', 0.0)),
+                    merkez=parent.pos)
 
 
 class Stylet(BaseWeapon):
@@ -130,6 +154,7 @@ class Lysin(BaseWeapon):
 class Phagocytosis(BaseWeapon):
     LOGIC = PhagocytosisLogic
     DISPLAY_LENGTH = 10.0
+    LAB_TASIYICI = False
 
 
 WEAPON_CLASSES = {
