@@ -165,6 +165,11 @@ def drop_corpse(organism, foods):
 class Dunya:
     """Bir ekosistem ornegi. adim(dt) bir kare ilerletir."""
 
+    #: Bir SILAHIN eseri olan olum nedenleri (silah sayacina yazilir).
+    SILAH_NEDENLERI = frozenset((
+        'toksin', 'lizin', 'molekul', 'nematocyst', 'harpoon', 'stylet',
+        'phagocytosis', 'yutuldu', 'patlama', 'hasar'))
+
     def __init__(self, food_count=None, kaotropi_count=None,
                  optropi_count=None, notropi_count=None, tohum=None):
         if tohum is not None:
@@ -381,9 +386,10 @@ class Dunya:
             # ayirmak zaten rolu onceden dagitmak olurdu.
             o.update(dt, komsu, foods, trail_manager, None, scent_env, komsu)
 
-            for victim in o.fire_weapons(dt, komsu):
-                self.silah_olumu[victim.death_cause] = \
-                    self.silah_olumu.get(victim.death_cause, 0) + 1
+            # Silah olumleri OLUM DONGUSUNDE sayilir (asagida): igne
+            # anindaki olumle molekulun saniyeler sonra getirdigi olum
+            # ayni sayaca girsin, hicbiri iki kez sayilmasin.
+            o.fire_weapons(dt, komsu)
 
             for pobj in komsu:
                 if pobj in eaten_prey:
@@ -417,6 +423,14 @@ class Dunya:
                     o.stok_sac(izgara.yakin(
                         o, o.radius + game_settings.SACILMA_MENZILI))
                 self._olum_kaydet(o)
+                # SILAHLA GELEN HER OLUM silah sayacina - igne aninda da,
+                # molekul saniyeler sonra vardiginda da. Eskiden yalnizca
+                # fire_weapons'in dondurdugu anlik olumler sayiliyordu;
+                # toksinle olen hucre panelde "toksin" yaziyor ama silah
+                # sayacinda gorunmuyordu.
+                _c = getattr(o, 'death_cause', None)
+                if _c in self.SILAH_NEDENLERI:
+                    self.silah_olumu[_c] = self.silah_olumu.get(_c, 0) + 1
                 if not getattr(o, 'consumed', False):
                     drop_corpse(o, foods)
         self.son_olenler = list(oldu)

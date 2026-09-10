@@ -1047,6 +1047,7 @@ class RuntimeInspector:
         'yutuldu': ('yutuldu',          (240, 150, 120)),
         'toksin':  ('toksin',           (255, 210, 120)),
         'molekul': ('toksin (molekul)', (255, 210, 120)),
+        'lizin':   ('lizin (duvar eridi)', (255, 170, 90)),
         'hasar':   ('delinme',          (255, 110, 110)),
         'nematocyst': ('nematosist (enjeksiyon)', (255, 110, 110)),
         'harpoon':    ('harpun (enjeksiyon)',     (255, 110, 110)),

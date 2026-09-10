@@ -2127,6 +2127,11 @@ class Organism(Entity):
         if pi <= 0 or pi >= len(_lab.PAYLOADS) or _lab.PAYLOADS[pi][1] is None:
             return False
         zarf = hedef.zarf_arayuzu()
+        # OLUMUN NEDENI SILAHIN ADIDIR. Surekli salimla gelen olum
+        # 'molekul' diye kaydediliyordu; toksin mi lizin mi belli degildi
+        # ve silah sayacina hic yazilmiyordu.
+        zarf.neden = 'lizin' if getattr(lg, 'KEY', '') == 'LYSIN' else 'toksin'
+        zarf.sahip = self
         birikim = getattr(lg, '_mol_birikim', 0.0) + dt * (4.0 + 3.0 * ci)
         n = int(birikim)
         lg._mol_birikim = birikim - n
