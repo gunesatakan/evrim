@@ -862,6 +862,15 @@ class Shot:
         if self.dead:
             self._emit()    # guvenlik agi: baska bir yolla olduyse de biraksin
             return
+        # SINIR HER DALDA. Hedeften uzaklasan mermi durumu ne olursa olsun
+        # biter; once yalnizca serbest ucusta bakiliyordu, gomulu ya da
+        # emen bir mermi hedefin cevresinden cikinca sonsuza kadar
+        # yasiyordu.
+        if not self.cell.sinir_icinde(self.pos):
+            self.dead = True
+            self.miss_reason = self.miss_reason or 'hedeften koptu'
+            self._emit()
+            return
         if self.feeding:
             self._emit()    # emen stilet yerinde durur, yukunu orada birakir
             return
@@ -893,13 +902,23 @@ class Shot:
             # GOMULME: hedef derinlige yaklastikca yavasla ve orada dur.
             # Sabit carpanla yavaslatmak hedefe VARMADAN hizi sifirliyordu -
             # mermi kalinligin %60'ina girecekken %10'unda kaliyordu.
-            remaining = self.pos.distance_to(self.cell.center) - self.embed_r
+            #
+            # ICERI DOGRU, RADYAL. Once ucus yonu (`dir`) boyunca
+            # ilerliyordu. Teget carpan bir iplik icin bu yon DISARI
+            # bakar: kalan mesafe her karede buyur, hiz = kalan x 5 de
+            # onunla buyur - ustel kacis. Olculdu: 300 karede 626 px,
+            # 780 karede 10^9 px; cizim tamsayi sinirinda cokuyordu.
+            # Gomulen bir uc yuzeye dogru cekilir, o yuzden yon yuzeyin
+            # normali; kalan asla buyumez.
+            _n = self.cell.center - self.pos
+            remaining = _n.length() - self.embed_r
             if remaining <= 0.6 * self.vs:
                 self.dead = True
                 self._emit()
                 return
             self.speed = max(18.0, remaining * 5.0)
-            self.pos += self.dir * self.speed * self.vs * dt
+            adim = min(remaining, self.speed * self.vs * dt)
+            self.pos += _n.normalize() * adim
             if len(self.trail) < 500:
                 self.trail.append(pygame.math.Vector2(self.pos))
             return
@@ -1101,8 +1120,16 @@ class Shot:
                (ACCENT if not dead else (WARN if self.glanced else BAD)))
         ci = self.ci
 
-        if len(self.trail) > 1 and ci not in (3, 4):
-            # 3-4 govdeye BAGLI uzayan yapilar; ayrica iz cizmeye gerek yok
+        # IPLIK ORGANA BAGLIDIR. Nematosist ipi kapsulden cikar ve kapsul
+        # hucrede durur; hucre yuzerken ipin koku onunla gider. Onceden
+        # dunya-sabit bir IZ (merminin gectigi noktalar) ciziliyordu:
+        # laboratuvarda saldirgan kimildamadigi icin iz = iplik gibi
+        # goruunuyordu, oyunda ise hucre uzaklasinca iplik bosluga bagli
+        # kaliyordu. Iplik artik koku (organ) ile uc arasindaki cizgidir.
+        if ci >= 5 and not dead:
+            o = T(self.origin)
+            pygame.draw.line(s, (85, 95, 125), o, p, L(2))
+        elif len(self.trail) > 1 and ci < 3:
             pygame.draw.lines(s, (85, 95, 125), False,
                               [T(q) for q in self.trail], L(2))
 

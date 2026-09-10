@@ -1942,6 +1942,19 @@ class Organism(Entity):
         shot = _lab.Shot(zarf, namlu, yon, tuple(_tasiyici), _lab.PAYLOADS[pi],
                          _lab.MARKERS[mi], ci)
         shot.sahip = self
+        # MERMININ BOYU SINIRLI - o bir cisim. T6SS tupu ve stilet
+        # organin kendi boyu kadar uzanir (kilif/pedunkul uzunlugu),
+        # nematosist ipligi kapsulde sarili duran ipin boyu kadar
+        # (lab.CARRIER_REACH, saldirganin olcegiyle). Gelisim ikisini de
+        # uzatir. Uc bu boydan uzaga gidemez: ya geri ceker (tup) ya
+        # kopar (iplik). Eskiden sekip iskalayan bir stilet 130 px
+        # uzaga ucup gidiyordu - govdeye bagli bir yapi icin imkansiz.
+        _birim = float(self.radius) / 110.0 * float(getattr(lg, 'power', 1.0))
+        if ci in (3, 4):
+            from organs.peripheral.weapons.view_weapons import LAB_BOY
+            shot.azami_uzunluk = LAB_BOY.get(ci, 66.0) * _birim * 1.15
+        else:
+            shot.azami_uzunluk = _lab.CARRIER_REACH[ci] * _birim
         # ORGANIN TEK BASLIGI YOLA CIKTI: geri donene kadar ikincisi yok.
         organ.baslik_gonder(shot)
         # KOK ORGANDA DURUR. T6SS tupu ve stilet govdeye BAGLI yapilardir,
@@ -1968,6 +1981,19 @@ class Organism(Entity):
                     and not getattr(_sahip, 'dead', False)):
                 sh.origin = _org.get_absolute_position(
                     _sahip.pos, _sahip.direction, _sahip.radius)
+            # BOY SINIRI. Uc, organdan azami uzunluktan daha uzaga
+            # gidemez: iplik kopar, tup geri ceker. Saldirgan uzaklasirsa
+            # da ayni sey olur - ip gerilir ve kopar.
+            _azami = getattr(sh, 'azami_uzunluk', None)
+            if (_azami is not None and not sh.dead
+                    and (sh.pos - sh.origin).length() > _azami):
+                sh.dead = True
+                sh.koptu = True
+                sh.feeding = False
+                if getattr(zarf, 'feeder', None) is sh:
+                    zarf.feeder = None
+                if getattr(zarf, 'pulling', None) is sh:
+                    zarf.pulling = None
             sh.update(dt)
             if sh.released:
                 for m in sh.released:
@@ -1999,6 +2025,13 @@ class Organism(Entity):
                 sh.bitti = True
                 sh.olum_t = getattr(sh, 'olum_t', 0.0) + dt
                 if sh.olum_t > 0.35 and not sh.released:
+                    # Listeden dusen mermi zarfta bayat referans birakmasin:
+                    # izoriza cekmesi dusmus bir mermiye bagli kalip
+                    # sonsuza kadar "cekiliyor" gorunuyordu.
+                    if getattr(zarf, 'pulling', None) is sh:
+                        zarf.pulling = None
+                    if getattr(zarf, 'feeder', None) is sh:
+                        zarf.feeder = None
                     continue            # cizim payi bitti
             kalan.append(sh)
         self.atislar = kalan
