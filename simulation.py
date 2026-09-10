@@ -400,6 +400,10 @@ class RuntimeInspector:
         self.panel_kaydirma = 0
         self._panel_icerik = 0
         self.panel_x = WIDTH - self.PANEL_W
+        # KAMERA. Tiklama isabeti ve secim halkasi DUNYA konumlariyla
+        # calisir; ekranda gorulen ise kameradan gecmis halidir. main()
+        # kamera sozlugunu buraya baglar (bkz. `kamera_bagla`).
+        self.kamera = None
 
         # Fonts (pygame must be init'd before this)
         # Zaman olcegi: simulasyon dt'si bununla carpilir. Cizim ve girdi
@@ -411,6 +415,22 @@ class RuntimeInspector:
         self._fnt_v  = pygame.font.Font(None, 20)
         self._fnt_s  = pygame.font.Font(None, 16)
 
+    def kamera_bagla(self, kamera):
+        """main()'in kamera sozlugunu bagla (yakinlastirma/kaydirma)."""
+        self.kamera = kamera
+
+    def _zoom(self):
+        return float(self.kamera["z"]) if self.kamera else 1.0
+
+    def _tuvale(self, dunya_p):
+        """Dunya noktasi -> tuval (ekran) noktasi."""
+        k = self.kamera
+        if not k:
+            return (dunya_p[0], dunya_p[1])
+        z = float(k["z"])
+        return ((dunya_p[0] - k["cx"]) * z + WIDTH * 0.5,
+                (dunya_p[1] - k["cy"]) * z + HEIGHT * 0.5)
+
     # ── events ──────────────────────────────────────────────
 
     def handle_event(self, event, organisms):
@@ -418,14 +438,29 @@ class RuntimeInspector:
             # Olcekli tam ekranda tiklama pencere koordinatinda gelir;
             # dunya koordinatina cevrilmezse secim goruntudeki yere denk
             # gelmez. Cevrimi main() olay dongusu yapip event'e yazar.
-            mx, my = getattr(event, 'dunya_pos', event.pos)
+            # IKI AYRI KOORDINAT.
+            #
+            # Panel EKRANA cizilir, hucreler DUNYADA durur. Ikisi
+            # yakinlastirma yokken ayni sayidir, o yuzden tek deger
+            # yetiyor saniliyordu: `dunya_pos` aslinda TUVAL noktasiydi
+            # ve hucrenin dunya konumuyla karsilastiriliyordu. z=1'de
+            # dogru, yakinlastirmada tamamen kayik - hicbir hucreye
+            # tiklanamiyordu.
+            tx, ty = getattr(event, 'tuval_pos', event.pos)
             # Ignore clicks on panel area when panel is open
-            if mx >= self.panel_x and self.selected is not None:
+            if tx >= self.panel_x and self.selected is not None:
                 return
+            mx, my = getattr(event, 'dunya_pos', (tx, ty))
+            # Tolerans EKRAN pikselidir: yakinlastirmada hucre buyudugu
+            # icin dunya karsiligi kucuulur, yoksa x64'te bos alana
+            # tiklamak da hucreyi secerdi.
+            z = self._zoom()
+            gorunum = float(getattr(game_settings, 'GORUNUM_OLCEGI', 1.0))
+            pay = 15.0 / max(1e-6, z)
             best, best_d = None, float('inf')
             for o in organisms:
                 d = math.hypot(o.pos.x - mx, o.pos.y - my)
-                if d < o.radius + 15 and d < best_d:
+                if d < o.radius * gorunum + pay and d < best_d:
                     best, best_d = o, d
             if best is not self.selected:
                 self.panel_kaydirma = 0     # yeni hucre bastan gorunsun
@@ -1070,16 +1105,21 @@ class RuntimeInspector:
 
     def _draw_selection_ring(self, screen, elapsed):
         o = self.selected
+        # Halka da kameradan gecer: hucre yakinlastirmada buyuyup
+        # kayarken halka dunya konumunda ve x1 boyunda kaliyordu.
+        z = self._zoom()
+        gorunum = float(getattr(game_settings, 'GORUNUM_OLCEGI', 1.0))
+        cx, cy = self._tuvale((o.pos.x, o.pos.y))
         pulse = math.sin(elapsed * 4.0) * 0.5 + 0.5      # 0..1
-        ring_r = int(o.radius + 8 + pulse * 4)
+        ring_r = int(o.radius * gorunum * z + 8 + pulse * 4)
+        if ring_r <= 0 or ring_r > max(WIDTH, HEIGHT):
+            return
         alpha  = int(140 + pulse * 115)
         size   = ring_r * 2 + 4
         surf   = pygame.Surface((size, size), pygame.SRCALPHA)
         pygame.draw.circle(surf, (255, 255, 255, alpha),
                            (ring_r + 2, ring_r + 2), ring_r, 2)
-        screen.blit(surf,
-                    (int(o.pos.x) - ring_r - 2,
-                     int(o.pos.y) - ring_r - 2))
+        screen.blit(surf, (int(cx) - ring_r - 2, int(cy) - ring_r - 2))
 
     def _header(self, screen, text, y, px, pw):
         pygame.draw.line(screen, self.COL_DIVIDER,
@@ -1201,6 +1241,7 @@ def main(food_count=None, kaotropi_count=None):
     if optropis:
         optropis[0].log_enabled = True
     inspector = RuntimeInspector()
+    inspector.kamera_bagla(kamera)
 
     # Diagnostik loglama
     diag_file = open(DIAG_LOG_PATH, "w", encoding="utf-8")
@@ -1249,7 +1290,12 @@ def main(food_count=None, kaotropi_count=None):
 
         for event in pygame.event.get():
             if hasattr(event, 'pos'):
-                event.dunya_pos = ekran_konumu(event.pos)
+                # Pencere -> TUVAL (panel bu koordinatta) -> DUNYA
+                # (hucreler burada). Ikisi ayri yazilir; eskiden yalnizca
+                # tuval noktasi `dunya_pos` adiyla veriliyordu ve isabet
+                # testi onu dunya konumu sanip yakinlastirmada sasiyordu.
+                event.tuval_pos = ekran_konumu(event.pos)
+                event.dunya_pos = dunya_konumu(event.tuval_pos)
             if event.type == pygame.KEYDOWN and event.key == pygame.K_F11:
                 tam_ekran = not tam_ekran
                 window = pygame.display.set_mode(
@@ -1276,7 +1322,9 @@ def main(food_count=None, kaotropi_count=None):
                 continue
             if event.type == pygame.QUIT:
                 running = False
-            inspector.handle_event(event, optropis)
+            # BUTUN populasyon. Yalnizca optropis veriliyordu: kaotropi
+            # hucrelerine tiklandiginda hicbir sey secilmiyordu.
+            inspector.handle_event(event, optropis + kaotropis)
 
         # ---------------- DUNYA BIR ADIM ----------------
         # Ekosistemin butunu systems/world.py'de. Buradaki tek is onu
@@ -1409,7 +1457,9 @@ def main(food_count=None, kaotropi_count=None):
                                   (150, 170, 200)), (14, HEIGHT - 26))
 
         # 7. Inspector panel (topmost layer)
-        inspector.validate(optropis)
+        # Secim ancak hucre GERCEKTEN olduyse dusurulur; liste yalnizca
+        # optropis olunca secili kaotropi her karede siliniyordu.
+        inspector.validate(optropis + kaotropis)
         inspector.draw(screen, scent_env, elapsed_time, dt, dunya)
 
         window.fill((0, 0, 0))
