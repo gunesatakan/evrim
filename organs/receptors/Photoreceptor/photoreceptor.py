@@ -5,7 +5,7 @@ from .logic_photoreceptor import PhotoreceptorLogic
 from .view_photoreceptor import draw_photoreceptor, draw_vision_cone
 
 class Photoreceptor(BaseOrgan):
-    def __init__(self, attachment_angle=0, range=25, angle=0.75, base_hue=0.0):
+    def __init__(self, attachment_angle=0, range=50, angle=0.75, base_hue=0.0):
         super().__init__(attachment_angle, offset_distance=0.8)
         self.logic = PhotoreceptorLogic(range, angle)
         self.base_hue = base_hue

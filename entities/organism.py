@@ -238,7 +238,7 @@ class Morphology:
                                  length=params.get("length", 5.0))
         if otype == "Photoreceptor":
             return Photoreceptor(attachment_angle=angle,
-                                 range=params.get("range", 25.0),
+                                 range=params.get("range", 50.0),
                                  angle=params.get("angle", math.radians(10.0)))
         if otype == "Mechanoreceptor":
             return Mechanoreceptor(attachment_angle=angle,

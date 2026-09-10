@@ -745,7 +745,7 @@ class ModernLauncher:
 
         # Organ türüne göre yeni organ oluştur
         if organ_type == "Photoreceptor":
-            new_organ = Photoreceptor(attachment_angle=angle, range=15, angle=0.3)
+            new_organ = Photoreceptor(attachment_angle=angle, range=30, angle=0.3)
         elif organ_type == "Mechanoreceptor":
             new_organ = Mechanoreceptor(attachment_angle=angle, size=1.0)
         elif organ_type == "Chemoreceptor":

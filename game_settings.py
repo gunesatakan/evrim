@@ -69,7 +69,7 @@ DEFAULT_SETTINGS = {
     # dunyayi ~10 saniyede geciyor.
     "THRUST_SCALE": 4.0,
     # Fotoreseptor varsayilanlari (yalnizca deger verilmediginde kullanilir)
-    "VISION_RANGE_BASE": 15.0,
+    "VISION_RANGE_BASE": 30.0,
     "VISION_ANGLE_BASE": 0.35,
     # Yaricap artik ZARFI DA iceriyor (varsayilan hucrede 20 -> 55.2).
     # Referans da ayni oranda buyutuldu ki mevcut hiz dengesi korunsun;
@@ -822,12 +822,12 @@ DEFAULT_SETTINGS = {
 
 # Added ribosome_area and vacuole_area to each entity
 DEFAULT_ENTITY_CONFIGS = {
-    "optropi_0": {"name": "Magenta", "cytoplasm": 2.0, "flagella": 10.0, "cilia": 3.0, "vision_range": 25.0, "vision_angle": 10.0, "memory": 10, "smell": 5.0, "sound": 30.0, "ribosome_area": 20.0, "vacuole_area": 30.0},
-    "optropi_1": {"name": "Yellow", "cytoplasm": 2.0, "flagella": 10.0, "cilia": 3.0, "vision_range": 25.0, "vision_angle": 10.0, "memory": 10, "smell": 5.0, "sound": 30.0, "ribosome_area": 20.0, "vacuole_area": 30.0},
-    "optropi_2": {"name": "Lime Green", "cytoplasm": 2.0, "flagella": 10.0, "cilia": 3.0, "vision_range": 25.0, "vision_angle": 10.0, "memory": 10, "smell": 5.0, "sound": 30.0, "ribosome_area": 20.0, "vacuole_area": 30.0},
-    "optropi_3": {"name": "Orange", "cytoplasm": 2.0, "flagella": 10.0, "cilia": 3.0, "vision_range": 25.0, "vision_angle": 10.0, "memory": 10, "smell": 5.0, "sound": 30.0, "ribosome_area": 20.0, "vacuole_area": 30.0},
-    "kaotropi":  {"name": "Kaotropi", "cytoplasm": 3.0, "flagella": 15.0, "cilia": 2.0, "vision_range": 60.0, "vision_angle": 30.0, "memory": 10, "smell": 5.0, "sound": 40.0, "ribosome_area": 25.0, "vacuole_area": 40.0},
-    "notropi":   {"name": "Hunter", "cytoplasm": 2.0, "flagella": 20.0, "cilia": 1.0, "vision_range": 15.0, "vision_angle": 10.0, "memory": 10, "smell": 5.0, "sound": 10.0, "ribosome_area": 15.0, "vacuole_area": 20.0}
+    "optropi_0": {"name": "Magenta", "cytoplasm": 2.0, "flagella": 10.0, "cilia": 3.0, "vision_range": 50.0, "vision_angle": 10.0, "memory": 10, "smell": 5.0, "sound": 30.0, "ribosome_area": 20.0, "vacuole_area": 30.0},
+    "optropi_1": {"name": "Yellow", "cytoplasm": 2.0, "flagella": 10.0, "cilia": 3.0, "vision_range": 50.0, "vision_angle": 10.0, "memory": 10, "smell": 5.0, "sound": 30.0, "ribosome_area": 20.0, "vacuole_area": 30.0},
+    "optropi_2": {"name": "Lime Green", "cytoplasm": 2.0, "flagella": 10.0, "cilia": 3.0, "vision_range": 50.0, "vision_angle": 10.0, "memory": 10, "smell": 5.0, "sound": 30.0, "ribosome_area": 20.0, "vacuole_area": 30.0},
+    "optropi_3": {"name": "Orange", "cytoplasm": 2.0, "flagella": 10.0, "cilia": 3.0, "vision_range": 50.0, "vision_angle": 10.0, "memory": 10, "smell": 5.0, "sound": 30.0, "ribosome_area": 20.0, "vacuole_area": 30.0},
+    "kaotropi":  {"name": "Kaotropi", "cytoplasm": 3.0, "flagella": 15.0, "cilia": 2.0, "vision_range": 120.0, "vision_angle": 30.0, "memory": 10, "smell": 5.0, "sound": 40.0, "ribosome_area": 25.0, "vacuole_area": 40.0},
+    "notropi":   {"name": "Hunter", "cytoplasm": 2.0, "flagella": 20.0, "cilia": 1.0, "vision_range": 30.0, "vision_angle": 10.0, "memory": 10, "smell": 5.0, "sound": 10.0, "ribosome_area": 15.0, "vacuole_area": 20.0}
 }
 
 # Modülün kendi konumuna göre mutlak yol. Göreli yol kullanılırsa, proje
