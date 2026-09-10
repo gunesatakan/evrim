@@ -798,6 +798,15 @@ class Shot:
         # Reynolds rejiminde son derece viskozdur: iceri giren durur.
         self.cyto_travel = None
         self.feeding = False
+        # TUTMA: volvent/izoriza ucu hedefe tutundu ve orada KALIYOR.
+        # Once uc gomulur gomulmez mermi oluyordu ve tutma, avin uzerine
+        # yazilan bir sure sayaciydi (2.5 sn). Iplik koptuktan sonra da
+        # av tutulu kaliyordu; sayac iplikten bagimsizdi. Artik tutan
+        # sey ipligin kendisi: uc tutundugu surece av tutulur, iplik
+        # koparsa (boy, kurtulma, sure) tutma o anda biter.
+        self.holding = False
+        self.hold_t = 0.0
+        self.tutma_suresi = 2.5      # ucun dokuda kalabilecegi en uzun sure
         # BELIRTEC: hangi katmana kenetlenecek. None = balistik.
         self.marker = marker or MARKERS[0]
         mlayer = self.marker[1]
@@ -898,6 +907,15 @@ class Shot:
             if len(self.trail) < 500:
                 self.trail.append(pygame.math.Vector2(self.pos))
             return
+        if self.holding:
+            # TUTUNMUS UC: yerinde durur (hedefle birlikte hareket eder,
+            # yukarida), sure dolunca dokudan siyrilir.
+            self.hold_t += dt
+            if self.hold_t >= self.tutma_suresi:
+                self.holding = False
+                self.dead = True
+                self._emit()
+            return
         if self.embed_r is not None:
             # GOMULME: hedef derinlige yaklastikca yavasla ve orada dur.
             # Sabit carpanla yavaslatmak hedefe VARMADAN hizi sifirliyordu -
@@ -913,6 +931,12 @@ class Shot:
             _n = self.cell.center - self.pos
             remaining = _n.length() - self.embed_r
             if remaining <= 0.6 * self.vs:
+                if self.ci in (VOLVENT, ISORHIZA):
+                    # Yakalayici uc VARDI ve TUTUNDU: mermi bitmez, tutar.
+                    self.holding = True
+                    self.hold_t = 0.0
+                    self._emit()
+                    return
                 self.dead = True
                 self._emit()
                 return
@@ -2119,10 +2143,12 @@ class HedefZarf:
 
     @tethered.setter
     def tethered(self, v):
-        # VOLVENT: iplik ava sarilir, kacamaz. Oyunda karsiligi ip suresi.
+        # VOLVENT: iplik ava sarilir, kacamaz. TUTAN SEY IPLIKTIR, bir
+        # sayac degil: sure burada yazilmaz, iplik tutundugu her karede
+        # (Organism.atislari_guncelle) kisa bir pay tazelenir. Iplik
+        # koparsa av bir sonraki karede serbesttir.
         if v:
-            import game_settings as _g
-            self.org.tether_timer = _g.NEMATOCYST_TETHER_TIME
+            self.org.tether_timer = max(getattr(self.org, 'tether_timer', 0.0), 0.05)
             self.org.tether_from = self.sahip
 
     @property

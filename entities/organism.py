@@ -1061,12 +1061,12 @@ class Organism(Entity):
         # gorsel izi yoktu - hucre "birine yapisip oylece duruyor" gibi
         # gorunuyordu. Ip, tutandan tutulana gerilir ve suresi dolarken
         # solar.
+        # Ip ayrica cizilmez: tutan iplik bir Shot'tur ve Shot.draw onu
+        # organdan uca kendisi cizer (tek cisim, tek cizim). Burada
+        # yalnizca TUTULAN hucrenin cevresine ince bir halka konur.
         _tut = getattr(self, 'tether_from', None)
         if self.tether_timer > 0.0 and _tut is not None and not _tut.dead:
-            _k = self.tether_timer / max(1e-6, game_settings.NEMATOCYST_TETHER_TIME)
-            _renk = (int(120 + 135 * _k), int(200 * _k) + 40, 90)
-            pygame.draw.line(screen, _renk, _tut.pos, self.pos, 2)
-            pygame.draw.circle(screen, _renk, (int(self.pos.x), int(self.pos.y)),
+            pygame.draw.circle(screen, (235, 220, 150), (int(self.pos.x), int(self.pos.y)),
                                max(2, int(self.radius * 0.35)), 1)
 
         if self.current_trail_escape_vector:
@@ -1955,6 +1955,8 @@ class Organism(Entity):
             shot.azami_uzunluk = LAB_BOY.get(ci, 66.0) * _birim * 1.15
         else:
             shot.azami_uzunluk = _lab.CARRIER_REACH[ci] * _birim
+        # Yakalayici ucun dokuda kalabilecegi sure: ipligin ozelligi.
+        shot.tutma_suresi = float(game_settings.NEMATOCYST_TETHER_TIME)
         # ORGANIN TEK BASLIGI YOLA CIKTI: geri donene kadar ikincisi yok.
         organ.baslik_gonder(shot)
         # KOK ORGANDA DURUR. T6SS tupu ve stilet govdeye BAGLI yapilardir,
@@ -1971,6 +1973,10 @@ class Organism(Entity):
         """Bana atilmis mermileri ilerlet; biraktiklari yuku zarfima al."""
         if not self.atislar:
             return
+        try:
+            from lab import VOLVENT as _lab_VOLVENT
+        except Exception:
+            _lab_VOLVENT = 6
         kalan = []
         zarf = self.zarf_arayuzu()
         for sh in self.atislar:
@@ -1999,6 +2005,25 @@ class Organism(Entity):
                 for m in sh.released:
                     self.molekul_ekle(m)
                 sh.released = []
+            # TUTAN IPLIK. Uc tutundugu surece av tutulur; sure sayaci
+            # degil, ipligin varligi tutar. Av her karede kurtulmayi dener
+            # (kayganlik/kapsul direnci - tutunmayla ayni fizik); kurtulursa
+            # iplik siyrilir ve mermi biter.
+            if getattr(sh, 'holding', False) and not sh.dead:
+                atk = getattr(sh, 'sahip', None)
+                if atk is None or atk.dead:
+                    sh.holding = False; sh.dead = True
+                else:
+                    if sh.ci == _lab_VOLVENT:
+                        self.tether_timer = max(self.tether_timer, 2.0 * dt + 1e-3)
+                        self.tether_from = atk
+                    res = self.binding_resistance
+                    rate = game_settings.BIND_BREAK_RATE * res / (1.0 + res)
+                    if rate > 0 and random.random() < 1.0 - math.exp(-rate * dt):
+                        sh.holding = False; sh.dead = True
+                        sh.miss_reason = 'av kurtuldu'
+                        if zarf.pulling is sh:
+                            zarf.pulling = None
             # IZORIZA: avlanma degil hareket - saldirgan kendini ceker.
             if zarf.pulling is sh:
                 atk = getattr(sh, 'sahip', None)
@@ -2012,7 +2037,10 @@ class Organism(Entity):
                         adim = min(game_settings.IZORIZA_HIZ * dt, d - hedef_d)
                         atk.pos += fark.normalize() * adim
                     else:
+                        # Temas kuruldu: kancanin isi bitti, birakir.
                         zarf.pulling = None
+                        sh.holding = False
+                        sh.dead = True
             # Emen stilet (mizositoz) bag surdukce yerinde kalir.
             if sh.feeding:
                 atk = getattr(sh, 'sahip', None)
