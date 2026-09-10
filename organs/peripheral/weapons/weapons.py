@@ -59,10 +59,75 @@ class BaseWeapon(BaseOrgan):
 
     #: Ates edince silah geriye tepiyor (lab: 14 px, 60 px/sn ile doner).
     GERI_TEPME = 14.0
+
+    #: Basligin disarida kalabilecegi en uzun sure (sn). Fiziksel bir
+    #  sinir: uzatilmis bir tup ya da bosalmis bir iplik sonsuza kadar
+    #  disarida kalamaz - hedef olur, kopar ya da geri cekilir. Ayni
+    #  zamanda guvenlik agi: mermi baska bir yoldan listeden dusup
+    #  organi ilelebet kilitli birakmasin.
+    BASLIK_SURESI = 12.0
+
+    #: TEK BASLIK. Organ bir sayac degil bir CISIMDIR: harpunun bir
+    #  mizragi, stiletin bir sivri ucu, nematosistin bir kapsulu vardir.
+    #  O disaridayken ikincisi YOKTUR. (Sinif duzeyinde varsayilan:
+    #  eski kayitlardan yuklenen organlarda da tanimli olsun.)
+    mermi = None
+    baslik_t = 0.0
+
+    # ---- basligin durumu --------------------------------------------
+
+    def baslik_disarida(self):
+        """Organin tek basligi su an disarida mi?"""
+        m = self.mermi
+        if m is None:
+            return False
+        if getattr(m, 'dead', False) or getattr(m, 'bitti', False):
+            return False
+        return True
+
+    def baslik_gonder(self, mermi):
+        """Basligi yola cikar: organ artik dolu."""
+        self.mermi = mermi
+        self.baslik_t = 0.0
+
+    def baslik_geri(self):
+        """Baslik dondu/tukendi: YENIDEN KURULUM simdi baslar.
+
+        Bekleme suresi atis aninda degil basligin DONDUGU anda baslar -
+        T6SS kilifi ic tup geri cekilmeden ClpV ile sokulup yeniden
+        kurulamaz, bosalmis nematosist kapsulu de ancak bosaldiktan
+        sonra yenisiyle degistirilir.
+        """
+        self.mermi = None
+        self.baslik_t = 0.0
+        self.logic.trigger()
+
+    def atisa_hazir(self, parent=None):
+        """Organ ates edebilir mi? IKI kosul: baslik icerde VE kurulmus.
+
+        DONUSU BURADA DA YAKALA. Basligin donusu yalnizca `update` icinde
+        isleniyordu, oysa kare sirasi `fire_weapons` -> `update`: baslik
+        onceki karenin sonunda dondugunde ates once sorulu yor ve organ
+        "bos ve hazir" gorunup hemen yeniden atiyordu. Kurulum sayaci hic
+        baslamiyor, silah saniyede 14 mizrak firlatiyordu. Donus hangi
+        cagri once gelirse orada, BIR KEZ islenir.
+        """
+        if self.mermi is not None and not self.baslik_disarida():
+            self.baslik_geri()
+        if self.baslik_disarida():
+            return False
+        return self.logic.ready
     #: Lab tasiyicisi (0-8) olan silahlar lab sekilleriyle, lab olcegiyle cizilir.
     LAB_TASIYICI = True
 
     def update(self, dt, parent=None):
+        # BASLIK SAYACI. Disarida gecen sure olculur; mermi bir sekilde
+        # ortadan kaybolduysa (hedef oldu, liste temizlendi) organ
+        # sonsuza kadar kilitli kalmasin.
+        if self.mermi is not None:
+            self.baslik_t += dt
+            if not self.baslik_disarida() or self.baslik_t >= self.BASLIK_SURESI:
+                self.baslik_geri()
         self.logic.update(dt)
         self._atis_sure = getattr(self, '_atis_sure', 0.0) - dt
         if self._atis_sure <= 0.0:

@@ -1648,7 +1648,14 @@ class Organism(Entity):
                         continue
 
             # --- TEK ATIŞLIK SİLAHLAR ---
-            if not lg.ready or self.energy < lg.energy_cost:
+            #
+            # SILAH BIR BECERI DEGIL BIR CISIMDIR. Harpunun BIR mizragi,
+            # stiletin BIR sivri ucu, nematosistin BIR kapsulu vardir.
+            # Bekleme sayaci tek basina bunu anlatmiyordu: 0.3 sn'lik
+            # bir sayacla tek bir harpun organi ayni anda bes mizragi
+            # disarida tutabiliyordu (olculdu; uc organli hucrede 15).
+            # Oysa ikinci mizrak ancak birincisi geri cekilince olabilir.
+            if not organ.atisa_hazir(self) or self.energy < lg.energy_cost:
                 continue
 
             # Tutunma gerektiren silahlar (stilet): önce bağ kurulmalı.
@@ -1658,6 +1665,8 @@ class Organism(Entity):
                     for t in candidates:
                         if t is self or t.dead or not organ.can_hit(self, t):
                             continue
+                        # Tutunma DENEMESI baslik gondermez; basarisiz
+                        # deneme yalnizca zaman ve enerji goturur.
                         self.energy -= lg.energy_cost
                         lg.trigger()
                         self.atis_sayisi += 1
@@ -1668,7 +1677,7 @@ class Organism(Entity):
                 if t not in candidates:
                     continue
                 self.energy -= lg.energy_cost
-                lg.trigger()
+                # Bekleme atis aninda DEGIL baslik donunce baslar.
                 self.atis_sayisi += 1
                 organ.atis_isaretle(pygame.math.Vector2(t.pos))
                 # Her batista secili yuk iceri gider (varsa). Stiletin asil
@@ -1683,7 +1692,7 @@ class Organism(Entity):
                 if t is self or t.dead or not organ.can_hit(self, t):
                     continue
                 self.energy -= lg.energy_cost
-                lg.trigger()
+                # Bekleme atis aninda DEGIL baslik donunce baslar.
                 self.atis_sayisi += 1
                 organ.atis_isaretle(pygame.math.Vector2(t.pos))
                 # DELMEK OLDURMEZ - delik kapanir. Olduren, varsa YUKTUR:
@@ -1911,6 +1920,8 @@ class Organism(Entity):
         shot = _lab.Shot(zarf, namlu, yon, _lab.CARRIERS[ci], _lab.PAYLOADS[pi],
                          _lab.MARKERS[mi], ci)
         shot.sahip = self
+        # ORGANIN TEK BASLIGI YOLA CIKTI: geri donene kadar ikincisi yok.
+        organ.baslik_gonder(shot)
         # KOK ORGANDA DURUR. T6SS tupu ve stilet govdeye BAGLI yapilardir,
         # nematosist ipi de kapsulden cikar; ucu ilerlerken kokleri
         # saldirganla birlikte hareket eder. `origin` bir kez yazilip
@@ -1961,6 +1972,9 @@ class Organism(Entity):
                     sh.feeding = False
                     sh.dead = True
             if sh.dead:
+                # BASLIK GERI DONDU. Organ ancak simdi yeniden kurulmaya
+                # baslar (bkz. BaseWeapon.baslik_geri).
+                sh.bitti = True
                 sh.olum_t = getattr(sh, 'olum_t', 0.0) + dt
                 if sh.olum_t > 0.35 and not sh.released:
                     continue            # cizim payi bitti
