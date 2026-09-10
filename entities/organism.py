@@ -1514,6 +1514,7 @@ class Organism(Entity):
                 # yoktu.
                 pay = 1.0 / len(hedefler)
 
+                _namlu = organ.get_absolute_position(self.pos, self.direction, self.radius)
                 for t in hedefler:
                     # Mesafeyle seyrelme artik molekulun kendi yolculugunda:
                     # uzaga atilan molekul surtunmeyle durur, varmaz.
@@ -1526,7 +1527,7 @@ class Organism(Entity):
                     # Yuk yalnizca MOLEKUL olarak gider; "hasar" diye ikinci
                     # bir yol yok. Tasiyici molekuler degilse hicbir sey
                     # cikmaz.
-                    self._molekul_birak(t, lg, dt * pay)
+                    self._molekul_birak(t, lg, dt * pay, _namlu)
                     if t.dead:
                         killed.append(t)
                 self.energy -= lg.energy_cost * dt
@@ -1866,7 +1867,7 @@ class Organism(Entity):
             killed.append(hedef)
             self.release_binding()
 
-    def _molekul_birak(self, hedef, lg, dt):
+    def _molekul_birak(self, hedef, lg, dt, namlu=None):
         """Hedefin zarfina molekul sal. Birakildiysa True.
 
         Salim hizi silahin atis temposuna baglidir; her karede bir avuc
@@ -1894,7 +1895,12 @@ class Organism(Entity):
         if n <= 0:
             return True          # tasiyici molekuler; bu karede sira gelmedi
         lg.stok -= n
-        yon = hedef.pos - self.pos
+        # SALGI NOKTASI ORGANDIR, HUCRE MERKEZI DEGIL. Molekul govdenin
+        # icinden dogup uzerine yazilmis hedefe ucuyordu; artik toksin
+        # organinin durdugu yuzey noktasindan cikar - hangi tarafa
+        # takildigi salginin nereye gittigini belirler.
+        cikis = pygame.math.Vector2(namlu) if namlu is not None else pygame.math.Vector2(self.pos)
+        yon = hedef.pos - cikis
         if yon.length() < 1e-6:
             yon = pygame.math.Vector2(1, 0)
         yon = yon.normalize()
@@ -1905,7 +1911,7 @@ class Organism(Entity):
             a = taban + random.uniform(-yari, yari)
             hiz = v0 * random.uniform(0.8, 1.2)
             v = pygame.math.Vector2(math.cos(a), math.sin(a)) * hiz
-            m = _lab.Molecule(zarf, pygame.math.Vector2(self.pos), v, pi)
+            m = _lab.Molecule(zarf, pygame.math.Vector2(cikis), v, pi)
             hedef.molekul_ekle(m)
         return True
 

@@ -436,7 +436,23 @@ class Dunya:
         tum = self.optropis + self.kaotropis
         fazla = len(tum) - cap
         if cap > 0 and fazla > 0:
-            for victim in random.sample(tum, fazla):
+            # ONCE HAREKETSIZLER YIKANIR. Kemostatta akinti herkesi ayni
+            # oranda tasir ama yuzebilen hucre akintiya karsi tutunur;
+            # motorunu (kamci/sil) yitirmis hucre tutunamaz ve ilk o gider.
+            # Kalan fazla yine RASTGELE secilir - "en zayifi ele" kurali
+            # secilimi tersine cevirmisti (bkz. yukarisi), o yuzden burada
+            # enerjiye bakilmaz; yalnizca yuzup yuzemedigine bakilir.
+            def _motorsuz(o):
+                return not any(x.__class__.__name__ in ('Flagella', 'Cilia')
+                               for x in o.organs)
+            hareketsiz = [o for o in tum if _motorsuz(o)]
+            random.shuffle(hareketsiz)
+            kurbanlar = hareketsiz[:fazla]
+            if len(kurbanlar) < fazla:
+                _sec = set(map(id, kurbanlar))
+                kalan = [o for o in tum if id(o) not in _sec]
+                kurbanlar += random.sample(kalan, fazla - len(kurbanlar))
+            for victim in kurbanlar:
                 victim.die('yikandi')
                 self._olum_kaydet(victim)
                 victim.consumed = True      # les birakmaz
