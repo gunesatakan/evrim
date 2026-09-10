@@ -639,6 +639,18 @@ class ModernLauncher:
             return base_width + organ.logic.length * 0.3
         elif isinstance(organ, Cilia):
             return base_width + organ.logic.length * 0.2
+        elif organ.__class__.__name__ in WEAPON_CLASSES:
+            # SILAHIN GERCEK ATIS YAYI. Editor her organa sus bir genislik
+            # ciziyordu; nematosistin 30 derecelik dar yayi ile toksinin
+            # 180 derecelik yonsuz salimi ayni gorunuyordu. Kullanici
+            # silahi yana takip "neden atmiyor" diyordu - hucre ava onden
+            # gider, yana bakan dar bir silah hedefe nadiren bakar
+            # (olculdu: onde 67 atis, yanda 46, arkada 35). Yay artik
+            # can_hit'in kullandigi acinin kendisi.
+            try:
+                return max(base_width, 2.0 * float(organ.logic.arc))
+            except Exception:
+                return base_width
 
         return base_width
 

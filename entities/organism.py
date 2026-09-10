@@ -1893,11 +1893,18 @@ class Organism(Entity):
         if not (0 <= ci < len(_lab.CARRIERS)):
             return None
         mi = mi if 0 <= mi < len(_lab.MARKERS) else 0
-        # YUK: ureticiden, stoktan. CARRIER_EMIT kadar molekul cekilir.
+        # YUK: ureticiden, stoktan. Tasiyici en fazla CARRIER_EMIT molekul
+        # tasir; stokta daha azi varsa O KADARI gider. Once ya hepsi ya
+        # hicbiriydi: stok 11 iken igne BOS gidiyor, 11 molekul kesede
+        # bekliyordu. Olculdu - ekosistemde 229 nematosist atisinin 221'i
+        # bos. Atilan, uretilenin ta kendisidir: eksigi de fazlasi da yok.
         pi = 0
+        yuk_n = 0
         ur = self._uretici_bul(hedef)
         gerek = _lab.CARRIER_EMIT[ci]
-        if ur is not None and gerek > 0 and ur.yuk_cek(gerek):
+        if ur is not None and gerek > 0:
+            yuk_n = min(int(gerek), int(ur.stok))
+        if yuk_n >= 1 and ur.yuk_cek(yuk_n):
             pi = int(ur.payload)
             # ACMA BEDELI: katlanmis protein lumenden gecmez; saperon ve
             # ATPaz ister (T3SS). Lab: unfold_cost(yuk, tasiyici).
@@ -1959,6 +1966,8 @@ class Organism(Entity):
         shot = _lab.Shot(zarf, namlu, yon, tuple(_tasiyici), _lab.PAYLOADS[pi],
                          _lab.MARKERS[mi], ci)
         shot.sahip = self
+        if pi > 0:
+            shot.yuk_sayisi = yuk_n          # stokta ne varsa o kadar
         # MERMININ BOYU SINIRLI - o bir cisim. T6SS tupu ve stilet
         # organin kendi boyu kadar uzanir (kilif/pedunkul uzunlugu),
         # nematosist ipligi kapsulde sarili duran ipin boyu kadar

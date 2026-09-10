@@ -824,10 +824,14 @@ class Shot:
         self._pi = PAYLOADS.index(payload)
         self.released = []       # bu merminin ortama biraktigi molekuller
         self._pending = False    # yuk birakilmayi bekliyor
+
         # MENZIL: hedefin dis yuzeyine olan mesafe tasiyicinin erisimini
         # asiyorsa atis bosa gider. Difuzyon seyrelir, temas silahi ulasamaz.
         self.out_of_reach = False
         self.ci = carrier_index if carrier_index is not None else 0
+        # TASINAN MOLEKUL SAYISI. Varsayilan tasiyicinin kapasitesi;
+        # oyun stokta daha azi varsa onu yazar (kismi yuk).
+        self.yuk_sayisi = CARRIER_EMIT[self.ci] if 0 <= self.ci < len(CARRIER_EMIT) else 0
         self.origin = pygame.math.Vector2(pos)
         self.reach = CARRIER_REACH[self.ci] if carrier_index is not None else 1e9
         gap = self.pos.distance_to(cell.center) - cell.outer_r
@@ -1113,7 +1117,7 @@ class Shot:
         if not self._pending:
             return
         self._pending = False
-        for _ in range(CARRIER_EMIT[self.ci]):
+        for _ in range(int(getattr(self, 'yuk_sayisi', CARRIER_EMIT[self.ci]))):
             a = random.uniform(0, 2 * math.pi)
             sp = random.uniform(0.25, 0.9) * MOLECULE_SPEED * self.vs
             v = pygame.math.Vector2(math.cos(a), math.sin(a)) * sp
