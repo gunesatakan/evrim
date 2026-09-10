@@ -150,7 +150,7 @@ class OlumEfektleri:
     """
 
     SURE = {'toksin': 3.2, 'molekul': 3.2, 'hasar': 2.6, 'aclik': 3.0,
-            'nematocyst': 2.6, 'harpoon': 2.6, 'stylet': 3.0,
+            'nematocyst': 2.6, 'harpoon': 2.6, 'stylet': 3.0, 'patlama': 3.2,
             'avlandi': 1.2, 'yutuldu': 1.2, 'yikandi': 2.4}
     PEMBE = (235, 115, 145)          # lab.py'deki lizis parcaciklari
     SARI = (255, 220, 120)           # toksin stoku
@@ -1016,6 +1016,7 @@ class RuntimeInspector:
         'nematocyst': ('nematosist (enjeksiyon)', (255, 110, 110)),
         'harpoon':    ('harpun (enjeksiyon)',     (255, 110, 110)),
         'stylet':     ('stilet (emildi)',         (255, 170, 90)),
+        'patlama':    ('patlama (sacilan toksin)', (255, 210, 120)),
         'yikandi': ('yikandi (seyrelme)', (150, 190, 240)),
     }
 

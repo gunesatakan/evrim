@@ -1934,7 +1934,8 @@ class HedefZarf:
     """
 
     __slots__ = ('org', '_zarf', '_key', 'arrived', 'tier_of', 'sahip',
-                 'neden', 'feeder', 'alarm', 'pulling')
+                 'neden', 'feeder', 'alarm', 'pulling',
+                 'keseler', 'kacan', 'sindirilen', 'yutulan')
 
     def __init__(self, org):
         self.org = org
@@ -1948,6 +1949,11 @@ class HedefZarf:
         self.feeder = None
         self.alarm = 0.0
         self.pulling = None        # izoriza: kendini ceken mermi
+        # SITOSTOM: yutulan molekuller fagozoma (Kese) alinir
+        self.keseler = []
+        self.kacan = 0             # keseyi delip sitoplazmaya kacan (gozenek acici)
+        self.sindirilen = 0        # fagozomda yok edilen
+        self.yutulan = 0
 
     # ---- geometri (onbellekli) ----
     def _g(self):
@@ -2063,12 +2069,47 @@ class HedefZarf:
             import game_settings as _g
             self.org.yapiskan = _g.STICKY_TIME
 
-    # ---- sitostom yok: oyunda yutma ayri bir akista ----
-    def agza_girdi(self, pos):
+    # ---- SITOSTOM (LabCell ile ayni kurallar) ----
+    #
+    # Fagositoz organi bir AGIZDIR. Acisal penceresine giren molekul yutulur
+    # ve fagozoma alinir; fagozom bir tuzaktir - asitlesir, lizozomla
+    # kaynasir ve yuku sindirir. Yalnizca gozenek acici bir yuk keseyi
+    # delip sitoplazmaya kacar (Listeria'nin listeriolizini). Igneler bu
+    # yuzden vardir: keseyi ATLAYIP dogrudan sitoplazmaya birakirlar.
+    @property
+    def agizlar(self):
+        return [o.aim_angle(self.org) for o in getattr(self.org, 'organs', ())
+                if o.__class__.__name__ == 'Phagocytosis']
+
+    @property
+    def sert_yuzey(self):
+        for l in self.active():
+            if l.name in SERT_KATMANLAR and l.t > SERT_ESIK:
+                return l.name
         return None
 
-    def yut(self, *a, **k):
-        return False
+    @property
+    def sitostom_aktif(self):
+        return bool(self.agizlar) and self.sert_yuzey is None
+
+    def agza_girdi(self, pos):
+        if not self.sitostom_aktif:
+            return None
+        d = pos - self.center
+        r = d.length()
+        if r > self.outer_r or r < self.core_r * 0.55:
+            return None
+        a = math.atan2(d.y, d.x)
+        for ag in self.agizlar:
+            fark = abs((a - ag + math.pi) % (2 * math.pi) - math.pi)
+            if fark <= MOUTH_HALF:
+                return ag
+        return None
+
+    def yut(self, pi, ang, r):
+        self.keseler.append(Kese(self, ang, min(r, self.outer_r * 0.95), pi))
+        self.yutulan += 1
+        return True
 
     # ---- varis muhasebesi ----
     def clear_one(self, pi):

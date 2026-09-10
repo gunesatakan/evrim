@@ -286,12 +286,9 @@ DEFAULT_SETTINGS = {
     "TOXIN_ARC": 180.0,
     "LYSIN_ARC": 120.0,
     "PHAGO_ARC": 90.0,
-    "STYLET_DAMAGE": 25.0,
     "STYLET_RANGE": 0.0,
     "STYLET_COOLDOWN": 0.8,
-    "STYLET_ENERGY": 2.0,
     "STYLET_GROW": 0.25,
-    "STYLET_COST": 0.05,
     # IGNELI SILAHLAR HP HASARI VERMEZ.
     #
     # Stilet, harpun ve nematosist once `take_damage(40)` ile soyut bir
@@ -329,7 +326,28 @@ DEFAULT_SETTINGS = {
     #              delik kapanir.
     #   BELIRTEC : tasiyici uzerinde ayri gen, 0 (balistik) dogar.
     # Birlikte isleyen bir uclunun bir araya gelmesi sansa baglidir.
-    "YUK_SENTEZ_OLCEK": 0.1,        # lab payload_cost x bu = molekul basina enerji
+    # LAB ENERJI OLCEGI. Silahin BUTUN bedelleri laboratuvar tablolarindan
+    # gelir ve bu katsayiyla oyunun enerji olcegine indirilir:
+    #   bakim/sn  : CARRIER_COST[ci][0] x guc      (kilif, iskelet, makine)
+    #   atis      : CARRIER_COST[ci][1]            (tek kullanimlik nematosist
+    #                                               her atista yeniden kurulur)
+    #   acma      : unfold_cost(yuk, tasiyici)     (T3SS saperonlari) - yuk
+    #                                               yuklendiginde
+    #   sentez    : payload_cost(yuk) / 12 molekul (katalitik yukte bagisiklik
+    #                                               proteini dahil) - stok
+    #                                               dolarken, molekul basina
+    # Eski STYLET_ENERGY / _COST / _DAMAGE ayarlari kaldirildi: laboratuvarla
+    # celisen ikinci bir fiyat listesiydi. Fagositoz lab tasiyicisi degil,
+    # kendi ayarlarini korur.
+    #
+    # KALIBRASYON (olculdu): oyunda hucre basina gelir ~8.4 enerji/sn
+    # (lab 25/sn) ve sade hucre zaten ~2.3/sn bakim oder (gelirin %27'si).
+    # Labda nematosist bakimi gelirin %40'i (10/25). Iki okuma:
+    #   brut oran  : 10 x olcek = 0.40 x 8.4  -> olcek 0.33
+    #   net butce  : gelir - temel bakim - silah = %60 kalsin -> olcek 0.11
+    # 0.2 ortasi: nematosist 2/sn (gelirin %24'u), tasiyicinin toplam
+    # bakimi 4.3/sn (%51). Daha yukarisi tasiyicilari aclıktan olduruyor.
+    "LAB_ENERJI_OLCEK": 0.2,
     "MARKER_MUTATION": 0.03,        # bolunmede belirtec degisme olasiligi
     "TASIYICI_VARYANT_MUTATION": 0.03,
     "URETICI_YUK_MUTATION": 0.02,   # uretici organin yuk tipi degisir
@@ -357,29 +375,27 @@ DEFAULT_SETTINGS = {
     # Stilet emmesi: emilen sitoplazma orani kadar cekirdek kuculur
     # (lab: core_r x (1 - 0.72 x drained)).
     "EMME_KUCULME": 0.72,
-    "HARPOON_DAMAGE": 15.0,
+    # PATLAMADA STOK SACILIR (lab spill): ozmotik lizisle patlayan hucre
+    # ureticilerinin stogunu komsulara dagitir - toksin dolu bir hucreyi
+    # patlatmak onu kimyasal bombaya cevirir. Sacilan molekul surtunmeyle
+    # ~bir hucre yaricapi kadar yol alir (lab ile ayni); bu yuzden yalnizca
+    # BITISIK komsular vurulur. Menzil: govdeler arasi bosluk (px).
+    # Pay, mesafeyle radyal seyrelir: (r0/(r0+d))^2.
+    "SACILMA_MENZILI": 40.0,
     "HARPOON_RANGE": 6.0,
     "HARPOON_COOLDOWN": 0.3,
-    "HARPOON_ENERGY": 6.0,
     "HARPOON_GROW": 0.25,
-    "HARPOON_COST": 0.06,
-    "NEMATOCYST_DAMAGE": 40.0,
     "NEMATOCYST_RANGE": 50.0,
     "NEMATOCYST_COOLDOWN": 6.0,
-    "NEMATOCYST_ENERGY": 10.0,
     "NEMATOCYST_GROW": 0.2,
-    "NEMATOCYST_COST": 0.12,
     # Bakteriosin varyanti sayisi. Kucuk tutulursa iki soy sik sik ayni
     # allele carpar ve birbirine bagisik cikar; buyuk tutulursa bagisiklik
     # neredeyse yalnizca oz kardesler arasinda kalir.
     "TOXIN_ALLELES": 12,
     "TOXIN_ALLELE_MUTATION": 0.02,
-    "TOXIN_DAMAGE": 8.0,
     "TOXIN_RANGE": 60.0,
     "TOXIN_COOLDOWN": 0.0,
-    "TOXIN_ENERGY": 3.0,
     "TOXIN_GROW": 0.25,
-    "TOXIN_COST": 0.1,
     # LIZIN: zirhin CEVABI. Kimyasal oldugu icin duvari yok sayar - zirhli
     # bir populasyonda tek ise yarayan silah odur. 12 hasar / 1.2 sn
     # bekleme = 10 dps ile bu rolu oynayamiyordu: 100 butunluklu bir hedefi
@@ -387,12 +403,9 @@ DEFAULT_SETTINGS = {
     # kalamaz. Olculdu: lizin tasiyan takim 2/32 sagkalim, silahsiz 11/32.
     # 22 ile dps 18.3 olur - ciplak hedefte harpundan (50) hala cok zayif,
     # ama duvarli hedefte harpun sifira duserken lizin isini gorur.
-    "LYSIN_DAMAGE": 9.0,
     "LYSIN_RANGE": 25.0,
     "LYSIN_COOLDOWN": 0.0,
-    "LYSIN_ENERGY": 3.5,
     "LYSIN_GROW": 0.25,
-    "LYSIN_COST": 0.05,
     "PHAGO_DAMAGE": 0.0,
     "PHAGO_RANGE": 0.0,
     "PHAGO_COOLDOWN": 3.0,

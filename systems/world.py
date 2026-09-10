@@ -387,6 +387,11 @@ class Dunya:
         for o in hepsi:
             if o.dead:
                 oldu.append(o)
+                # Lizisle patlayan hucre stogunu komsulara sacar: toksin
+                # dolu bir hucreyi patlatmak onu kimyasal bombaya cevirir.
+                if getattr(o, 'olum_sekli', None) == 'patlama':
+                    o.stok_sac(izgara.yakin(
+                        o, o.radius + game_settings.SACILMA_MENZILI))
                 self._olum_kaydet(o)
                 if not getattr(o, 'consumed', False):
                     drop_corpse(o, foods)

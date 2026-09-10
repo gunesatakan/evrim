@@ -78,7 +78,9 @@ class WeaponLogic:
         if self.stok >= _lab.STOCK_MAX:
             return
         synth, imm = _lab.payload_cost(_lab.PAYLOADS[pi])
-        bedel = (synth + imm) * game_settings.YUK_SENTEZ_OLCEK
+        # Lab bedeli bir ATISLIK yuk icindir (igne 12 molekul): molekul
+        # basina onun 1/12'si, oyun olcegiyle.
+        bedel = (synth + imm) / 12.0 * game_settings.LAB_ENERJI_OLCEK
         self._sentez += _lab.STOCK_REGEN * dt
         while self._sentez >= 1.0 and self.stok < _lab.STOCK_MAX:
             if hucre.energy < bedel:
@@ -123,9 +125,12 @@ class WeaponLogic:
     def _s(self, field):
         return getattr(game_settings, f"{self.KEY}_{field}")
 
-    @property
-    def damage(self):
-        return self._s("DAMAGE") * self.power
+    # Bedeller LAB tablolarindan mi (Stylet/Harpoon/Nematocyst/Toxin/Lysin)
+    # yoksa oyunun kendi ayarindan mi (Phagocytosis - lab tasiyicisi degil)?
+    LAB_BEDEL = True
+
+    def _olcek(self):
+        return float(game_settings.LAB_ENERJI_OLCEK)
 
     @property
     def reach(self):
@@ -142,13 +147,35 @@ class WeaponLogic:
 
     @property
     def energy_cost(self):
-        """Kullanım başına (sürekli silahlarda saniyede) enerji."""
-        return self._s("ENERGY")
+        """Atis basina enerji (surekli silahlarda saniyede).
+
+        Lab: CARRIER_COST[ci][1]. Tek kullanimlik nematosist her atista
+        yeniden kurulur - bedeli budur. Surekli puskurtme saniyede
+        (4+3ci) molekul saliyor; labdaki atis 26 molekul, o oranla.
+        """
+        if not self.LAB_BEDEL:
+            return self._s("ENERGY")
+        import lab as _lab
+        ci = int(self.carrier)
+        if not (0 <= ci < len(_lab.CARRIER_COST)):
+            return 0.0
+        atis = _lab.CARRIER_COST[ci][1] * self._olcek()
+        if self.CONTINUOUS:
+            emit = max(1, _lab.CARRIER_EMIT[ci]) if ci < len(_lab.CARRIER_EMIT) else 26
+            return atis * (4.0 + 3.0 * ci) / emit
+        return atis
 
     @property
     def base_energy_cost(self):
-        """Sürekli bakım — silahlar için düşüktür; asıl gider kullanımda."""
-        return self.power * self._s("COST")
+        """Bakim (saniyede): tasiyici makinesini ayakta tutmak.
+        Lab: CARRIER_COST[ci][0], gelisimle (guc) buyur."""
+        if not self.LAB_BEDEL:
+            return self.power * self._s("COST")
+        import lab as _lab
+        ci = int(self.carrier)
+        if not (0 <= ci < len(_lab.CARRIER_COST)):
+            return 0.0
+        return _lab.CARRIER_COST[ci][0] * self._olcek() * max(0.0, self.power)
 
     def update(self, dt):
         if self.cooldown_timer > 0:
@@ -331,6 +358,7 @@ class PhagocytosisLogic(WeaponLogic):
     hedefe işler ve yutarken avcı bir süre hareketsiz kalır.
     """
     KEY = "PHAGO"; CHANNEL = 'engulf'; CONTACT = True; REQUIRES_BIND = True
+    LAB_BEDEL = False           # lab tasiyicisi degil: kendi ayarlari
 
     def can_engulf(self, attacker, target):
         """Gelişim (power) görece daha büyük avı yutabilmeyi sağlar.

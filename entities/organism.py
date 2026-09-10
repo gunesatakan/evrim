@@ -1515,25 +1515,18 @@ class Organism(Entity):
                 pay = 1.0 / len(hedefler)
 
                 for t in hedefler:
-                    # MESAFEYLE SEYRELME: radyal salinan bir maddenin
-                    # derisimi uzaklikla duser. Menzilin ucundaki hucre ile
-                    # dibindeki hucre ayni dozu alamaz; toksin boylece
-                    # YAKIN mesafe silahi olur ve kullanmak icin
-                    # yaklasmak - yani kendini gostermek - gerekir.
-                    d = max(0.0, self.pos.distance_to(t.pos)
-                            - self.radius - t.radius)
-                    r0 = max(1.0, self.radius)
-                    seyrelme = (r0 / (r0 + d)) ** 2
-                    olcek = pay * seyrelme
+                    # Mesafeyle seyrelme artik molekulun kendi yolculugunda:
+                    # uzaga atilan molekul surtunmeyle durur, varmaz.
                     # MOLEKUL SALIMI: hasari dogrudan yazmak yerine
                     # gercek molekuller birakilir. Hedefe varip varmadigina
                     # KATMANLARIN DELIKLERI karar verir - lab.py'deki ayni
                     # fizik, ayni geometri. Hasar molekul varinca dogar
                     # (HedefZarf.receive). Molekul yolu mesafeyi zaten
                     # fiziksel olarak yasar; ona yalnizca PAY uygulanir.
-                    if not self._molekul_birak(t, lg, dt * pay):
-                        t.take_damage(lg.damage * dt * olcek,
-                                      lg.CHANNEL, lg.CONTACT, 'toksin', lg)
+                    # Yuk yalnizca MOLEKUL olarak gider; "hasar" diye ikinci
+                    # bir yol yok. Tasiyici molekuler degilse hicbir sey
+                    # cikmaz.
+                    self._molekul_birak(t, lg, dt * pay)
                     if t.dead:
                         killed.append(t)
                 self.energy -= lg.energy_cost * dt
@@ -1661,6 +1654,66 @@ class Organism(Entity):
                 self.membrane.logic.integrity = 0.0
             self.die(neden)
 
+    def stok_sac(self, komsular):
+        """Patladim: ureticilerimin stogu komsulara SACILIR (lab spill).
+
+        Stok bir sayi degil, fiilen tasinan molekullerdir; hucre lizisle
+        patlayinca ortama dagilir ve yakindakilere varir. Pay mesafeyle
+        radyal seyrelir. Bagisik olan (ayni allel) ve olmus komsular
+        almaz. Donen: sacilan molekul sayisi.
+        """
+        try:
+            import lab as _lab
+        except Exception:
+            return 0
+        ureticiler = [o.logic for o in self.organs
+                      if getattr(getattr(o, 'logic', None), 'URETICI', False)
+                      and getattr(o.logic, 'stok', 0.0) >= 1.0
+                      and 0 < int(o.logic.payload) < len(_lab.PAYLOADS)
+                      and _lab.PAYLOADS[int(o.logic.payload)][1] is not None]
+        if not ureticiler:
+            return 0
+        adaylar = []
+        r0 = max(1.0, self.radius)
+        for t in komsular:
+            if t is self or t.dead:
+                continue
+            d = max(0.0, self.pos.distance_to(t.pos) - self.radius - t.radius)
+            adaylar.append((t, (r0 / (r0 + d)) ** 2))
+        if not adaylar:
+            for ur in ureticiler:
+                ur.stok = 0.0
+            return 0
+        toplam_w = sum(w for _t, w in adaylar)
+        sacilan = 0
+        for ur in ureticiler:
+            pi = int(ur.payload)
+            n = int(ur.stok)
+            ur.stok = 0.0
+            for t, w in adaylar:
+                if t.is_immune_to_toxin(ur):
+                    continue
+                k = int(round(n * w / toplam_w))
+                if k <= 0:
+                    continue
+                zarf = t.zarf_arayuzu()
+                zarf.neden = 'patlama'
+                zarf.sahip = self
+                yon = t.pos - self.pos
+                if yon.length() < 1e-6:
+                    yon = pygame.math.Vector2(1, 0)
+                yon = yon.normalize()
+                for _ in range(k):
+                    a = math.atan2(yon.y, yon.x) + random.uniform(-0.6, 0.6)
+                    hiz = random.uniform(0.5, 1.3) * _lab.MOLECULE_SPEED * zarf.hiz_olcegi
+                    p = self.pos + pygame.math.Vector2(random.uniform(-self.radius, self.radius),
+                                                       random.uniform(-self.radius, self.radius)) * 0.5
+                    m = _lab.Molecule(zarf, p, pygame.math.Vector2(math.cos(a), math.sin(a)) * hiz, pi)
+                    m.depth = m.band()
+                    t.molekul_ekle(m)
+                    sacilan += 1
+        return sacilan
+
     def _uretici_bul(self, hedef=None):
         """Yuk verebilecek uretici organ: stoklu ve (varsa) hedefin bagisik
         olmadigi. Yoksa None - igne yuksuz gider."""
@@ -1707,6 +1760,13 @@ class Organism(Entity):
         gerek = _lab.CARRIER_EMIT[ci]
         if ur is not None and gerek > 0 and ur.yuk_cek(gerek):
             pi = int(ur.payload)
+            # ACMA BEDELI: katlanmis protein lumenden gecmez; saperon ve
+            # ATPaz ister (T3SS). Lab: unfold_cost(yuk, tasiyici).
+            try:
+                self.energy -= (_lab.unfold_cost(_lab.PAYLOADS[pi], _lab.CARRIERS[ci][1])
+                                * game_settings.LAB_ENERJI_OLCEK)
+            except Exception:
+                pass
         ad = organ.__class__.__name__.lower()
         zarf = hedef.zarf_arayuzu()
         zarf.neden = ad
@@ -1904,6 +1964,13 @@ class Organism(Entity):
         "baglanan molekul sonsuza kadar orada durmaz - hucre onarir,
         pompalar disari atar".
         """
+        # FAGOZOMLAR: sitostomla yutulan molekuller keselerde sindirilir;
+        # gozenek acici yuk keseyi delip sitoplazmaya kacar (Kese.update).
+        _z = getattr(self, '_zarf_arayuz', None)
+        if _z is not None and _z.keseler:
+            for _k in _z.keseler:
+                _k.update(dt)
+            _z.keseler = [_k for _k in _z.keseler if not _k.bitti]
         mols = getattr(self, 'molekuller', None)
         if not mols:
             return
