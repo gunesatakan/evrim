@@ -466,6 +466,16 @@ DEFAULT_SETTINGS = {
     # sabitleyen referans yaricap: tam bu boydaki hucrede yuzey derisimi
     # KOKU_YAYIM x koku olur. Baslangic hucresinin yaricapi.
     "KOKU_REF_YARICAP": 22.45,
+    # AYNI MOLEKUL TOPLANIR. Iki hucre ayni sentazi tasiyorsa AYNI
+    # molekulu salgilar; alicidaki derisimleri kimyanin geregi toplanir -
+    # alici ikisini ayirt edemez. Boylece bir koloninin TOPLU kokusu
+    # olur: tek tek duyulmayan akrabalar birlikte duyulur.
+    #
+    # Bu ayar toplama havuzuna kimin girecegini belirler: esigin bu
+    # katindan daha zayif katkilar dislanir. Kaynak sayisi bu sayiyi
+    # gecmedikce hicbir sey kaybolmaz, ama tarama menzili
+    # KOKU_BULUT x ln(bu) kadar genisler - buyutmek pahalidir.
+    "KOKU_TOPLAM_TAVANI": 8.0,
     # Hucre koku bulutunun ekrandaki yogunlugu (govde ustunde alfa; kenarda
     # 0). Kenar = populasyonun en hassas burnunun duyabilecegi son nokta.
     # 0 = cizme. H tusu isi haritasiyla birlikte acip kapar.

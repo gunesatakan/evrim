@@ -968,8 +968,12 @@ class Organism(Entity):
         ref = max(1e-6, getattr(game_settings, 'KOKU_REF_YARICAP', 22.45))
         sv = (max(1e-9, Organism.en_guclu_koku) * game_settings.KOKU_YAYIM
               * (r0 / ref))
+        # Ayni molekulu salgilayanlarin katkilari toplandigi icin, TEK
+        # BASINA esigin altinda kalan bir kaynak da havuza girer. Tarama
+        # bu yuzden esigin 1/TAVAN katina kadar uzanmali.
+        tavan = max(1.0, getattr(game_settings, 'KOKU_TOPLAM_TAVANI', 8.0))
         for c in getattr(self, '_koku_alicilari', ()):
-            esik = c.logic.scent_sensitivity
+            esik = c.logic.scent_sensitivity / tavan
             if esik <= 0.0:
                 continue
             oran = sv / esik
@@ -1211,6 +1215,14 @@ class Organism(Entity):
             alici_pay = max((u - self.pos).length() for u, _e in alicilar)
         else:
             esik_min, alici_pay = 0.0, 0.0
+        # AYNI MOLEKUL TOPLANIR (bkz. KOKU_TOPLAM_TAVANI). Havuza giris
+        # siniri esigin altindadir: tek basina duyulmayan bir akraba da
+        # toplama katilir.
+        _toplam_tavan = max(1.0, getattr(game_settings, 'KOKU_TOPLAM_TAVANI', 8.0))
+        esik_havuz = esik_min / _toplam_tavan
+        # sentaz -> [alici basina derisim toplami, agirlik, yon x agirlik,
+        #            koku x agirlik, akraba mi, uye id'leri]
+        _kokular = {}
         atak = game_settings.ATAK_ESIGI
         surus = pygame.math.Vector2(0.0, 0.0)
         en_guclu = 0.0
@@ -1283,7 +1295,10 @@ class Organism(Entity):
                 # oldugu icin yaricapla buyur: iri hucre daha uzaktan
                 # duyulur (bkz. scent_profile.koku_derisimi).
                 _sal = yayim * t.scent_value * (_r0 / koku_ref)
-                _oran_max = _sal / esik_min
+                # esik_havuz: toplama havuzuna giris siniri (esik/TAVAN).
+                # Tek basina duyulmayan kaynak da akrabalariyla toplanip
+                # duyulabilir; eleme bu yuzden daha gevsek.
+                _oran_max = _sal / esik_havuz
                 if _oran_max > 1.0:
                     _dmax = bulut * math.log(_oran_max) + _r0 + alici_pay
                     _koku_var = (d - _kayma_payi <= _dmax)
@@ -1301,6 +1316,7 @@ class Organism(Entity):
                 # Denklemin tek kaynagi scent_profile.koku_derisimi;
                 # burada sicak dongu icin acik yazildi.
                 _A = _sal * _r0 * math.exp(_r0 / bulut)
+                _cs = []
                 _en = 0.0
                 for _uc, _esik in alicilar:
                     _dd = (_kaynak - _uc).length()
@@ -1308,28 +1324,37 @@ class Organism(Entity):
                         _c = _sal
                     else:
                         _c = _A / _dd * math.exp(-_dd / bulut)
+                    _cs.append(_c)
                     _o = _c / _esik
                     if _o > _en:
                         _en = _o
-                if _en >= 1.0:            # esigi asti: molekul BAGLANDI
-                    # Weber-Fechner: derisim esigin kac katiysa onun
-                    # logaritmasi. Esikte 0, doyumda 1.
-                    _guc = min(1.0, math.log(_en) / _doyum)
-                    kin = self.is_kin(t)
-                    # Akrabanin ozel sinyali spektrumun onune gecer:
-                    # "iri biri" degil, "benden biri".
-                    _x = BehaviorGenome.relative_position(t.scent_value,
-                                                          my_scent)
-                    _r = (self.behavior.kin_response if kin
-                          else self.behavior.spectrum_response(_x)) * _guc
-                    if _r >= atak:
-                        self.attack_targets.add(id(t))
-                    _kat(_kfark, _r)
+                if _en >= 1.0 / _toplam_tavan:
+                    # HAVUZA YAZ. Karar burada verilmez: ayni sentazi
+                    # tasiyan butun kaynaklar toplandiktan SONRA verilir.
+                    _syn = getattr(getattr(t, 'lineage', None), 'synthase', -1)
+                    _gr = _kokular.get(_syn)
+                    if _gr is None:
+                        _gr = _kokular[_syn] = [
+                            list(_cs), 0.0, pygame.math.Vector2(0.0, 0.0),
+                            0.0, self.is_kin(t), []]
+                    else:
+                        _tc = _gr[0]
+                        for _i in range(len(_cs)):
+                            _tc[_i] += _cs[_i]
+                    # Agirlik = bu kaynagin en guclu alicidaki katkisi:
+                    # yon ve kimlik, bulutun neresinden geldigine gore.
+                    _w = max(_cs)
+                    _gr[1] += _w
+                    _gr[2] += _kfark * _w
+                    _gr[3] += t.scent_value * _w
+                    _gr[5].append(id(t))
 
-                    # KAIROMON: "bu hucre az once birini yedi". Tehlike
-                    # bilgisini tasiyan tek kanal; ayri bir eksen degil,
-                    # ayri bir uyaran.
+                if _en >= 1.0:
+                    # KAIROMON: "bu hucre az once birini yedi". AYRI bir
+                    # molekul - soy imzasiyla toplanmaz, hedefin kendi
+                    # derisimiyle okunur.
                     if t.kairomone > 0.0:
+                        _guc = min(1.0, math.log(_en) / _doyum)
                         _rk = self.behavior.respond(
                             'kairomone',
                             BehaviorGenome.kairomone_bin(t.kairomone),
@@ -1347,6 +1372,38 @@ class Organism(Entity):
                 if _r >= atak:
                     self.attack_targets.add(id(t))
                 _kat(fark, _r)
+
+        # ---------------- KOKU: HAVUZLARIN KARARI ----------------
+        #
+        # Ayni sentazi tasiyan hucreler AYNI molekulu salgilar; alicidaki
+        # derisimleri toplanir ve alici onlari birbirinden ayiramaz.
+        # Karar bu yuzden tek tek degil HAVUZ basina verilir: tek basina
+        # esigin altinda kalan bir koloni, birlikte duyulur.
+        #
+        # Yon ve kimlik havuzun agirlikli ortalamasidir - alici ayri ayri
+        # kaynak gormedigi icin dogrusu budur; okudugu sey tek bir bulut.
+        for _gr in _kokular.values():
+            _tc, _w, _yon_top, _koku_top, _kin, _uyeler = _gr
+            if _w <= 0.0:
+                continue
+            _en = 0.0
+            for _i, (_u, _esik) in enumerate(alicilar):
+                _o = _tc[_i] / _esik
+                if _o > _en:
+                    _en = _o
+            if _en < 1.0:
+                continue                  # havuz bile esigi asamadi
+            # Weber-Fechner: derisim esigin kac katiysa onun logaritmasi.
+            # Esikte 0, doyumda 1.
+            _guc = min(1.0, math.log(_en) / _doyum)
+            # Akrabanin ozel sinyali spektrumun onune gecer:
+            # "iri biri" degil, "benden biri".
+            _x = BehaviorGenome.relative_position(_koku_top / _w, my_scent)
+            _r = ((self.behavior.kin_response if _kin
+                   else self.behavior.spectrum_response(_x)) * _guc)
+            if _r >= atak:
+                self.attack_targets.update(_uyeler)
+            _kat(_yon_top / _w, _r)
 
         if surus.length_squared() <= 1e-9:
             self.current_response = 0.0
