@@ -1925,7 +1925,21 @@ class Organism(Entity):
             if _d.length() < 1e-6:
                 _d = -yon
             namlu = hedef.pos + _d.normalize() * _R
-        shot = _lab.Shot(zarf, namlu, yon, _lab.CARRIERS[ci], _lab.PAYLOADS[pi],
+        # GELISIM FIZIKSEL BIR KAZANC OLMALI. Organin `power`i bakim
+        # giderini ve cizilen boyu buyutuyordu ama DELME ENERJISI
+        # tasiyicinin sabitiydi: sekiz kat bakim odeyen gelismis bir
+        # nematosist, taze bir tanesiyle tipatip ayni duvari deliyordu.
+        # Bir beceri sayaci degil bir CISIM: gelisim kapsuldeki ozmotik
+        # basinci ve iplikteki kasilma proteinini artirir, bosalma
+        # enerjisi de onunla dogrusal buyur. Uc SIVRILIGI degismez -
+        # o molekuler bir yapidir - yani gereken enerji sabit kalir ve
+        # kazanc gercekten kazanctir. Bedeli de dogrusal: bakim gideri
+        # ayni carpanla artiyor, bedava degil.
+        _tasiyici = list(_lab.CARRIERS[ci])
+        _prm = dict(_tasiyici[1])
+        _prm['energy'] = float(_prm.get('energy', 0.0)) * max(0.1, float(lg.power))
+        _tasiyici[1] = _prm
+        shot = _lab.Shot(zarf, namlu, yon, tuple(_tasiyici), _lab.PAYLOADS[pi],
                          _lab.MARKERS[mi], ci)
         shot.sahip = self
         # ORGANIN TEK BASLIGI YOLA CIKTI: geri donene kadar ikincisi yok.
