@@ -821,13 +821,27 @@ DEFAULT_SETTINGS = {
 }
 
 # Added ribosome_area and vacuole_area to each entity
+# DAVRANIS DA TASARIMIN PARCASIDIR.
+#
+# Editor govdeyi kuruyordu (organlar, zar) ama davranis genleri dogumda
+# rastgeleydi. Silahli bir tur tasarlayan kullanici onu oyunda hic
+# saldirirken gormuyordu: rastgele genomlarin cogu komsuyu av olarak
+# gormez. Olculdu - toksinli kaotropi 150 sn'de 0 hedef, 0 atis, stok
+# 44/44 dolu; ayni tur "herkese saldir" genomuyla 453 salim, 3 toksin
+# olumu. Silah organdi, kullanma karari gendi ve gen verilemiyordu.
+#
+#   davranis_elle  : 0 = genom dogumda rastgele (evrim bulur),
+#                    1 = asagidaki degerler kurucuya yazilir (evrim oradan surer)
+#   koku_bant_*    : komsu kokusu BENIMKINE gore zayif .. guclu bes bant,
+#                    -1 tam guc kac .. 0 umursama .. +1 tam guc saldir
+#   akraba_tepkisi : soy imzasi tanindiginda tepki (-1..+1)
 DEFAULT_ENTITY_CONFIGS = {
-    "optropi_0": {"name": "Magenta", "cytoplasm": 2.0, "flagella": 10.0, "cilia": 3.0, "vision_range": 50.0, "vision_angle": 10.0, "memory": 10, "smell": 5.0, "sound": 30.0, "ribosome_area": 20.0, "vacuole_area": 30.0},
-    "optropi_1": {"name": "Yellow", "cytoplasm": 2.0, "flagella": 10.0, "cilia": 3.0, "vision_range": 50.0, "vision_angle": 10.0, "memory": 10, "smell": 5.0, "sound": 30.0, "ribosome_area": 20.0, "vacuole_area": 30.0},
-    "optropi_2": {"name": "Lime Green", "cytoplasm": 2.0, "flagella": 10.0, "cilia": 3.0, "vision_range": 50.0, "vision_angle": 10.0, "memory": 10, "smell": 5.0, "sound": 30.0, "ribosome_area": 20.0, "vacuole_area": 30.0},
-    "optropi_3": {"name": "Orange", "cytoplasm": 2.0, "flagella": 10.0, "cilia": 3.0, "vision_range": 50.0, "vision_angle": 10.0, "memory": 10, "smell": 5.0, "sound": 30.0, "ribosome_area": 20.0, "vacuole_area": 30.0},
-    "kaotropi":  {"name": "Kaotropi", "cytoplasm": 3.0, "flagella": 15.0, "cilia": 2.0, "vision_range": 120.0, "vision_angle": 30.0, "memory": 10, "smell": 5.0, "sound": 40.0, "ribosome_area": 25.0, "vacuole_area": 40.0},
-    "notropi":   {"name": "Hunter", "cytoplasm": 2.0, "flagella": 20.0, "cilia": 1.0, "vision_range": 30.0, "vision_angle": 10.0, "memory": 10, "smell": 5.0, "sound": 10.0, "ribosome_area": 15.0, "vacuole_area": 20.0}
+    "optropi_0": {"name": "Magenta", "cytoplasm": 2.0, "flagella": 10.0, "cilia": 3.0, "vision_range": 50.0, "vision_angle": 10.0, "memory": 10, "smell": 5.0, "sound": 30.0, "ribosome_area": 20.0, "vacuole_area": 30.0, "davranis_elle": 0, "koku_bant_zayif": 0.0, "koku_bant_az_zayif": 0.0, "koku_bant_esit": 0.0, "koku_bant_az_guclu": 0.0, "koku_bant_guclu": 0.0, "akraba_tepkisi": 0.0},
+    "optropi_1": {"name": "Yellow", "cytoplasm": 2.0, "flagella": 10.0, "cilia": 3.0, "vision_range": 50.0, "vision_angle": 10.0, "memory": 10, "smell": 5.0, "sound": 30.0, "ribosome_area": 20.0, "vacuole_area": 30.0, "davranis_elle": 0, "koku_bant_zayif": 0.0, "koku_bant_az_zayif": 0.0, "koku_bant_esit": 0.0, "koku_bant_az_guclu": 0.0, "koku_bant_guclu": 0.0, "akraba_tepkisi": 0.0},
+    "optropi_2": {"name": "Lime Green", "cytoplasm": 2.0, "flagella": 10.0, "cilia": 3.0, "vision_range": 50.0, "vision_angle": 10.0, "memory": 10, "smell": 5.0, "sound": 30.0, "ribosome_area": 20.0, "vacuole_area": 30.0, "davranis_elle": 0, "koku_bant_zayif": 0.0, "koku_bant_az_zayif": 0.0, "koku_bant_esit": 0.0, "koku_bant_az_guclu": 0.0, "koku_bant_guclu": 0.0, "akraba_tepkisi": 0.0},
+    "optropi_3": {"name": "Orange", "cytoplasm": 2.0, "flagella": 10.0, "cilia": 3.0, "vision_range": 50.0, "vision_angle": 10.0, "memory": 10, "smell": 5.0, "sound": 30.0, "ribosome_area": 20.0, "vacuole_area": 30.0, "davranis_elle": 0, "koku_bant_zayif": 0.0, "koku_bant_az_zayif": 0.0, "koku_bant_esit": 0.0, "koku_bant_az_guclu": 0.0, "koku_bant_guclu": 0.0, "akraba_tepkisi": 0.0},
+    "kaotropi":  {"name": "Kaotropi", "cytoplasm": 3.0, "flagella": 15.0, "cilia": 2.0, "vision_range": 120.0, "vision_angle": 30.0, "memory": 10, "smell": 5.0, "sound": 40.0, "ribosome_area": 25.0, "vacuole_area": 40.0, "davranis_elle": 0, "koku_bant_zayif": 0.0, "koku_bant_az_zayif": 0.0, "koku_bant_esit": 0.0, "koku_bant_az_guclu": 0.0, "koku_bant_guclu": 0.0, "akraba_tepkisi": 0.0},
+    "notropi":   {"name": "Hunter", "cytoplasm": 2.0, "flagella": 20.0, "cilia": 1.0, "vision_range": 30.0, "vision_angle": 10.0, "memory": 10, "smell": 5.0, "sound": 10.0, "ribosome_area": 15.0, "vacuole_area": 20.0, "davranis_elle": 0, "koku_bant_zayif": 0.0, "koku_bant_az_zayif": 0.0, "koku_bant_esit": 0.0, "koku_bant_az_guclu": 0.0, "koku_bant_guclu": 0.0, "akraba_tepkisi": 0.0}
 }
 
 # Modülün kendi konumuna göre mutlak yol. Göreli yol kullanılırsa, proje

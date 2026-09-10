@@ -38,6 +38,7 @@ class Notropi(Organism):
             self._load_default_organs(cfg)
 
         self.direction_memory.capacity = cfg["memory"]
+        self.davranisi_ayardan_kur(cfg)
         self.temel_yapiyi_tamamla()
         self.recalculate_physics()
         self.genome = Genome.from_organism(self)

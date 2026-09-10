@@ -1291,9 +1291,10 @@ class Organism(Entity):
                 _sinyal = kulak.duyulan_sinyal(_gur, max(1.0, d - t.radius))
                 if _sinyal >= 1.0:
                     _x = BehaviorGenome.relative_position(t.radius, self.radius)
-                    _r = (self.behavior.ses_tepkisi(_x)
-                          * BehaviorGenome.aciliyet(_sinyal))
-                    if _r >= atak:
+                    # KARAR bant, EFOR siddet (bkz. koku havuzu notu).
+                    _bant = self.behavior.ses_tepkisi(_x)
+                    _r = _bant * BehaviorGenome.aciliyet(_sinyal)
+                    if _bant >= atak:
                         self.attack_targets.add(id(t))
                     # SESIN YONU KAPSAMAYA BAGLI: kac noktadan dinledigin
                     # menzili degil YONU belirler. Kapsamasi dusuk hucre
@@ -1387,11 +1388,12 @@ class Organism(Entity):
                     # derisimiyle okunur.
                     if t.kairomone > 0.0:
                         _guc = min(1.0, math.log(_en) / _doyum)
-                        _rk = self.behavior.respond(
+                        _bant = self.behavior.respond(
                             'kairomone',
                             BehaviorGenome.kairomone_bin(t.kairomone),
-                            BehaviorGenome.level_bin(_guc, 1.0)) * _guc
-                        if _rk >= atak:
+                            BehaviorGenome.level_bin(_guc, 1.0))
+                        _rk = _bant * _guc
+                        if _bant >= atak:
                             self.attack_targets.add(id(t))
                         _kat(_kfark, _rk)
 
@@ -1399,9 +1401,10 @@ class Organism(Entity):
             if vrange > 0.0 and d <= vrange + t.radius and self.can_see(t):
                 _erim = vrange + t.radius
                 _guc = max(0.0, 1.0 - d / max(1.0, _erim))
-                _r = self.behavior.renk_tepkisi(
-                    BehaviorGenome.renk_ekseni(t.color)) * _guc
-                if _r >= atak:
+                _bant = self.behavior.renk_tepkisi(
+                    BehaviorGenome.renk_ekseni(t.color))
+                _r = _bant * _guc
+                if _bant >= atak:
                     self.attack_targets.add(id(t))
                 _kat(fark, _r)
 
@@ -1431,9 +1434,23 @@ class Organism(Entity):
             # Akrabanin ozel sinyali spektrumun onune gecer:
             # "iri biri" degil, "benden biri".
             _x = BehaviorGenome.relative_position(_koku_top / _w, my_scent)
-            _r = ((self.behavior.kin_response if _kin
-                   else self.behavior.spectrum_response(_x)) * _guc)
-            if _r >= atak:
+            _bant = (self.behavior.kin_response if _kin
+                     else self.behavior.spectrum_response(_x))
+            _r = _bant * _guc
+            # KARAR BANTTAN, EFOR SIDDETTEN.
+            #
+            # Saldiri esigi "bant x siddet" uzerinden sinaniyordu. Siddet
+            # (Weber-Fechner, 0..1) doyuma ancak temasta yaklastigi icin
+            # menzilli bir silah menzilini HIC kullanamiyordu: C/esik = 5
+            # iken bant >= 0.93 gerekiyordu, rastgele genomlarin yalnizca
+            # %16'sinda oyle bir bant var. Olculdu - toksin tasiyan soy
+            # 40.497 hucre-karenin 238'inde hedef bulabildi, stogu 44/44
+            # dolu bekledi. Oysa "bu bir av mi" sorusunun cevabi kimlik
+            # bandidir; siddet yalnizca ne kadar kararli gidilecegini
+            # soyler. Silahin menzili ise organin kendi fiziksel siniri
+            # (can_hit). Bant saldir diyorsa ve hedef duyuluyorsa hedef
+            # alinir; ne kadar guclu yaklasilacagini _kat'a giden _r verir.
+            if _bant >= atak:
                 self.attack_targets.update(_uyeler)
             _kat(_yon_top / _w, _r)
 
@@ -2270,6 +2287,43 @@ class Organism(Entity):
             y = my + d.y * olcek
             r = max(1, int(round(m.rad * vs * olcek)))
             pygame.draw.circle(screen, m.col, (int(x), int(y)), r)
+
+    def davranisi_ayardan_kur(self, cfg):
+        """Kurucunun davranis genlerini editordeki tasarimdan yaz.
+
+        Yalnizca `davranis_elle` = 1 ise; aksi halde dogumdaki rastgele
+        genom kalir ve evrim onu bulur. Elle verilen genom da kalitsaldir
+        ve bolunmede mutasyona ugrar - baslangic noktasi tasarlanir, sonrasi
+        secilime kalir.
+
+        Bantlar sabit kesmelerle yerlesir (25/45/55/75): "zayif" gercekten
+        benden zayif kokan demektir (goreli eksen: 50 = esit, 75 = iki
+        kat). Rastgele genomda kesmeler de gendir; burada etiketler anlam
+        tasisin diye sabitlenir.
+        """
+        try:
+            if not int(cfg.get("davranis_elle", 0)):
+                return
+        except (TypeError, ValueError):
+            return
+        b = self.behavior
+        if b is None:
+            return
+        adlar = ("koku_bant_zayif", "koku_bant_az_zayif", "koku_bant_esit",
+                 "koku_bant_az_guclu", "koku_bant_guclu")
+        bantlar = []
+        for ad in adlar:
+            try:
+                v = float(cfg.get(ad, 0.0))
+            except (TypeError, ValueError):
+                v = 0.0
+            bantlar.append(max(-1.0, min(1.0, v)))
+        b.scent_bands = bantlar
+        b.scent_cuts = [25.0, 45.0, 55.0, 75.0]
+        try:
+            b.kin_response = max(-1.0, min(1.0, float(cfg.get("akraba_tepkisi", 0.0))))
+        except (TypeError, ValueError):
+            pass
 
     def temel_yapiyi_tamamla(self):
         """Zar ve sitoplazma yoksa ekle.

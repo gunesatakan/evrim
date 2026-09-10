@@ -1507,7 +1507,23 @@ class ModernLauncher:
                            % (_lab.CARRIER_SPREAD[ci], _lab.CARRIER_REACH[ci]))
             else:
                 out.append("* %s" % aciklama)
-        metin = _lab.kombinasyon_ozeti(lg.carrier, lg.payload)
+        # IGNELI SILAH: yuku hucredeki URETICIDEN alir. Uretici yoksa
+        # igne bosa gider - bunu editorde gormek gerekiyor.
+        if not getattr(lg, 'URETICI', False) and ci >= 3:
+            _ent = getattr(self, 'popup_entity', None) or getattr(self, 'selected_entity', None)
+            _ureticiler = [o for o in (getattr(_ent, 'organs', None) or ())
+                           if getattr(getattr(o, 'logic', None), 'URETICI', False)]
+            if _ureticiler:
+                _adlar = ", ".join(_lab.PAYLOADS[int(o.logic.payload)][0]
+                                   for o in _ureticiler)
+                out.append("  yuk: ureticiden (%s)" % _adlar)
+                _pi_ozet = int(_ureticiler[0].logic.payload)
+            else:
+                out.append("  URETICI YOK - igne yuksuz gider (Toksin/Lizin ekle)")
+                _pi_ozet = 0
+            metin = _lab.kombinasyon_ozeti(lg.carrier, _pi_ozet)
+        else:
+            metin = _lab.kombinasyon_ozeti(lg.carrier, lg.payload)
         # Panel dar: bolmeden sigmayacak satirlari ikiye ayir.
         if len(metin) > 34 and " / " in metin:
             sol, sag = metin.split(" / ", 1)
@@ -1547,8 +1563,14 @@ class ModernLauncher:
             # zaten kutudaki sayidir, etikette tekrarina gerek yok.
             _ta = _lab.CARRIERS[ci][0].split('. ', 1)[-1]
             params["carrier"] = ("Tasiyici: " + _ta, ci, 0, len(_lab.CARRIERS) - 1)
-            params["payload"] = ("Yuk: " + _lab.PAYLOADS[pi][0],
-                                 pi, 0, len(_lab.PAYLOADS) - 1)
+            # YUK YALNIZCA URETICININ GENIDIR. Igneli silah (stilet,
+            # harpun, nematosist) yuk sentezlemez; atarken hucredeki
+            # ureticiden (Toksin/Lizin) ceker. Editor igneye de bir yuk
+            # kutusu gosteriyordu ve secim hicbir seye baglanmiyordu -
+            # kullanici nematosiste yuk secip oyunda hic etki gormuyordu.
+            if getattr(organ.logic, 'URETICI', False):
+                params["payload"] = ("Yuk: " + _lab.PAYLOADS[pi][0],
+                                     pi, 0, len(_lab.PAYLOADS) - 1)
             params["marker"] = ("Belirtec: " + _lab.MARKERS[mi][0],
                                 mi, 0, len(_lab.MARKERS) - 1)
         elif organ_name == "Membrane":
