@@ -3064,12 +3064,17 @@ class Organism(Entity):
         
         # Hafıza Güncelleme — yaşlanma simülasyon zamanıyla ilerler
         self.direction_memory.update(dt)
-        for k in kaotropis:
-            if self.can_see(k):
-                start = pygame.math.Vector2(k.pos); vec = pygame.math.Vector2(k.current_path_end) - start
-                if vec.length() > 0:
-                    trunc = vec.normalize() * min(vec.length(), self.max_memory_length)
-                    self.direction_memory.encode(k.uid, (start, start + trunc))
+        # BASKASININ NEREYE GITTIGI TAHMIN EDILMEZ.
+        #
+        # Gorulen her hucrenin hizindan bir "rota" cikarilip hafizaya
+        # yaziliyor ve ekrana kalin bir cizgi olarak ciziliyordu. Bu bir
+        # ORGANIN yapabilecegi bir sey degil: fotoreseptor isik siddeti
+        # ve renk okur, karsidakinin hiz vektorunu ve gidecegi yeri
+        # OKUYAMAZ. Hucrenin elinde tek bir anlik goruntu vardir; ondan
+        # yorunge cikarmak icin izlemek, hatirlamak ve hesaplamak gerekir
+        # - hicbiri bir alicinin isi degil. Ozellik kaldirildi; goren
+        # hucre yalnizca "orada biri var" bilgisini alir ve tepkisini
+        # davranis tablosundan verir.
 
         # threat_uids None ise: KENDIMDEN BASKA HERKESIN izi. Roller artik
         # sinifa gore dagitilmadigi icin "tehdit listesi" diye onceden
