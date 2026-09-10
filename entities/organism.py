@@ -2644,9 +2644,22 @@ class Organism(Entity):
             changes = 0
             if daughter.genome is not None:
                 changes += daughter.genome.mutate() or 0
-            # Davranış tablosu da kalıtsaldır ve mutasyona uğrar
+            # Davranış tablosu da kalıtsaldır ve mutasyona uğrar - ama
+            # IRAKSAMA SAYACINA GIRMEZ.
+            #
+            # Soy imzası, hücrenin SALGILADIĞI molekülün (sentaz geninin
+            # ürünü) değişmesidir. Davranış tablosu bir düzenleyici
+            # karar tablosudur: neye yaklaşılacağını, neden kaçılacağını
+            # söyler. Neyden yapıldığını ya da ne salgıladığını değil.
+            # Kaçma eşiği kayan bir hücrenin kokusunun değişmesi için
+            # hiçbir sebep yoktur.
+            #
+            # Ölçüldü: davranış, birikimin %37'siydi ve imzayı 5.4
+            # nesilde bir kaydırıyordu. Bu kadar hızlı kayan bir imzayla
+            # koloni tutunamıyor - akrabalar birkaç bölünme sonra
+            # birbirinin koku havuzundan düşüyordu.
             if daughter.behavior is not None:
-                changes += daughter.behavior.mutate() or 0
+                daughter.behavior.mutate()
             # KOKU: zar atışıyla değil, biriken ıraksamayla değişir. Eşiği
             # aşana kadar yavru ebeveyniyle AYNI kokar - kardeşler, kuzenler
             # ve yakın soylar aynı sınıfta kalır ki davranış evrimleşebilsin.
