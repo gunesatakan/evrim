@@ -209,6 +209,12 @@ DEFAULT_SETTINGS = {
     "STARVE_TIMEOUT": 15.0,
     # Olen hucre yerine besin birakir (les). Ilk varan alir.
     "CORPSE_FOOD_MAX": 24,
+    # Olen HER hucre en az bu kadar besin birakir - ac olse, deposu bos
+    # olsa da. Govdenin kendisi biyokutledir; enerji hesabi (biyokutle
+    # x verim / besin enerjisi) ac hucrede 0'a yuvarlaniyordu ve olum
+    # arkasinda hicbir sey birakmiyordu. Yenen (yutulan) hucre haric:
+    # onun govdesi yiyenin icinde.
+    "CORPSE_FOOD_MIN": 1,
     # Haritadaki TOPLAM les besini tavani. FOOD_MAX'tan ayri sayilir:
     # dogal besin doluyken de olen hucre arkasinda bir sey birakabilsin,
     # ama hizli devrilen bir populasyon haritayi lesle bogamasin.

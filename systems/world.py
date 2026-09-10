@@ -136,7 +136,11 @@ def drop_corpse(organism, foods):
     kitligi tamamen ortadan kaldirir. Harita doluyken cozunen bir les
     ortama yayilmis sayilir - kimse toplamaya yetismez.
     """
-    n = organism.corpse_food_count()
+    # EN AZ CORPSE_FOOD_MIN: govdenin kendisi biyokutledir. Enerji
+    # hesabi ac olen hucrede 0'a yuvarlaniyordu (0.5 x 166 / 270 = 0.3);
+    # hucre kaybolup arkasinda hicbir sey birakmiyordu.
+    taban_adet = max(0, int(getattr(game_settings, 'CORPSE_FOOD_MIN', 1)))
+    n = max(taban_adet, organism.corpse_food_count())
     # LESIN KENDI TAVANI VAR. FOOD_MAX = FOOD_COUNT (80 = 80) oldugu
     # icin harita neredeyse hep doluydu ve les HIC dusmuyordu: olen
     # hucre arkasinda hicbir sey birakmiyordu. Tasma korumasi kaliyor
@@ -144,8 +148,9 @@ def drop_corpse(organism, foods):
     tavan = int(getattr(game_settings, 'CORPSE_TOTAL_MAX',
                         game_settings.FOOD_MAX))
     les_sayisi = sum(1 for f in foods if getattr(f, 'from_corpse', False))
-    for _ in range(n):
-        if les_sayisi >= tavan:
+    for i in range(n):
+        # Garanti edilen ilk besin(ler) tavani gormez: olum hep iz birakir.
+        if i >= taban_adet and les_sayisi >= tavan:
             break
         les_sayisi += 1
         fx = organism.pos.x + random.uniform(-organism.radius, organism.radius)
