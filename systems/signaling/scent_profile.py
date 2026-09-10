@@ -85,3 +85,89 @@ def scent_value(organism):
         else:
             total += organ_score(organ)
     return total
+
+
+# ---------------------------------------------------------------------------
+# KOKU ALANI: puanin cevredeki derisime donusmesi
+#
+# TEK KAYNAK. Ayni denklem dort yerde kullaniliyor - algi (alici ucundaki
+# derisim), kaba uzamsal eleme, menzil ust siniri ve ekran cizimi. Dordu
+# ayri ayri yazilinca biri degisip digerleri geride kaliyordu; hepsi
+# buradan gecer.
+#
+# FIZIK. Hucre kokusunu YUZEYINDEN salgilar. Kuresel bir kaynaktan
+# difuzyon + birinci derece bozunma (buharlasma, hidroliz) kararli halde
+# su profili verir:
+#
+#     C(d) = (Q / 4piD d) * exp(-(d - r0) / lambda)
+#
+# Iki carpan var ve ikisi de gercek:
+#
+#   1/d  : GEOMETRIK SEYRELME. Ayni molekul sayisi giderek buyuyen bir
+#          kurenin yuzeyine dagilir. Eskiden bu carpan YOKTU - koku
+#          yalnizca ussel olarak seyreliyordu ve bulut olmasi gerekenden
+#          cok genis kaliyordu (dunyanin %46'si, hucre basina 10 komsu).
+#
+#   Q ~ r0^2 : SALGI YUZEY ALANIYLA ORANTILI. Iri hucrenin zari daha
+#          genis, daha cok molekul birakir. Yuzeydeki derisim boylece
+#          r0 ile buyur (Q/4piD r0 ~ r0). Yani BOYUT KOKUYU ARTIRIR:
+#          ayni organ yukunu tasiyan iri bir hucre daha uzaktan duyulur.
+#          Organ yukunun getirdigi `koku` puani bunun uzerine biner.
+#
+# lambda = KOKU_BULUT = sqrt(D/k), bulutun karakteristik boyu.
+# KOKU_REF_YARICAP olcegi sabitler: o yaricaptaki bir hucrede yuzey
+# derisimi tam KOKU_YAYIM * koku olur, yani eski kalibrasyon korunur.
+
+
+def koku_derisimi(koku, r0, d):
+    """Kaynak MERKEZINDEN d px uzaktaki derisim. Govde icinde yuzey degeri."""
+    if koku <= 0.0:
+        return 0.0
+    r0 = r0 if r0 > 1.0 else 1.0
+    bulut = game_settings.KOKU_BULUT
+    if bulut < 1.0:
+        bulut = 1.0
+    ref = getattr(game_settings, 'KOKU_REF_YARICAP', 22.45)
+    if ref <= 0.0:
+        ref = 22.45
+    yuzey = game_settings.KOKU_YAYIM * koku * (r0 / ref)
+    if d <= r0:
+        return yuzey
+    import math as _m
+    return yuzey * (r0 / d) * _m.exp(-(d - r0) / bulut)
+
+
+def koku_erimi(koku, r0, esik):
+    """C(R) = esik cozumu: bu kokunun duyulabildigi en uzak nokta (merkezden).
+
+    Cozulecek denklem  A/R * exp(-R/BULUT) = 1  kapali bicimde Lambert W
+    ister; Newton ile uc dort adimda yakinsar (f = lnA - lnR - R/BULUT).
+    Duyulamiyorsa 0 doner - o zaman bulut da cizilmez.
+    """
+    import math as _m
+    r0 = r0 if r0 > 1.0 else 1.0
+    if koku <= 0.0 or esik <= 0.0:
+        return 0.0
+    if koku_derisimi(koku, r0, r0) < esik:
+        return 0.0                       # yuzeyde bile esigin altinda
+    bulut = game_settings.KOKU_BULUT
+    if bulut < 1.0:
+        bulut = 1.0
+    ref = getattr(game_settings, 'KOKU_REF_YARICAP', 22.45)
+    if ref <= 0.0:
+        ref = 22.45
+    # A = yuzey_derisimi * r0 * exp(r0/BULUT) / esik
+    lnA = (_m.log(game_settings.KOKU_YAYIM * koku * (r0 / ref) / esik)
+           + _m.log(r0) + r0 / bulut)
+    R = bulut * (lnA - _m.log(bulut)) if lnA > _m.log(bulut) + 1.0 else r0
+    if R < r0:
+        R = r0
+    for _ in range(24):
+        f = lnA - _m.log(R) - R / bulut
+        if -1e-4 < f < 1e-4:
+            break
+        R += f / (1.0 / R + 1.0 / bulut)
+        if R < r0:
+            R = r0
+            break
+    return R if R > r0 else r0

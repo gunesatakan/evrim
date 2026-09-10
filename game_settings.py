@@ -461,6 +461,11 @@ DEFAULT_SETTINGS = {
     # kokuyor, burun ne kadar hassas.
     "KOKU_BULUT": 80.0,
     "KOKU_YAYIM": 0.7,
+    # SALGI YUZEY ALANIYLA ORANTILI: iri hucrenin zari genis, daha cok
+    # molekul birakir - yuzeydeki derisim yaricapla buyur. Bu, o olcegi
+    # sabitleyen referans yaricap: tam bu boydaki hucrede yuzey derisimi
+    # KOKU_YAYIM x koku olur. Baslangic hucresinin yaricapi.
+    "KOKU_REF_YARICAP": 22.45,
     # Hucre koku bulutunun ekrandaki yogunlugu (govde ustunde alfa; kenarda
     # 0). Kenar = populasyonun en hassas burnunun duyabilecegi son nokta.
     # 0 = cizme. H tusu isi haritasiyla birlikte acip kapar.

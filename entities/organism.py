@@ -960,8 +960,14 @@ class Organism(Entity):
         her hedef icin ayrica hesaplanir.
         """
         en_iyi = 0.0
-        sv = max(1e-9, Organism.en_guclu_koku) * game_settings.KOKU_YAYIM
         r0 = max(1.0, Organism.en_iri_yaricap)
+        # UST SINIR, tam cozum degil. Gercek profilde geometrik seyrelme
+        # (r0/d) de var ve derisimi hep DUSURUR; onu atlayan bu bicim
+        # guvenli tarafta kalir - duyulabilen bir kokuyu asla kirpmaz.
+        # Tam cozum koku_erimi'nde, her hedef icin ayrica hesaplanir.
+        ref = max(1e-6, getattr(game_settings, 'KOKU_REF_YARICAP', 22.45))
+        sv = (max(1e-9, Organism.en_guclu_koku) * game_settings.KOKU_YAYIM
+              * (r0 / ref))
         for c in getattr(self, '_koku_alicilari', ()):
             esik = c.logic.scent_sensitivity
             if esik <= 0.0:
@@ -1194,6 +1200,7 @@ class Organism(Entity):
         alicilar = getattr(self, '_alici_noktalari', ())
         yayim = game_settings.KOKU_YAYIM
         bulut = max(1.0, game_settings.KOKU_BULUT)
+        koku_ref = max(1e-6, getattr(game_settings, 'KOKU_REF_YARICAP', 22.45))
         # log(esik kati) / log(doyum): esikte 0, doyumda 1.
         _doyum = math.log(max(1.0001, game_settings.KOKU_DOYUM))
         # Kaba eleme icin: en hassas esik ve alici ucunun govde
@@ -1266,12 +1273,16 @@ class Organism(Entity):
             # Kaba eleme HEDEFIN KENDI kokusundan hesaplanir. Populasyon
             # geneline ait bir ust sinir kullanmak, o sinir bayatladigi an
             # gercekten duyulan bir kokuyu SESSIZCE kirpardi.
-            #     C(d) = YAYIM*koku*exp(-d/BULUT) >= esik
-            #  -> d_max = BULUT*ln(YAYIM*koku/esik) + r0 + alici payi
+            #     C(d) <= yuzey*exp(-(d-r0)/BULUT) >= esik
+            #  -> d_max = BULUT*ln(yuzey/esik) + r0 + alici payi
+            # (geometrik seyrelme atlanir: elemenin UST SINIR olmasi lazim)
             _koku_var = False
             if alicilar and esik_min > 0.0:
                 _r0 = max(1.0, t.radius)
-                _sal = yayim * t.scent_value
+                # YUZEY DERISIMI. Salgi zarin yuzey alaniyla orantili
+                # oldugu icin yaricapla buyur: iri hucre daha uzaktan
+                # duyulur (bkz. scent_profile.koku_derisimi).
+                _sal = yayim * t.scent_value * (_r0 / koku_ref)
                 _oran_max = _sal / esik_min
                 if _oran_max > 1.0:
                     _dmax = bulut * math.log(_oran_max) + _r0 + alici_pay
@@ -1283,15 +1294,20 @@ class Organism(Entity):
                 # yakalayan aliciya gore alinir. Kokunun ters tarafinda
                 # duran bir burun daha az molekulle karsilasir - organin
                 # nerede durdugu artik gercekten onemli.
+                # C(d) = yuzey * (r0/d) * exp(-(d-r0)/BULUT), govde
+                # icinde yuzey degeri. Iki carpan da gercek: 1/d
+                # geometrik seyrelme (ayni molekul sayisi buyuyen bir
+                # kurenin yuzeyine dagilir), ussel terim bozunma.
+                # Denklemin tek kaynagi scent_profile.koku_derisimi;
+                # burada sicak dongu icin acik yazildi.
+                _A = _sal * _r0 * math.exp(_r0 / bulut)
                 _en = 0.0
                 for _uc, _esik in alicilar:
-                    _du = max(0.0, (_kaynak - _uc).length() - _r0)
-                    # USSEL seyrelme: her BULUT px'de x0.37. Weber-Fechner
-                    # ile algilanan siddet mesafeyle DOGRUSAL duser -
-                    # kemotaksinin izleyebilecegi sabit bir egim. 1/r^2 ile
-                    # egim yakinda dik, uzakta duzdu; uzaktaki her sey ayni
-                    # siddette "vardi" ve hepsi birbirine karisiyordu.
-                    _c = _sal * math.exp(-_du / bulut)
+                    _dd = (_kaynak - _uc).length()
+                    if _dd <= _r0:
+                        _c = _sal
+                    else:
+                        _c = _A / _dd * math.exp(-_dd / bulut)
                     _o = _c / _esik
                     if _o > _en:
                         _en = _o
