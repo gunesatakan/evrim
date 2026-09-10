@@ -260,6 +260,10 @@ SETTINGS_SCHEMA = {
         ("KOKU_BULUT",              "Bulutun karakteristik boyu (px): her bu kadar mesafede derisim x0.37"),
         ("KOKU_REF_YARICAP",        "Salgi yuzey alaniyla orantili: bu yaricapta yuzey derisimi tam KOKU_YAYIM x koku"),
         ("KOKU_TOPLAM_TAVANI",      "Ayni molekulu salgilayanlar toplanir: esigin bu katindan zayif katkilar dislanir"),
+        ("ISIK_BESIN_CARPANI",      "Tam isikta besin kac kat olusur (fotosentez)"),
+        ("ISIK_KESIM",              "Isigin bittigi kabul edilen siddet orani: erimde bu degere duser"),
+        ("ISIK_ERIM",               "Yeni isigin varsayilan erimi (px); 0 = harita yuksekliginin yarisi"),
+        ("ISIK_ALFA",               "Isigin ekrandaki parlakligi (0 = cizme)"),
         ("KOKU_BULUT_ALFA",         "Hucre koku bulutunun ekran yogunlugu (0 = cizme); kenari en hassas burnun duyma siniri"),
         ("KOKU_DOYUM",              "Tepkinin doydugu derisim/esik orani"),
         ("SIGNATURE_ALLELES",       "Kaç farklı soy imzası olabilir"),
@@ -420,6 +424,17 @@ class ModernLauncher:
         self.harita_yaricap = 45.0     # firca: yamanin dagilma yaricapi
         self.harita_siliyor = False    # sag tik / silgi kipi
         self.harita_suruklu = False
+        # UC KATMAN, TEK TUVAL. Besin nerede, isik nerede ve kurucularin
+        # nereden basladigi ayni haritanin uc katmani; hepsi ekolojiyi
+        # birlikte belirliyor, ayri ekranlara bolmek karsilastirmayi
+        # zorlastirirdi.
+        self.harita_kip = "besin"      # besin | isik | baslangic
+        self.harita_isiklar = [list(k) for k in
+                               (getattr(game_settings, 'HARITA_ISIKLARI', []) or [])]
+        self.harita_baslangic = [list(b) for b in
+                                 (getattr(game_settings, 'HARITA_BASLANGIC', []) or [])]
+        self.isik_guc = 1.0            # firca: isik gucu
+        self.isik_erim = 0.0           # 0 = varsayilan (yukseklik/2)
 
         self.scroll_y = 0
         self.max_scroll = 0
@@ -929,7 +944,7 @@ class ModernLauncher:
         """Tuvalin ekrandaki dikdortgeni ve dunya -> ekran olcegi."""
         from entities.entity import WIDTH as DW, HEIGHT as DH
         x0 = self.sidebar_width + 30
-        y0 = 150
+        y0 = 196                       # iki sira dugme sigsin
         gen = self.screen_width - x0 - 40
         yuk = self.screen_height - y0 - 40
         k = min(gen / DW, yuk / DH)
@@ -940,18 +955,46 @@ class ModernLauncher:
         return ((ekran_pos[0] - r.x) / k, (ekran_pos[1] - r.y) / k)
 
     def harita_dugmeleri(self):
-        """[(dikdortgen, etiket, eylem)] - ust seritteki dugmeler."""
-        y = 100
-        x = self.sidebar_width + 30
+        """[(dikdortgen, etiket, eylem)] - iki siralik dugme seridi.
+
+        Ust sira KIP secer (hangi katman duzenleniyor), alt sira o kipin
+        fircasini ayarlar. Kip degisince alt sira da degisir; boylece
+        "adet" dugmesi isik kipindeyken anlamsizca durmaz.
+        """
         out = []
-        for etiket, eylem, gen in (
-                ("- ADET", "adet-", 90), ("+ ADET", "adet+", 90),
-                ("- YARICAP", "yari-", 110), ("+ YARICAP", "yari+", 110),
-                ("SILGI", "silgi", 90), ("TEMIZLE", "temizle", 110),
-                ("RASTGELE", "rastgele", 120)):
-            out.append((pygame.Rect(x, y, gen, 34), etiket, eylem))
+        x = self.sidebar_width + 30
+        for etiket, eylem, gen in (("BESIN", "kip:besin", 100),
+                                   ("ISIK", "kip:isik", 90),
+                                   ("BASLANGIC", "kip:baslangic", 130)):
+            out.append((pygame.Rect(x, 100, gen, 34), etiket, eylem))
+            x += gen + 8
+        x += 18
+        for etiket, eylem, gen in (("SILGI", "silgi", 90),
+                                   ("TEMIZLE", "temizle", 110)):
+            out.append((pygame.Rect(x, 100, gen, 34), etiket, eylem))
+            x += gen + 8
+
+        x = self.sidebar_width + 30
+        if self.harita_kip == "besin":
+            firca = (("- ADET", "adet-", 90), ("+ ADET", "adet+", 90),
+                     ("- YARICAP", "yari-", 110), ("+ YARICAP", "yari+", 110),
+                     ("RASTGELE", "rastgele", 120))
+        elif self.harita_kip == "isik":
+            firca = (("- GUC", "guc-", 90), ("+ GUC", "guc+", 90),
+                     ("- ERIM", "erim-", 100), ("+ ERIM", "erim+", 100))
+        else:
+            firca = ()
+        for etiket, eylem, gen in firca:
+            out.append((pygame.Rect(x, 142, gen, 34), etiket, eylem))
             x += gen + 8
         return out
+
+    def _isik_erim(self):
+        """Fircanin erimi; 0 ise varsayilan (harita yuksekliginin yarisi)."""
+        if self.isik_erim > 0.0:
+            return self.isik_erim
+        from systems import isik as _isik
+        return _isik.varsayilan_erim()
 
     def draw_harita(self):
         r, k, DW, DH = self._harita_tuval()
@@ -960,14 +1003,17 @@ class ModernLauncher:
         self.screen.blit(self.font_title.render("HARITA", True, ACCENT_COLOR),
                          (sx, 35))
         toplam = sum(int(y[2]) for y in self.harita_yamalar)
-        bilgi = ("%d yama - %d besin   |   sol tik: koy, sag tik: sil, surukle: boya"
-                 % (len(self.harita_yamalar), toplam))
+        bilgi = ("%d yama / %d besin   %d isik   %d baslangic   |   "
+                 "sol tik: koy, sag tik: sil, surukle: boya"
+                 % (len(self.harita_yamalar), toplam,
+                    len(self.harita_isiklar), len(self.harita_baslangic)))
         self.screen.blit(self.font_small.render(bilgi, True, TEXT_COLOR), (sx, 78))
 
         # dugmeler
         fare = pygame.mouse.get_pos()
         for rect, etiket, eylem in self.harita_dugmeleri():
-            secili = (eylem == "silgi" and self.harita_siliyor)
+            secili = ((eylem == "silgi" and self.harita_siliyor)
+                      or eylem == "kip:" + self.harita_kip)
             renk = (DANGER if eylem in ("temizle",) else
                     (SUCCESS if secili else
                      (WHITE if rect.collidepoint(fare) else GRAY)))
@@ -975,14 +1021,17 @@ class ModernLauncher:
             t = self.font_small.render(etiket, True,
                                        BG_COLOR if secili else renk)
             self.screen.blit(t, t.get_rect(center=rect.center))
-        # Firca degerleri dugme seridinin SAGINA yazilir; onceden dugmelerin
-        # ustune biniyordu.
-        d = self.font_small.render("firca: %d besin / %.0f px"
-                                   % (self.harita_adet, self.harita_yaricap),
-                                   True, ACCENT_COLOR)
-        _son = self.harita_dugmeleri()[-1][0]
-        self.screen.blit(d, (min(_son.right + 16,
-                                 self.screen_width - d.get_width() - 20), 108))
+        # Firca degerleri alt seridin SAGINA yazilir.
+        if self.harita_kip == "besin":
+            _fm = "firca: %d besin / %.0f px" % (self.harita_adet, self.harita_yaricap)
+        elif self.harita_kip == "isik":
+            _fm = "firca: guc %.2f / erim %.0f px" % (self.isik_guc, self._isik_erim())
+        else:
+            _fm = "tikla: kurucularin dogacagi nokta"
+        d = self.font_small.render(_fm, True, ACCENT_COLOR)
+        _alt = [r for r, _e, _a in self.harita_dugmeleri() if r.y == 142]
+        _sx2 = (max(r.right for r in _alt) + 16) if _alt else (self.sidebar_width + 30)
+        self.screen.blit(d, (min(_sx2, self.screen_width - d.get_width() - 20), 150))
 
         # tuval
         pygame.draw.rect(self.screen, (10, 14, 20), r)
@@ -995,6 +1044,10 @@ class ModernLauncher:
             pygame.draw.line(self.screen, (26, 32, 42),
                              (r.x, r.y + r.h * i / 4),
                              (r.x + r.w, r.y + r.h * i / 4))
+
+        # KATMANLAR TUVALIN ICINDE KALIR. Erim halkasi tuvalden tasinca
+        # baslik ve dugmelerin uzerine tasiyordu.
+        self.screen.set_clip(r)
 
         # yamalar
         for wx, wy, adet, yari in self.harita_yamalar:
@@ -1017,18 +1070,84 @@ class ModernLauncher:
                                                    (150, 245, 190)),
                              (px + pr + 3, py - 7))
 
+        # ISIKLAR. Erim halkasi isigin BITTIGI yeri gosterir (siddet
+        # ISIK_KESIM'e duser); ic dolgu ussel profili kabaca izler.
+        from systems import isik as _isik
+        for _k in self.harita_isiklar:
+            wx, wy = float(_k[0]), float(_k[1])
+            guc = float(_k[2]) if len(_k) > 2 else 1.0
+            erim = float(_k[3]) if len(_k) > 3 else self._isik_erim()
+            px = int(r.x + wx * k); py = int(r.y + wy * k)
+            pr = max(4, int(erim * k))
+            hale = pygame.Surface((pr * 2 + 2, pr * 2 + 2), pygame.SRCALPHA)
+            _lam = _isik.lambda_px(erim)
+            # Basamak sayisi PIKSEL yaricapina baglanir: kucuk halede az,
+            # buyuk halede cok - sabit 10 basamakta halkalar sayiliyordu.
+            _adim = max(12, min(64, pr))
+            for i in range(_adim, 0, -1):
+                _d = erim * i / float(_adim)
+                _s = guc * math.exp(-_d / _lam)
+                pygame.draw.circle(hale, (255, 232, 150, max(1, int(120 * _s))),
+                                   (pr + 1, pr + 1), max(1, int(_d * k)))
+            self.screen.blit(hale, (px - pr - 1, py - pr - 1))
+            pygame.draw.circle(self.screen, (255, 210, 90), (px, py), pr, 1)
+            pygame.draw.circle(self.screen, (255, 240, 190), (px, py), 4)
+            self.screen.blit(self.font_tiny.render("%.2f" % guc, True,
+                                                   (255, 226, 140)),
+                             (px + 7, py - 7))
+
+        # BASLANGIC NOKTALARI: kuruculari nereye birakiyoruz.
+        for i, _b in enumerate(self.harita_baslangic):
+            px = int(r.x + float(_b[0]) * k); py = int(r.y + float(_b[1]) * k)
+            pygame.draw.circle(self.screen, (90, 220, 255), (px, py), 7, 2)
+            pygame.draw.line(self.screen, (90, 220, 255), (px - 10, py), (px + 10, py))
+            pygame.draw.line(self.screen, (90, 220, 255), (px, py - 10), (px, py + 10))
+            self.screen.blit(self.font_tiny.render(str(i + 1), True, (150, 235, 255)),
+                             (px + 9, py - 16))
+
         # firca onizlemesi
         if r.collidepoint(fare):
-            pr = max(3, int(self.harita_yaricap * k))
+            if self.harita_kip == "isik":
+                pr = max(4, int(self._isik_erim() * k))
+                onizleme = (255, 210, 90)
+            elif self.harita_kip == "baslangic":
+                pr = 8
+                onizleme = (90, 220, 255)
+            else:
+                pr = max(3, int(self.harita_yaricap * k))
+                onizleme = ACCENT_COLOR
             pygame.draw.circle(self.screen,
-                               DANGER if self.harita_siliyor else ACCENT_COLOR,
+                               DANGER if self.harita_siliyor else onizleme,
                                fare, pr, 1)
+        self.screen.set_clip(None)
 
-        alt = self.font_tiny.render(
-            "Dunya %dx%d px - cizilen duzen KALICI: sonradan dogan besin de "
-            "yalnizca bu yamalarda olusur. Bos birakilirsa besin rastgele doğar."
-            % (DW, DH), True, GRAY)
-        self.screen.blit(alt, (sx, r.y + r.h + 12))
+        _aciklama = {
+            "besin": ("Cizilen duzen KALICI: sonradan dogan besin de yalnizca bu "
+                      "yamalarda olusur. Bos birakilirsa besin rastgele dogar."),
+            "isik": ("Isik suda USSEL zayiflar; erim, siddetin %%%d'e dustugu "
+                     "uzakliktir. Erim %d px (yukseklik/2) olan bir isik en uste "
+                     "konursa haritanin ortasinda biter. Isikli bolgede besin %.1f kat."
+                     % (int(getattr(game_settings, 'ISIK_KESIM', 0.02) * 100),
+                        int(DH * 0.5),
+                        float(getattr(game_settings, 'ISIK_BESIN_CARPANI', 2.0)))),
+            "baslangic": ("Kurucular bu noktalarda SIRAYLA dogar. Bos birakilirsa "
+                          "rastgele bir besin yamasinin cevresine birakilirlar."),
+        }[self.harita_kip]
+        # Aciklama tek satira sigmiyorsa BOLUNUR; onceden sagdan kesiliyordu.
+        _tam = "Dunya %dx%d px - %s" % (DW, DH, _aciklama)
+        _en = self.screen_width - sx - 20
+        _satir, _kelime = [], ""
+        for _k in _tam.split(" "):
+            _deneme = (_kelime + " " + _k).strip()
+            if self.font_tiny.size(_deneme)[0] > _en and _kelime:
+                _satir.append(_kelime); _kelime = _k
+            else:
+                _kelime = _deneme
+        if _kelime:
+            _satir.append(_kelime)
+        for _i, _st in enumerate(_satir[:3]):
+            self.screen.blit(self.font_tiny.render(_st, True, GRAY),
+                             (sx, r.y + r.h + 12 + _i * 15))
 
     def handle_harita_events(self, event, m_pos):
         r, k, DW, DH = self._harita_tuval()
@@ -1045,8 +1164,25 @@ class ModernLauncher:
                         self.harita_yaricap = min(400.0, self.harita_yaricap + 10)
                     elif eylem == "silgi":
                         self.harita_siliyor = not self.harita_siliyor
+                    elif eylem.startswith("kip:"):
+                        self.harita_kip = eylem[4:]
+                    elif eylem == "guc-":
+                        self.isik_guc = max(0.1, round(self.isik_guc - 0.1, 2))
+                    elif eylem == "guc+":
+                        self.isik_guc = min(3.0, round(self.isik_guc + 0.1, 2))
+                    elif eylem == "erim-":
+                        self.isik_erim = max(50.0, self._isik_erim() - 50.0)
+                    elif eylem == "erim+":
+                        self.isik_erim = min(4000.0, self._isik_erim() + 50.0)
                     elif eylem == "temizle":
-                        self.harita_yamalar = []
+                        # Yalnizca ACIK KATMAN temizlenir; besin cizerken
+                        # isiklarin da silinmesi kullaniciyi sasirtirdi.
+                        if self.harita_kip == "besin":
+                            self.harita_yamalar = []
+                        elif self.harita_kip == "isik":
+                            self.harita_isiklar = []
+                        else:
+                            self.harita_baslangic = []
                     elif eylem == "rastgele":
                         self._harita_rastgele()
                     self.harita_kaydet()
@@ -1073,6 +1209,34 @@ class ModernLauncher:
     def _harita_bas(self, m_pos, dugme, surukleme=False):
         wx, wy = self._harita_dunyaya(m_pos)
         sil = (dugme == 3) or self.harita_siliyor
+
+        if self.harita_kip == "isik":
+            if sil:
+                for i, _k in enumerate(self.harita_isiklar):
+                    _e = float(_k[3]) if len(_k) > 3 else self._isik_erim()
+                    if (float(_k[0]) - wx) ** 2 + (float(_k[1]) - wy) ** 2 <= _e * _e:
+                        del self.harita_isiklar[i]
+                        return
+                return
+            if surukleme:
+                return          # isik surukleyerek YIGILMAZ: tek tek konur
+            self.harita_isiklar.append([round(wx, 1), round(wy, 1),
+                                        round(float(self.isik_guc), 2),
+                                        round(float(self._isik_erim()), 1)])
+            return
+
+        if self.harita_kip == "baslangic":
+            if sil:
+                for i, _b in enumerate(self.harita_baslangic):
+                    if (float(_b[0]) - wx) ** 2 + (float(_b[1]) - wy) ** 2 <= 40 ** 2:
+                        del self.harita_baslangic[i]
+                        return
+                return
+            if surukleme:
+                return
+            self.harita_baslangic.append([round(wx, 1), round(wy, 1)])
+            return
+
         if sil:
             # En yakin yamayi kaldir (fircanin icindeyse)
             for i, (x, y, _a, yari) in enumerate(self.harita_yamalar):
@@ -1112,6 +1276,8 @@ class ModernLauncher:
         "koydum ama gorunmuyor" durumu ortaya cikar.
         """
         game_settings.HARITA_YAMALARI = [list(y) for y in self.harita_yamalar]
+        game_settings.HARITA_ISIKLARI = [list(k) for k in self.harita_isiklar]
+        game_settings.HARITA_BASLANGIC = [list(b) for b in self.harita_baslangic]
         toplam = sum(int(y[2]) for y in self.harita_yamalar)
         if toplam > int(game_settings.FOOD_MAX):
             game_settings.FOOD_MAX = toplam

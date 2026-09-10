@@ -3,6 +3,7 @@ import pygame
 import random
 import math
 import game_settings
+from systems import isik
 from entities.entity import Entity, SCALE
 import interactions.reflexes
 from organs.receptors.Photoreceptor.photoreceptor import Photoreceptor
@@ -925,6 +926,8 @@ class Organism(Entity):
         return v
 
     _koku_onbellek = None
+    #: Bu karede fotoreseptorun okudugu isik siddeti (0 = karanlik).
+    isik_siddeti = 0.0
 
     def koku_kaynagi(self):
         """Bu hucrenin kokusunun ETKIN kaynagi (konumu degil).
@@ -1184,8 +1187,12 @@ class Organism(Entity):
         Doner: (surus_vektoru, en_guclu_tepki)
         """
         self.attack_targets = set()
+        # Bu karede okunan isik. Erken cikislardan ONCE sifirlanir; yoksa
+        # duyusuz bir hucrede hic yazilmiyor ve bir onceki karenin degeri
+        # takili kaliyordu.
+        self.isik_siddeti = 0.0
         bos = (None, 0.0)
-        if not others or not game_settings.BEHAVIOR_ENABLED:
+        if not game_settings.BEHAVIOR_ENABLED:
             self.current_response = 0.0
             return bos
 
@@ -1194,6 +1201,9 @@ class Organism(Entity):
         vrange = self.vision_range
         kulak = next((o.logic for o in self.organs
                       if isinstance(o, Mechanoreceptor)), None)
+        # ISIK KOMSUYA BAGLI DEGILDIR. Erken cikislar once `not others`
+        # ile basliyordu; bos bir denizde yuzen tek hucre isigi hic
+        # goremezdi. Isik kanali kimsenin olmadigi yerde de calisir.
         if vrange <= 0.0 and kulak is None and not self._alici_noktalari:
             self.current_response = 0.0
             return bos
@@ -1244,7 +1254,29 @@ class Organism(Entity):
             else:
                 kac_top -= tepki
 
-        for t in others:
+        # ---------------- ISIK ----------------
+        #
+        # Fototaksi GORME ORGANIYLA olur: fotoreseptoru olmayan hucre
+        # aydinligi okuyamaz. Siddet organin BULUNDUGU noktadan alinir -
+        # kemoreseptorde oldugu gibi, organin nerede durdugu onemli.
+        #
+        # Eksen siddetin kendisidir (karanlik 0 .. tam isik 100) ve tepki
+        # spektrumdan gelir: aydinlikta besin iki kat, ama aydinlik ayni
+        # zamanda gorunur olmak demek. Hangisinin agir bastigini genom
+        # soyler, kod degil.
+        if vrange > 0.0:
+            _goz = next((o for o in self.organs
+                         if isinstance(o, Photoreceptor)), None)
+            if _goz is not None:
+                _gp = _goz.get_absolute_position(self.pos, self.direction,
+                                                 self.radius)
+                _is, _iyon = isik.siddet_ve_yon(_gp.x, _gp.y)
+                if _is > 0.0:
+                    self.isik_siddeti = _is
+                    _r = self.behavior.isik_tepkisi(isik.eksen(_is))
+                    _kat(_iyon, _r)
+
+        for t in (others or ()):
             if t is self or t.dead:
                 continue
             fark = t.pos - self.pos

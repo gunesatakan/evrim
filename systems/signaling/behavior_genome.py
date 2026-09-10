@@ -106,6 +106,15 @@ class BehaviorGenome:
     SES_CUTS = 4
     SES_BANDS = 5
 
+    # --- ISIK SPEKTRUMU ---
+    # Isik SIRALI ve surekli bir buyukluk: karanliktan tam aydinliga.
+    # Koku ve ses gibi kendi kesme noktalari ve bantlariyla evrimlesir -
+    # "isiga git" ya da "isiktan kac" dayatilmaz. Aydinlikta besin iki
+    # kat, ama aydinlik ayni zamanda gorunur olmak demek; hangisinin agir
+    # bastigini populasyon kendi bulur.
+    ISIK_CUTS = 4
+    ISIK_BANDS = 5
+
     # --- RENK SPEKTRUMU (cembersel) ---
     # Kesme sayisi = bant sayisi: cemberde n kesme n dilim yapar.
     RENK_CUTS = 4
@@ -135,6 +144,10 @@ class BehaviorGenome:
     def ses_tepkisi(self, x):
         """0-100 SES (goreli boyut) eksenindeki bir konuma verilen tepki."""
         return self.ses_bands[bisect.bisect_right(self.ses_cuts, x)]
+
+    def isik_tepkisi(self, x):
+        """0-100 ISIK eksenindeki bir siddete verilen tepki (-1..1)."""
+        return self.isik_bands[bisect.bisect_right(self.isik_cuts, x)]
 
     def renk_tepkisi(self, x):
         """0-100 RENK CEMBERINDEKI bir tona verilen tepki.
@@ -179,7 +192,8 @@ class BehaviorGenome:
     def __init__(self, table=None, kin_response=None,
                  scent_cuts=None, scent_bands=None, sosyal_oncelik=None,
                  ses_cuts=None, ses_bands=None,
-                 renk_cuts=None, renk_bands=None):
+                 renk_cuts=None, renk_bands=None,
+                 isik_cuts=None, isik_bands=None):
         # {(tip, sınıf, seviye): -1..1}
         self.table = dict(table) if table else {}
         # Akraba tanindiginda ne yapilacagi. Soy imzasi "X sinifina ne
@@ -216,6 +230,13 @@ class BehaviorGenome:
         self.ses_bands = (list(ses_bands) if ses_bands is not None
                           else [self._rastgele_tepki()
                                 for _ in range(self.SES_BANDS)])
+        # Isik spektrumu: koku ve ses gibi.
+        self.isik_cuts = (sorted(isik_cuts) if isik_cuts is not None
+                          else sorted(_rnd.uniform(0.0, 100.0)
+                                      for _ in range(self.ISIK_CUTS)))
+        self.isik_bands = (list(isik_bands) if isik_bands is not None
+                           else [self._rastgele_tepki()
+                                 for _ in range(self.ISIK_BANDS)])
         # Renk spektrumu: cember uzerinde kesme noktalari + bant tepkileri.
         self.renk_cuts = (sorted(renk_cuts) if renk_cuts is not None
                           else sorted(_rnd.uniform(0.0, 100.0)
@@ -282,7 +303,9 @@ class BehaviorGenome:
                    sorted(rng.uniform(0.0, 100.0) for _ in range(cls.SES_CUTS)),
                    [cls._rastgele_tepki(rng) for _ in range(cls.SES_BANDS)],
                    sorted(rng.uniform(0.0, 100.0) for _ in range(cls.RENK_CUTS)),
-                   [cls._rastgele_tepki(rng) for _ in range(cls.RENK_CUTS)])
+                   [cls._rastgele_tepki(rng) for _ in range(cls.RENK_CUTS)],
+                   sorted(rng.uniform(0.0, 100.0) for _ in range(cls.ISIK_CUTS)),
+                   [cls._rastgele_tepki(rng) for _ in range(cls.ISIK_BANDS)])
 
     def respond(self, stim, cls_idx, level):
         return self.table.get((stim, cls_idx, level), 0.0)
@@ -348,6 +371,18 @@ class BehaviorGenome:
         for i in range(len(self.ses_bands)):
             if rng.random() < rate:
                 self.ses_bands[i] = kaydir(self.ses_bands[i])
+                changes += 1
+        # Isik spektrumu da ayni bicimde kayar.
+        isik_moved = []
+        for c in self.isik_cuts:
+            if rng.random() < rate:
+                c = min(100.0, max(0.0, c + rng.gauss(0.0, cut_sigma)))
+                changes += 1
+            isik_moved.append(c)
+        self.isik_cuts = sorted(isik_moved)
+        for i in range(len(self.isik_bands)):
+            if rng.random() < rate:
+                self.isik_bands[i] = kaydir(self.isik_bands[i])
                 changes += 1
         # Renk cemberi de ayni bicimde kayar.
         renk_moved = []

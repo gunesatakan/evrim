@@ -1235,6 +1235,10 @@ def main(food_count=None, kaotropi_count=None):
     # Hucre koku bulutu: isi haritasiyla ayni yoldan, ayni tusla (H).
     from systems.koku_bulutu import KokuBulutu, en_hassas_esikler
     koku_bulutu = KokuBulutu(WIDTH, HEIGHT)
+    # ISIK ALANI. Koku bulutunun altinda, en altta cizilir: aydinlik
+    # ZEMINDIR, uzerindeki her sey onun icinde durur.
+    from systems.isik import IsikAlani
+    isik_alani = IsikAlani(WIDTH, HEIGHT)
     kaotropis = dunya.kaotropis
     optropis = dunya.optropis
     foods = dunya.foods
@@ -1358,6 +1362,7 @@ def main(food_count=None, kaotropi_count=None):
         # esik x 0.1 (perceive'in sifir siniri), iz smell_threshold.
         _esik_koku, _esik_iz = en_hassas_esikler(optropis + kaotropis)
         if kamera["z"] <= 1.0 + 1e-6:
+            isik_alani.ciz(screen)
             if inspector.show_heatmap:
                 koku_bulutu.ciz(screen, optropis + kaotropis, _esik_koku)
             trail_manager.draw(screen, taban=_esik_iz)
@@ -1388,6 +1393,7 @@ def main(food_count=None, kaotropi_count=None):
             if _src.w > 1 and _src.h > 1:
                 _kat_yuzey.fill((0, 0, 0, 0), _src)
                 _kat_yuzey.set_clip(_src)
+                isik_alani.ciz(_kat_yuzey)
                 if inspector.show_heatmap:
                     koku_bulutu.ciz(_kat_yuzey, optropis + kaotropis, _esik_koku)
                 trail_manager.draw(_kat_yuzey, _src, taban=_esik_iz)

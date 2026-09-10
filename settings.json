@@ -164,6 +164,13 @@
         "FOOD_SPAWN_RATE": 3.0,
         "FOOD_PATCH_SIZE": 26,
         "FOOD_PATCH_SIGMA": 45.0,
+        "HARITA_ISIKLARI": [],
+        "ISIK_KESIM": 0.02,
+        "ISIK_ERIM": 0.0,
+        "ISIK_BESIN_CARPANI": 2.0,
+        "ISIK_ALFA": 85,
+        "HARITA_BASLANGIC": [],
+        "SPAWN_DAGILIM": 30.0,
         "HARITA_YAMALARI": [
             [
                 590.8,

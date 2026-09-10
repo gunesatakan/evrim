@@ -13,6 +13,7 @@ yitirirdi.
 import random
 
 import game_settings
+from systems import isik
 from entities.entity import WIDTH, HEIGHT
 from entities.food import Food
 from entities.kaotropi import Kaotropi
@@ -213,7 +214,25 @@ class Dunya:
         # Bir populasyon zaten kaynagin oldugu yerde kurulur. Kurucular
         # rastgele bir yamanin cevresine birakilir; oradan sonrasi
         # tamamen secilime kalir.
+        # ELDE SECILMIS BASLANGIC NOKTALARI. Kurucularin NEREDE dogdugu
+        # sonucu belirleyen bir kosul (bkz. asagidaki kurulus esigi);
+        # bunu da yamalar gibi elle koyabilmek gerekiyordu. Noktalar
+        # sirayla kullanilir, kurucular noktadan cok ise basa donulur.
+        _baslangic = [(float(b[0]), float(b[1]))
+                      for b in (getattr(game_settings, 'HARITA_BASLANGIC', None) or ())
+                      if len(b) >= 2]
+        self._baslangic_noktalari = _baslangic
+        _sira = [0]
+
         def _dogum_yeri():
+            if _baslangic:
+                bx, by = _baslangic[_sira[0] % len(_baslangic)]
+                _sira[0] += 1
+                # Ayni noktaya konan kurucular ust uste binmesin: bir
+                # hucre capi kadar dagilim yeter.
+                yari = game_settings.SPAWN_DAGILIM
+                return (min(WIDTH - 50, max(50, random.gauss(bx, yari))),
+                        min(HEIGHT - 50, max(50, random.gauss(by, yari))))
             if not self._yama_merkezleri:
                 return (random.randint(50, WIDTH - 50),
                         random.randint(50, HEIGHT - 50))
@@ -468,7 +487,18 @@ class Dunya:
         resolve_overlaps(self.optropis + self.kaotropis)
 
     def besin_yamasi_konumda(self, cx, cy, adet, sigma, izgara=None):
-        """Belirtilen noktaya besin obegi birak (harita duzenleyici icin)."""
+        """Belirtilen noktaya besin obegi birak.
+
+        BESIN OLUSTURAN TEK YER burasi: hem elde cizilen duzen hem de
+        yeniden dogus buradan gecer. Isik carpani da bu yuzden burada -
+        iki ayri yerde uygulanınca biri unutuluyordu.
+        """
+        # ISIK FOTOSENTEZI SURER. Aydinlik sudaki bir yama, ayni yamanin
+        # karanliktaki halinden daha cok uretir; carpan siddetle
+        # dogrusaldir (tam isikta ISIK_BESIN_CARPANI, karanlikta 1).
+        _kat = isik.besin_carpani(cx, cy)
+        if _kat != 1.0:
+            adet = max(1, int(round(adet * _kat)))
         self._yama_merkezleri.append((cx, cy))
         if len(self._yama_merkezleri) > 64:
             del self._yama_merkezleri[0]
@@ -521,19 +551,7 @@ class Dunya:
             cy = random.uniform(60, HEIGHT - 60)
         if adet is None:
             adet = int(game_settings.FOOD_PATCH_SIZE)
-        self._yama_merkezleri.append((cx, cy))
-        if len(self._yama_merkezleri) > 64:
-            del self._yama_merkezleri[0]
-        for _ in range(adet):
-            if sum(1 for f in self.foods
-                   if not getattr(f, 'from_corpse', False)) >= game_settings.FOOD_MAX:
-                return
-            for _deneme in range(6):
-                x = min(WIDTH - 15, max(15, random.gauss(cx, sigma)))
-                y = min(HEIGHT - 15, max(15, random.gauss(cy, sigma)))
-                if izgara is None or not izgara.dolu(x, y):
-                    self.foods.append(Food(x, y))
-                    break
+        self.besin_yamasi_konumda(cx, cy, adet, sigma, izgara)
 
     # ------------------------------------------------------------------
     def organ_sayimi(self):

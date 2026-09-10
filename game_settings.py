@@ -578,6 +578,28 @@ DEFAULT_SETTINGS = {
     # besin YALNIZCA bu yamalarda olusur - yani kullanicinin cizdigi
     # duzen kalici olur, bir dakika icinde yikanip gitmez.
     "HARITA_YAMALARI": [],    # yamanin yaricapi (px, gauss)
+    # --- ISIKLI BOLGELER ---
+    # Duzenleyicide konulan aydinlik alanlar: [x, y, guc, erim].
+    # Isik suda USSEL zayiflar (Beer-Lambert): I(d) = guc x exp(-d/lambda).
+    # lambda erimden cikar - erimde siddet ISIK_KESIM'e duser ve altinda
+    # KARANLIK sayilir. Yani erim = harita yuksekliginin yarisi olan bir
+    # isik, haritanin en ustune konuldugunda tam ortada biter.
+    "HARITA_ISIKLARI": [],
+    # Isigin bittigi kabul edilen siddet orani (denizin fotik bolgesi
+    # de %1 ile tanimlanir).
+    "ISIK_KESIM": 0.02,
+    # Yeni isigin varsayilan erimi (px). 0 = harita yuksekliginin yarisi.
+    "ISIK_ERIM": 0.0,
+    # Tam isikta besin kac kat olusur. Isik fotosentezi surer.
+    "ISIK_BESIN_CARPANI": 2.0,
+    # Isigin ekrandaki parlakligi (0 = cizme) ve rengi.
+    "ISIK_ALFA": 85,
+    "ISIK_RENK": (255, 232, 150),
+    # Hucrelerin dogdugu noktalar: [[x, y], ...]. Bos ise kurucular bir
+    # besin yamasinin cevresine birakilir (eski davranis).
+    "HARITA_BASLANGIC": [],
+    # Ayni baslangic noktasina konan kurucularin dagilma yaricapi (px).
+    "SPAWN_DAGILIM": 30.0,
 
     # BESIN YOGUNLUGU KITLIGI BELIRLER.
     #
