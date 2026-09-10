@@ -1524,17 +1524,25 @@ class Organism(Entity):
     def is_immune_to_toxin(self, silah=None):
         """Bu BELIRLI bakteriosine bagisik miyim?
 
-        Bagisiklik proteini toksin geniyle ayni operonda kodlanir; yani
+        Bagisiklik proteini toksin geniyle AYNI OPERONDA kodlanir; yani
         hucre yalnizca KENDI urettigi varyanta bagisiktir. Ayni alleli
         tasiyan akrabalari da bagisiktir - acik bir akraba tanima kodu
         olmadan soy-ici isbirligi buradan dogar. Alleli mutasyonla
         degisen yavru ise kendi soyunun toksininden olebilir.
+
+        BAGISIKLIK BIR ROZET DEGIL BIR PROTEINDIR. Alleli olmayan bir
+        silaha (lizin) karsi "toksin organi tasiyor musun" diye
+        soruluyordu ve herhangi bir bakteriosin tasiyan her hucre butun
+        lizinlere bagisik cikiyordu. Oysa kolisin bagisiklik proteini
+        lizozimi baglamaz: ayri molekul, ayri hedef. Alleli olmayan
+        silahin bagisikligi da YOKTUR - lizin kendi soyunu da eritir
+        (miksobakterilerin dost atesi sorunu birebir budur).
         """
         if silah is None:                 # eski cagri bicimi: herhangi biri
             return self.has_weapon(Toxin)
         allel = getattr(silah, 'allel', None)
         if allel is None:
-            return self.has_weapon(Toxin)
+            return False
         for o in self.organs:
             if isinstance(o, Toxin) and getattr(o.logic, 'allel', None) == allel:
                 return True
