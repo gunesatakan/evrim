@@ -1490,12 +1490,31 @@ class ModernLauncher:
         if lg is None or not hasattr(lg, "carrier"):
             return []
         import lab as _lab
+        out = []
+        # TASIYICININ MEKANIZMASI. Molekuler tasiyicilar (0-2) uc AYRI
+        # sistemdir ve laboratuvarda ayri ayri ifade edilmistir: difuzyon
+        # yon vermeden cevreye sizdirir, yonlu bosaltma bir bolgeden
+        # birakir (fiskirtmaz), fiskirtma molekulleri hizla ileri atar.
+        # Editorde yalnizca adlari goruunuyordu; hangisinin ne yaptigi
+        # ancak oyunda deneyerek anlasiliyordu. Fark bir katsayi degil
+        # SACILMA ACISI ve BASLANGIC HIZIDIR - ikisi de burada yazili.
+        ci = int(getattr(lg, 'carrier', 0))
+        if 0 <= ci < len(_lab.CARRIERS):
+            aciklama = _lab.CARRIERS[ci][2]
+            if ci < 3:
+                out.append("* %s" % aciklama)
+                out.append("  sacilma +-%.0f der, erim %.0f px"
+                           % (_lab.CARRIER_SPREAD[ci], _lab.CARRIER_REACH[ci]))
+            else:
+                out.append("* %s" % aciklama)
         metin = _lab.kombinasyon_ozeti(lg.carrier, lg.payload)
         # Panel dar: bolmeden sigmayacak satirlari ikiye ayir.
         if len(metin) > 34 and " / " in metin:
             sol, sag = metin.split(" / ", 1)
-            return ["-> " + sol, "   / " + sag]
-        return ["-> " + metin]
+            out += ["-> " + sol, "   / " + sag]
+        else:
+            out.append("-> " + metin)
+        return out
 
     def get_organ_editable_params(self, organ):
         """Organın düzenlenebilir parametrelerini döndürür."""
@@ -1997,7 +2016,8 @@ class ModernLauncher:
                 cy += 4
 
             for _sat in self.teslimat_ozeti(self.selected_organ):
-                renk = WARNING if "TASIMAZ" in _sat or "uyumsuz" in _sat else ACCENT_COLOR
+                renk = (WARNING if "TASIMAZ" in _sat or "uyumsuz" in _sat
+                        else (GRAY if _sat.startswith(("*", "  ")) else ACCENT_COLOR))
                 self.screen.blit(self.font_small.render(
                     self._sigdir(_sat, ic_g), True, renk), (ic_x, cy))
                 cy += 18

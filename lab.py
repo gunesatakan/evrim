@@ -1972,6 +1972,23 @@ class HedefZarf:
 
     # ---- geometri (onbellekli) ----
     def _g(self):
+        """Fizigin kullandigi zarf - CIZILENIN TA KENDISI.
+
+        Zarf, cekirdegin cevresine `zarf_geometrisi(zar, cekirdek)` ile
+        kurulur ve DISA dogru buyur. Fizik buraya `org.radius`i cekirdek
+        diye veriyordu; cizim (hucreyi_ciz) ise zarfi yaricapin ICINE
+        oturtuyor, yani cekirdek olarak `cekirdek_yaricapi_ham`i veriyor.
+        Ikisi ayni katman oranlarini kuruyor ama FARKLI OLCEKTE: fizigin
+        zarfi cizilenin `zarf_orani` kati (olculdu: 45.9'a karsi 30.3).
+
+        Sonuc gorunur bir yalandi. Zarina baglanmis, derinligi hic
+        degismeyen bir molekul ekranda hucrenin DISINDA, sitoplazmadaki
+        bir molekul ise zarin uzerinde cikiyordu. Molekul zari gecmiyordu
+        - cizim onu yanlis yere koyuyordu.
+
+        Artik ikisi ayni cagriyi yapiyor: zarfin DIS SINIRI hucrenin
+        temas yaricapidir, cizilen delik molekulun gectigi deliktir.
+        """
         zar = getattr(getattr(self.org, 'membrane', None), 'logic', None)
         k = (round(self.org.radius, 2),
              tuple(bool(getattr(zar, v, True)) for v in
@@ -1980,13 +1997,20 @@ class HedefZarf:
                    for a, _kt, _v in KATMAN_ALANI))
         if self._zarf is None or self._key != k:
             self._key = k
-            self._zarf = zarf_geometrisi(zar, self.org.radius)
+            self._zarf = zarf_geometrisi(
+                zar, cekirdek_yaricapi_ham(self.org.radius, self.org))
         return self._zarf
 
     @property
     def hiz_olcegi(self):
-        """Molekul hizlari geometriyle AYNI oranda kuculur."""
-        return max(0.05, self.org.radius / 110.0)
+        """Molekul hizlari geometriyle AYNI oranda kuculur.
+
+        Olcek zarfin CEKIRDEGIDIR (laboratuvarda 110 px), hucrenin dis
+        yaricapi degil - zarf artik yaricapin icine oturdugu icin ikisi
+        `zarf_orani` kadar ayrisir. Yanlis olcek, molekulu incelen bir
+        zarfin icinde ayni hizla kosturur ve elemeyi bozardi.
+        """
+        return max(0.05, self._g().core_r / 110.0)
 
     @property
     def pore_px(self):
@@ -2029,7 +2053,9 @@ class HedefZarf:
 
     @property
     def core_r(self):
-        return self.org.radius
+        # Sitoplazmanin yaricapi: zarf bunun DISINA oturur ve zarfin dis
+        # siniri hucrenin temas yaricapina esit cikar (bkz. _g).
+        return self._g().core_r
 
     @property
     def center(self):
