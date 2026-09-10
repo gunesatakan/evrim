@@ -461,6 +461,10 @@ DEFAULT_SETTINGS = {
     # kokuyor, burun ne kadar hassas.
     "KOKU_BULUT": 80.0,
     "KOKU_YAYIM": 0.7,
+    # Hucre koku bulutunun ekrandaki yogunlugu (govde ustunde alfa; kenarda
+    # 0). Kenar = populasyonun en hassas burnunun duyabilecegi son nokta.
+    # 0 = cizme. H tusu isi haritasiyla birlikte acip kapar.
+    "KOKU_BULUT_ALFA": 90,
     # Tepkinin doydugu derisim/esik orani: bunun ustunde daha da
     # yaklasmak tepkiyi artirmaz, alicilar zaten dolmustur.
     "KOKU_DOYUM": 20.0,

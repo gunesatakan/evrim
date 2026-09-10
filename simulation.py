@@ -1192,6 +1192,9 @@ def main(food_count=None, kaotropi_count=None):
     dunya = Dunya(food_count=food_count, kaotropi_count=kaotropi_count)
     trail_manager = dunya.trail_manager
     scent_env = dunya.scent_env
+    # Hucre koku bulutu: isi haritasiyla ayni yoldan, ayni tusla (H).
+    from systems.koku_bulutu import KokuBulutu, en_hassas_esikler
+    koku_bulutu = KokuBulutu(WIDTH, HEIGHT)
     kaotropis = dunya.kaotropis
     optropis = dunya.optropis
     foods = dunya.foods
@@ -1302,10 +1305,16 @@ def main(food_count=None, kaotropi_count=None):
         # koku bulutu besinden kopuyordu. Yakinlastirilmis karede ikisi de
         # once dunya olceginde bir tuvale cizilip kameraya gore
         # olceklenir: konumlari artik besinle AYNI donusumden geciyor.
+        # CIZILEN = DUYULABILEN. Uc koku katmaninin kenari da populasyonun
+        # en hassas burnuna gore: hucre bulutu C = esik, isi haritasi
+        # esik x 0.1 (perceive'in sifir siniri), iz smell_threshold.
+        _esik_koku, _esik_iz = en_hassas_esikler(optropis + kaotropis)
         if kamera["z"] <= 1.0 + 1e-6:
-            trail_manager.draw(screen)
             if inspector.show_heatmap:
-                scent_env.draw_debug(screen)
+                koku_bulutu.ciz(screen, optropis + kaotropis, _esik_koku)
+            trail_manager.draw(screen, taban=_esik_iz)
+            if inspector.show_heatmap:
+                scent_env.draw_debug(screen, taban=_esik_koku * 0.1)
         else:
             # YALNIZCA GORUNEN BOLGE OLCEKLENIR.
             #
@@ -1331,9 +1340,11 @@ def main(food_count=None, kaotropi_count=None):
             if _src.w > 1 and _src.h > 1:
                 _kat_yuzey.fill((0, 0, 0, 0), _src)
                 _kat_yuzey.set_clip(_src)
-                trail_manager.draw(_kat_yuzey, _src)
                 if inspector.show_heatmap:
-                    scent_env.draw_debug(_kat_yuzey)
+                    koku_bulutu.ciz(_kat_yuzey, optropis + kaotropis, _esik_koku)
+                trail_manager.draw(_kat_yuzey, _src, taban=_esik_iz)
+                if inspector.show_heatmap:
+                    scent_env.draw_debug(_kat_yuzey, taban=_esik_koku * 0.1)
                 _kat_yuzey.set_clip(None)
                 _bk = pygame.transform.smoothscale(
                     _kat_yuzey.subsurface(_src),

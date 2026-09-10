@@ -134,6 +134,7 @@
         "PHAGO_SIZE_RATIO": 0.7,
         "PHAGO_STUN": 1.0,
         "KOKU_BULUT": 80.0,
+        "KOKU_BULUT_ALFA": 90,
         "KOKU_YAYIM": 0.7,
         "KOKU_DOYUM": 20.0,
         "DIVERGENCE_NEW_ORGAN": 5.0,

@@ -258,6 +258,7 @@ SETTINGS_SCHEMA = {
         "KOKU İLE TANIMA": [
         ("KOKU_YAYIM",              "Koku alaninin gucu: C = bu x koku x exp(-d/KOKU_BULUT) (menzil buradan DOGAR)"),
         ("KOKU_BULUT",              "Bulutun karakteristik boyu (px): her bu kadar mesafede derisim x0.37"),
+        ("KOKU_BULUT_ALFA",         "Hucre koku bulutunun ekran yogunlugu (0 = cizme); kenari en hassas burnun duyma siniri"),
         ("KOKU_DOYUM",              "Tepkinin doydugu derisim/esik orani"),
         ("SIGNATURE_ALLELES",       "Kaç farklı soy imzası olabilir"),
         ("SCENT_WEIGHT_MEMBRANE",   "Zarın koku puanına katkısı"),

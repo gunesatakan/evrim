@@ -172,7 +172,7 @@ class TrailManager:
                     out.extend(bucket)
         return out
 
-    def draw(self, screen, bolge=None):
+    def draw(self, screen, bolge=None, taban=0.0):
         """Izleri ciz. `bolge` verilirse yalnizca oradakiler.
 
         Kirpma (set_clip) ekrana yazmayi engeller ama Python dongusu yine
@@ -193,13 +193,19 @@ class TrailManager:
         else:
             noktalar = self.points
         for p in noktalar:
-            intensity_ratio = p.current_intensity / p.max_intensity
+            yogunluk = p.current_intensity
+            intensity_ratio = yogunluk / p.max_intensity
             if intensity_ratio <= 0: continue
+            # CIZILEN = DUYULABILEN: populasyondaki en hassas burnun bile
+            # algilayamayacagi (can_detect) bir iz ekranda da yoktur.
+            if yogunluk < taban: continue
 
             # Görsel netlik için alpha hesaplaması
             alpha = int(120 * intensity_ratio)
-            # İz boyutu yoğunlukla birlikte hafifçe daralsın
-            draw_radius = int(p.radius * (0.4 + 0.6 * intensity_ratio))
+            # Disk TEMAS yaricapinda cizilir (probes_touch_xy r2 ile ayni).
+            # Eskiden solarken kuculuyordu ama temas yaricapi kucul-
+            # muyordu: iz, cizilen kenarinin disindan da algilaniyordu.
+            draw_radius = int(p.radius)
             if draw_radius <= 0: continue
 
             kind = 0 if "kaotropi" in p.owner_uid else 1

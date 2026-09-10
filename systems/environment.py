@@ -271,7 +271,7 @@ class ScentEnvironment:
             r, g, b = 180 + 75 * k, 40 + 120 * k, 130 - 110 * k
         return int(r), int(g), int(b), int(20 + 140 * t)
 
-    def draw_debug(self, screen):
+    def draw_debug(self, screen, taban=None):
         """Koku alanını yumuşak bir ısı haritası olarak çizer.
 
         Grid çözünürlüğünde küçük bir yüzeye yazılıp ekran boyutuna
@@ -300,6 +300,11 @@ class ScentEnvironment:
         scale_max = max(1.0, self._display_max)
         log_max = math.log(1.0 + scale_max)
 
+        # CIZILEN = DUYULABILEN. Taban, populasyondaki en hassas burnun
+        # algi siniridir (perceive: esik x 0.1 altinda 0). Verilmezse eski
+        # sabit. Boylece bulutun gorunen kenari kokunun duyulabildigi son
+        # noktadir - ne daha genis ne daha dar.
+        taban_deger = 0.01 if taban is None else max(0.0, float(taban))
         small = self._heat_small
         small.fill((0, 0, 0, 0))
         set_at = small.set_at
@@ -307,7 +312,7 @@ class ScentEnvironment:
             row_offset = r * self.cols
             for c in range(self.cols):
                 val = grid[row_offset + c]
-                if val < 0.01:
+                if val < taban_deger:
                     continue
                 t = min(1.0, math.log(1.0 + val) / log_max)
                 set_at((c, r), self._ramp(t))
