@@ -166,8 +166,10 @@ class InputBox:
     def handle_event(self, event, scroll_y=0):
         adjusted_rect = self.rect.move(0, int(scroll_y))
         if event.type == pygame.MOUSEBUTTONDOWN:
+            was_active = self.active
             self.active = adjusted_rect.collidepoint(event.pos)
-            if not self.active: self.submit()
+            if was_active and not self.active:
+                self.submit()
         if event.type == pygame.KEYDOWN and self.active:
             if event.key == pygame.K_RETURN:
                 self.active = False
@@ -593,6 +595,11 @@ class ModernLauncher:
         if not entity:
             return
 
+        # Gen kutusu hucreyi yeniden kurmadan once mevcut organ plani ve
+        # henuz Enter'lanmamis organ degeri kayda gecmeli.
+        self.commit_organ_inputs()
+        self.save_entity_organ_config(entity)
+
         # Seçili entity'nin index ve rengini sakla
         if isinstance(entity, Kaotropi):
             self._sync_organ_config_with_genes("kaotropi")
@@ -620,6 +627,15 @@ class ModernLauncher:
             self.selected_entity = self.dummy_optropis[idx]
             if self.entity_popup_open:
                 self.popup_entity = self.dummy_optropis[idx]
+
+        # Detay paneli eski hucrenin organini gostermeye devam etmesin.
+        if 0 <= self.selected_organ_index < len(self.selected_entity.organs):
+            self.selected_organ = self.selected_entity.organs[self.selected_organ_index]
+        else:
+            self.selected_organ = None
+            self.selected_organ_index = -1
+        self.organ_param_inputs = {}
+        self.dragging_organ = False
 
     def get_organ_angular_width(self, organ):
         """Organın zar üzerinde kapladığı açısal genişliği hesaplar (derece)."""
@@ -788,6 +804,7 @@ class ModernLauncher:
         # atanmiyordu.
         entity.add_organ(new_organ)
         entity.recalculate_physics()
+        self.save_entity_organ_config(entity)
         return True
 
     def remove_selected_organ(self):
@@ -807,6 +824,7 @@ class ModernLauncher:
         self.selected_organ = None
         self.selected_organ_index = -1
         entity.recalculate_physics()
+        self.save_entity_organ_config(entity)
         return True
 
     def extract_organ_config(self, entity):
@@ -884,11 +902,47 @@ class ModernLauncher:
             out.append(self.dummy_kaotropi)
         return out
 
+    def commit_organ_inputs(self):
+        """Secim/pencere kapanmadan once kutudaki son degeri organa uygula."""
+        for input_key, inp in self.organ_param_inputs.items():
+            if not inp["active"]:
+                continue
+            inp["active"] = False
+            if input_key.startswith(("katman_", "kalinlik_")):
+                self.update_katman_param(inp["param"], inp["text"])
+            else:
+                self.update_organ_param(inp["param"], inp["text"])
+
+    def save_entity_organ_config(self, entity):
+        """Tamamlanan duzenlemeyi hemen kaydet; ayni veriyi tekrar yazma."""
+        if entity is None:
+            return
+        ent_id = self.entity_id(entity)
+        config = self.extract_organ_config(entity)
+        if game_settings.get_entity_organs(ent_id) != config:
+            game_settings.set_entity_organs(ent_id, config)
+
     def save_all_organ_configs(self):
-        """Tüm entity'lerin organ konfigürasyonlarını kaydet."""
+        """Acik kutular dahil tum entity'lerin organ planlarini kaydet."""
+        self.commit_organ_inputs()
+        for _, ibox in self.entity_ui_elements:
+            if ibox.active:
+                ibox.active = False
+                ibox.submit()
         for entity in self.editable_entities():
-            game_settings.set_entity_organs(self.entity_id(entity),
-                                            self.extract_organ_config(entity))
+            self.save_entity_organ_config(entity)
+
+    def close_entity_editor(self):
+        self.save_all_organ_configs()
+        self.entity_popup_open = False
+        self.popup_entity = None
+        self.selected_organ = None
+        self.selected_organ_index = -1
+        self.selected_layer = None
+        self.organ_editor_mode = False
+        self.organ_param_inputs = {}
+        self.dragging_organ = False
+        self.organ_overlap_warning = False
 
     def create_entity_editor(self):
         self.entity_ui_elements = []
@@ -912,9 +966,11 @@ class ModernLauncher:
             self.entity_ui_elements.append((key, ibox))
 
     def set_state(self, state):
+        if self.state == state:
+            return
         # ENTITIES sekmesinden ayrılırken organ düzenini kalıcılaştır
-        if self.state == "ENTITIES" and state != "ENTITIES":
-            self.save_all_organ_configs()
+        if self.state == "ENTITIES":
+            self.close_entity_editor()
         if self.state == "HARITA" and state != "HARITA":
             self.harita_kaydet()
         self.state = state
@@ -1633,6 +1689,7 @@ class ModernLauncher:
         else:
             setattr(zar, param, max(0.0, min(30.0, v)))
         entity.recalculate_physics()
+        self.save_entity_organ_config(entity)
 
     def update_organ_param(self, param_name, new_value):
         """Seçili organın parametresini günceller."""
@@ -1648,8 +1705,10 @@ class ModernLauncher:
             try:
                 setattr(self.selected_organ.logic, param_name,
                         max(0, min(ust - 1, int(round(float(new_value))))))
-            except Exception:
-                pass
+            except (TypeError, ValueError, OverflowError):
+                return
+            entity = self.popup_entity if self.entity_popup_open else self.selected_entity
+            self.save_entity_organ_config(entity)
             return
 
         try:
@@ -1691,7 +1750,8 @@ class ModernLauncher:
             if entity:
                 entity.recalculate_physics()
         except:
-            pass
+            return
+        self.save_entity_organ_config(entity)
 
     def draw_entity_popup(self):
         """Varlık düzenleme için tam ekran popup çizer."""
@@ -2605,14 +2665,7 @@ class ModernLauncher:
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if self.popup_close_btn and self.popup_close_btn.collidepoint(m_pos):
                     # Popup kapanırken organ düzenini kalıcılaştır
-                    self.save_all_organ_configs()
-                    self.entity_popup_open = False
-                    self.popup_entity = None
-                    self.selected_organ = None
-                    self.selected_organ_index = -1
-                    self.selected_layer = None
-                    self.organ_editor_mode = False
-                    self.organ_param_inputs = {}
+                    self.close_entity_editor()
                     return
             return  # Popup açıkken diğer olayları organ editöre aktar
 
@@ -2658,6 +2711,16 @@ class ModernLauncher:
                     self.create_entity_editor()
                     return
 
+    def handle_entity_editor_event(self, event, m_pos):
+        was_open = self.entity_popup_open
+        self.handle_entity_list_events(event, m_pos)
+        if not was_open or not self.entity_popup_open:
+            return
+        # Organ kutusunu once tamamla; gen kutusu hucreyi yenileyebilir.
+        self.handle_organ_editor_events(event, m_pos)
+        for _, ibox in self.entity_ui_elements:
+            ibox.handle_event(event)
+
     def handle_organ_editor_events(self, event, m_pos):
         """Organ editör olaylarını işler."""
         if self.state != "ENTITIES":
@@ -2679,6 +2742,8 @@ class ModernLauncher:
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             # Toggle butonu
             if toggle_rect.collidepoint(m_pos):
+                self.commit_organ_inputs()
+                self.save_entity_organ_config(self.popup_entity)
                 self.organ_editor_mode = not self.organ_editor_mode
                 self.selected_organ = None
                 self.selected_organ_index = -1
@@ -2754,6 +2819,7 @@ class ModernLauncher:
                     if zar is not None:
                         zar.katman_cikar(self.selected_layer)
                         self.popup_entity.recalculate_physics()
+                        self.save_entity_organ_config(self.popup_entity)
                     self.selected_layer = None
                     self.organ_param_inputs = {}
                     return
@@ -2783,6 +2849,7 @@ class ModernLauncher:
                                 alan = KATMAN_ALANI_ADI[organ_type]
                                 zar.katman_ekle(alan)
                                 self.popup_entity.recalculate_physics()
+                                self.save_entity_organ_config(self.popup_entity)
                                 self.selected_layer = alan
                                 self.selected_organ = None
                                 self.selected_organ_index = -1
@@ -2850,6 +2917,7 @@ class ModernLauncher:
             if self.dragging_organ:
                 self.dragging_organ = False
                 self.organ_overlap_warning = False
+                self.save_entity_organ_config(self.popup_entity)
 
         elif event.type == pygame.MOUSEMOTION:
             # Hover kontrolü
@@ -2914,6 +2982,11 @@ class ModernLauncher:
                     if self.state == "HARITA":
                         self.harita_kaydet()
                     sys.exit()
+                # Popup arka plandaki sekmeleri ortuyor. Ayni tiklama
+                # hem organa hem sekmeye giderse setup_ui hucreyi siler.
+                if self.entity_popup_open:
+                    self.handle_entity_editor_event(event, m_pos)
+                    continue
                 if event.type == pygame.MOUSEWHEEL and self.state == "SETTINGS":
                     self.scroll_y = min(0, max(self.max_scroll, self.scroll_y + event.y * 30))
                 if event.type == pygame.MOUSEBUTTONDOWN:
@@ -2936,10 +3009,7 @@ class ModernLauncher:
                 elif self.state == "HARITA":
                     self.handle_harita_events(event, m_pos)
                 elif self.state == "ENTITIES":
-                    self.handle_entity_list_events(event, m_pos)
-                    if self.entity_popup_open:
-                        for _, ibox in self.entity_ui_elements: ibox.handle_event(event)
-                        self.handle_organ_editor_events(event, m_pos)
+                    self.handle_entity_editor_event(event, m_pos)
 
             self.draw_sidebar()
             if self.state == "DASHBOARD": self.draw_dashboard()
