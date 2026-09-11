@@ -1192,6 +1192,7 @@ class Shot:
             sp = random.uniform(0.25, 0.9) * MOLECULE_SPEED * self.vs
             v = pygame.math.Vector2(math.cos(a), math.sin(a)) * sp
             m = Molecule(self.cell, self.pos, v, self._pi)
+            m.injected = True
             m.depth = m.band()
             self.released.append(m)
 
@@ -1440,7 +1441,7 @@ class Molecule:
                  'bounces', 'jig', 'tumble', 'hug_t', 'hug_r', 'hug_sh',
                  'hug_bi', 'gen', 'rad', 'hug_side',
                  'anch_ang', 'anch_bi', 'anch_frac', 'side', 'insert_fail',
-                 'disarida', 'allel')
+                 'disarida', 'allel', 'injected')
 
     def __init__(self, cell, pos, vel, pi, depth=-1):
         # HIZ OLCEGI en basta atanmali: jig daha ilk satirlarda kuruluyor.
@@ -1474,6 +1475,11 @@ class Molecule:
         self.tumble = TUMBLE * random.uniform(0.5, 1.5)
         self.gen = cell.generation
         self.rad = max(2, int(round(dia * PORE_PX * 0.5)))
+        # Bir molekulun kendi basina zardan gecmesi ile bir igne tarafindan
+        # dogrudan sitoplazmaya birakilmasi ayni sey degildir. Bu bayrak
+        # yalnizca Shot._emit tarafindan acilir; cizim ve koruma katmani,
+        # gercekten enjekte edilmis bir yuzey yukunu yanlislikla gizlemez.
+        self.injected = False
         self.hug_t = 0.0
         self.hug_r = 0.0
         self.hug_sh = None
@@ -1636,6 +1642,68 @@ class Molecule:
         # inward=True -> disaridan geliyor, DIS yuze denk gelir
         return (self.side == 'dis') == bool(inward)
 
+    def _cytoplasm_guard(self):
+        """Zari gecemeyen dis kaynakli yuk cekirdege sizmissa durdur.
+
+        Normal yol, ``flat_sheets`` sirasi sayesinde bunu zaten engeller.
+        Yine de tek karelik buyuk adim, cakisik hucresel geometri veya eski
+        bir kayittan gelen baslangic konumu gibi durumlarda gorsel ile fizik
+        arasinda yalanci bir sizinti olusmamali. Igneyle iceri birakilan yuk
+        ``injected`` oldugu icin bu korumadan muaftir; o yuk zaten zarin
+        icinden fiziksel olarak tasinmistir.
+        """
+        if self.zone is not None and not self.injected:
+            bounds = self.cell.boundaries()
+            if bounds and self.band() >= len(bounds):
+                d = self.pos - self.cell.center
+                if d.length_squared() < 1e-9:
+                    d = pygame.math.Vector2(1, 0)
+                # En ic katmanin ortasinda guvenli bir durak: molekul
+                # sitoplazmaya gecmez, bir sonraki karede de hareket etmez.
+                r = (self.cell.core_r + bounds[-1]) * 0.5
+                self.pos = self.cell.center + d.normalize() * r
+                self.state = 'stuck'
+                self.blocked_by = 'Hucre zari (geometri korumasi)'
+                self.depth = len(bounds) - 1
+                self.disarida = True
+                self._anchor()
+                return True
+        return False
+
+    def cizim_yaricapi(self, olcek=1.0):
+        """Molekulu fiziksel olarak bulundugu bolgeyle sinirli ciz.
+
+        Molekulun merkezini zarda tutmak tek basina yeterli degildir:
+        buyuk bir molekulun tam dairesi sitoplazma sinirinin altina
+        tasabilir. Bu, zardan gecmis gibi gorunen bir cizim yalani uretir.
+        Yalnizca igneyle gercekten enjekte edilmis ve cekirdekte bulunan
+        yuk serbesttir; digerleri bulunduklari katmanin ic-disisina
+        kirpilir. Bu, sitoplazma hedefli bir yuk zar tabakasinda takildigi
+        anda bile yanlislikla cekirdekte gorunmesini engeller.
+        """
+        olcek = max(0.0, float(olcek))
+        tam = self.rad * self.vs * olcek
+        if self.zone is None:
+            return tam
+
+        bounds = self.cell.boundaries()
+        d = self.pos.distance_to(self.cell.center)
+        if not bounds:
+            return tam if d > self.cell.core_r else 0.0
+        band = self.band()
+        if band < 0:
+            return tam
+        if band >= len(bounds):
+            # Bu durum yalnizca igneyle iceri birakilmis bir yuzey yukunde
+            # fiziksel olarak mesrudur. Diger durumlarda _cytoplasm_guard
+            # bir sonraki fizik adiminda molekulu durdurur; aradaki tek
+            # karede de onu ekrana basmayarak yalani kapatiriz.
+            return tam if self.injected else 0.0
+        lo, hi = self._band_radii(band)
+        ic_mesafe = max(0.0, d - lo)
+        dis_mesafe = max(0.0, hi - d)
+        return min(tam, ic_mesafe * olcek, dis_mesafe * olcek)
+
     # ------------------------------------------------------------ hareket
     def update(self, dt):
         # NOT: burada bir zamanlar "zarfin icindekini hucre ile birlikte
@@ -1648,6 +1716,8 @@ class Molecule:
             # Hucre yenilendi - bu molekul eski nesle ait. Sayaci
             # dusurmeden yok olur; sayaclar zaten sifirlandi.
             self.state = 'cleared'
+            return
+        if self._cytoplasm_guard():
             return
         if self.state == 'arrived':
             self._apply_anchor()
@@ -1871,13 +1941,18 @@ class Molecule:
         # gorunuyordu, yani hangi molekulun neden gecemedigi gozle
         # anlasilmiyordu. Delikler de ayni PORE_PX olceginde uretiliyor,
         # dolayisiyla artik ikisi birebir orantili.
-        r = self.rad
+        r = int(math.floor(self.cizim_yaricapi()))
+        if r <= 0:
+            return
         if self.state == 'arrived':
             pygame.draw.circle(s, self.col, p, r)
             pygame.draw.circle(s, (255, 255, 255), p, r, 1)
         elif self.state == 'stuck':
             pygame.draw.circle(s, (110, 118, 135), p, r)
-            pygame.draw.circle(s, (210, 95, 95), p, r + 2, 1)
+            # Isaret de kirpilmis molekul yaricapini asamaz; r+2, ince
+            # zar bandinda kirmizi halkanin sitoplazmaya tasmasina neden
+            # oluyordu.
+            pygame.draw.circle(s, (210, 95, 95), p, r, 1)
         else:
             pygame.draw.circle(s, self.col, p, r)
             if r >= 4:

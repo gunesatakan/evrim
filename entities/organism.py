@@ -2451,7 +2451,12 @@ class Organism(Entity):
                 d = m.pos - self.pos
                 x = mx + d.x * olcek
                 y = my + d.y * olcek
-            r = max(1, int(round(m.rad * vs * olcek)))
+            try:
+                r = int(math.floor(m.cizim_yaricapi(olcek)))
+            except (AttributeError, TypeError, ValueError):
+                r = int(math.floor(m.rad * vs * olcek))
+            if r <= 0:
+                continue
             pygame.draw.circle(screen, m.col, (int(x), int(y)), r)
 
     def davranisi_ayardan_kur(self, cfg):
