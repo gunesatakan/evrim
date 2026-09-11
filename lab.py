@@ -751,7 +751,7 @@ class GlanceRecord:
 
 class Shot:
     def __init__(self, cell, pos, direction, carrier, payload, marker=None,
-                 carrier_index=None):
+                 carrier_index=None, source_scale=None, reach=None):
         self.cell = cell
         self.pos = pygame.math.Vector2(pos)
         self.dir = pygame.math.Vector2(direction).normalize()
@@ -782,12 +782,23 @@ class Shot:
         # yaricapli - mermi bir karede hucrenin obur tarafindan cikip
         # yuku DISARIDA birakiyordu. Molekuller zaten geometriyle ayni
         # oranda yavasliyordu (hiz_olcegi); mermi de oyle.
-        self.vs = float(getattr(cell, 'hiz_olcegi', 1.0))
+        # Mermi hedefin degil, onu atan organin fiziksel olcegindedir.
+        # Hedef olcegini kullanmak buyuk bir hedefe atilan silahi buyutuyor,
+        # kucuk hedefe atilani kucultuyor ve ayni atisin gorunur menzilini
+        # hedefe gore degistiriyordu. Kaynaktan gelen olcek hem hareketi hem
+        # de merminin kendi geometrisini belirler.
+        self.vs = max(0.05, float(source_scale if source_scale is not None
+                                  else getattr(cell, 'hiz_olcegi', 1.0)))
+        self.source_scale = self.vs
+        self.target_scale = float(getattr(cell, 'hiz_olcegi', 1.0))
         self.layer_idx = -1
         self.log = []
         self.dead = False
         self.glanced = False
         self.impact_angle = None
+        self.contact_point = None
+        self.contact_normal = None
+        self.impact_state = 'flying'
         self.trail = [pygame.math.Vector2(pos)]
         self.delivered = None
         self.miss_reason = None
@@ -833,7 +844,9 @@ class Shot:
         # oyun stokta daha azi varsa onu yazar (kismi yuk).
         self.yuk_sayisi = CARRIER_EMIT[self.ci] if 0 <= self.ci < len(CARRIER_EMIT) else 0
         self.origin = pygame.math.Vector2(pos)
-        self.reach = CARRIER_REACH[self.ci] if carrier_index is not None else 1e9
+        self.reach = (float(reach) if reach is not None else
+                      (CARRIER_REACH[self.ci] * self.source_scale
+                       if carrier_index is not None else 1e9))
         gap = self.pos.distance_to(cell.center) - cell.outer_r
         self.gap_at_fire = gap
         if gap > self.reach:
@@ -866,7 +879,50 @@ class Shot:
         c = max(-1.0, min(1.0, (-self.dir).dot(n)))
         return math.degrees(math.acos(c))
 
+    def attachment_origin(self):
+        """Merminin su anki fiziksel baglanti noktasi.
+
+        `origin` atis anindaki son bilinen konumdur; cizim sirasinda
+        saldirgan bir kare daha ilerlemis olabilir. Bagli bir mermi her zaman
+        canli organinin baglanti noktasindan cizilir. Laboratuvar
+        saldirgani icin `weapon_anchor()` kullanilir; `muzzle()` ise
+        basligin atis ucudur.
+        """
+        organ = getattr(self, 'organ', None)
+        owner = getattr(self, 'sahip', None)
+        if owner is not None and getattr(owner, 'dead', False):
+            return pygame.math.Vector2(self.origin)
+        if organ is not None and owner is not None:
+            try:
+                return organ.get_absolute_position(
+                    owner.pos, owner.direction, owner.radius)
+            except (AttributeError, TypeError, ValueError):
+                pass
+        if owner is not None:
+            anchor = getattr(owner, 'weapon_anchor', None)
+            if callable(anchor):
+                try:
+                    return pygame.math.Vector2(anchor())
+                except (TypeError, ValueError):
+                    pass
+            muzzle = getattr(owner, 'muzzle', None)
+            if callable(muzzle):
+                try:
+                    return pygame.math.Vector2(muzzle())
+                except (TypeError, ValueError):
+                    pass
+        return pygame.math.Vector2(self.origin)
+
+    def refresh_origin(self):
+        """Baglanti kokunu canli saldirgandan yeniden hesapla."""
+        self.origin = self.attachment_origin()
+        return self.origin
+
     def update(self, dt):
+        # Koku fizik hesabindan once guncellenir; ates eden hucre hareket
+        # ettiyse ip/tup ayni karede onunla birlikte tasinir.
+        if not getattr(getattr(self, 'sahip', None), 'dead', False):
+            self.refresh_origin()
         # Hucreye SAPLANMIS ya da EMEN mermi de hedefiyle birlikte hareket
         # eder; yoksa hedef kacarken igne havada asili kaliyor.
         if (self.feeding or self.docked or self.embed_r is not None
@@ -967,6 +1023,12 @@ class Shot:
     def _enter(self, idx):
         acts = self.cell.active()
         layer = acts[idx]
+        self.contact_point = pygame.math.Vector2(self.pos)
+        _normal = self.pos - self.cell.center
+        self.contact_normal = (_normal.normalize()
+                               if _normal.length_squared() > 1e-12
+                               else pygame.math.Vector2(1, 0))
+        self.impact_state = 'contact'
         if self.impact_angle is None:
             self.impact_angle = self._geometric_angle()
         self.cell.alarm = 3.0        # saldiri algilandi: kacmaya calisir
@@ -979,6 +1041,9 @@ class Shot:
             self.delivered = 0
             bounds = self.cell.boundaries()
             self.embed_r = bounds[0] - 0.35 * self._band_kalinlik(0)
+            self.impact_state = {VOLVENT: 'tethered',
+                                 GLUTINANT: 'adhesive',
+                                 ISORHIZA: 'pulling'}[self.ci]
             if self.ci == VOLVENT:
                 self.cell.tethered = True
             elif self.ci == GLUTINANT:
@@ -1012,6 +1077,7 @@ class Shot:
                 self.log.append(DockRecord(layer))
                 self.layer_idx = idx
                 self.docked = True
+                self.impact_state = 'docked'
                 self._deliver(idx)
                 bounds = self.cell.boundaries()
                 self.embed_r = bounds[idx] - 0.5 * self._band_kalinlik(idx)
@@ -1027,6 +1093,7 @@ class Shot:
                                  self.pen.energy, self.pen.attempts)):
             self.log.append(GlanceRecord(layer, self.impact_angle))
             self.glanced = True
+            self.impact_state = 'glanced'
             n = self.pos - self.cell.center
             if n.length() > 0:
                 n = n.normalize()
@@ -1066,6 +1133,7 @@ class Shot:
                     # emer; olum zehirden degil TUKENMEDEN gelir. Boru
                     # govdeye bagli kaldigi icin emis yolu da hazirdir.
                     self.feeding = True
+                    self.impact_state = 'feeding'
                     self.cell.feeder = self
                     self.dead = False
                     self.cyto_travel = None
@@ -1073,11 +1141,13 @@ class Shot:
                     return
                 self.cyto_travel = min(self.cell.core_r * 1.3,
                                        10.0 + 0.5 * self.pen.energy)
+                self.impact_state = 'inside'
         else:
             # Delemedi ama YUZEYDE DURMAZ: enerjisi oraninda gomulur.
             bounds = self.cell.boundaries()
             outer = bounds[idx]
             self.embed_r = outer - step.penetration * self._band_kalinlik(idx)
+            self.impact_state = 'embedded'
             self._deliver(idx)
 
     def _deliver(self, depth_reached):
@@ -1125,6 +1195,31 @@ class Shot:
             m.depth = m.band()
             self.released.append(m)
 
+    def _draw_impact_marker(self, s, T, p, L):
+        """Mermi artik serbest degilse temas kaydini tek bir isaretle goster."""
+        if self.glanced:
+            col = WARN
+        elif self.docked:
+            col = (255, 150, 210)
+        elif self.impact_state in ('tethered', 'adhesive', 'pulling'):
+            col = (235, 225, 170)
+        else:
+            col = DIM
+        pygame.draw.circle(s, col, p, L(7), L(2))
+        # Sekmede yeni hiz vektorunu; diger sonuclarda temas normalini goster.
+        vec = self.dir if self.glanced else self.contact_normal
+        if vec is not None and vec.length_squared() > 1e-12:
+            vec = vec.normalize()
+            q = self.pos + vec * (16.0 * self.vs)
+            pygame.draw.line(s, col, p, T(q), L(2))
+            side = pygame.math.Vector2(-vec.y, vec.x)
+            pygame.draw.line(s, col, T(q),
+                             T(q - vec * (5.0 * self.vs) + side * (4.0 * self.vs)),
+                             L(2))
+            pygame.draw.line(s, col, T(q),
+                             T(q - vec * (5.0 * self.vs) - side * (4.0 * self.vs)),
+                             L(2))
+
     def draw(self, s, donustur=None, olcek=1.0):
         """Her tasiyici KENDI mermisiyle cizilir - hepsi ayni nokta degil.
 
@@ -1132,7 +1227,7 @@ class Shot:
         kamera gorunumu), `olcek` cizgi kalinligi/yaricap carpani. Lab
         ikisini de vermez - orada birebir eski cizim.
         """
-        sv = float(getattr(self, 'vs', 1.0))     # mermi olcegi (hedef zarfina gore)
+        sv = float(getattr(self, 'vs', 1.0))     # mermi olcegi (kaynak organ)
         ks = float(olcek) * sv                   # ekran olcegi
         def T(v):
             if donustur is None:
@@ -1142,11 +1237,19 @@ class Shot:
         def L(n):
             return max(1, int(round(n * ks)))
         p = T(self.pos)
+        root = self.attachment_origin()
         pcol = self.payload[5]
         dead = self.dead
         col = ((255, 150, 210) if self.docked else
                (ACCENT if not dead else (WARN if self.glanced else BAD)))
         ci = self.ci
+
+        # Serbest olmayan bir baslik artik organin tam boy kopyasi gibi
+        # havada durmaz. Fiziksel mermi son konumunda bir temas isaretiyle
+        # gosterilir; aktif baglanti ise asagidaki gercek kokten uca cizilir.
+        if dead:
+            self._draw_impact_marker(s, T, p, L)
+            return
 
         # IPLIK ORGANA BAGLIDIR. Nematosist ipi kapsulden cikar ve kapsul
         # hucrede durur; hucre yuzerken ipin koku onunla gider. Onceden
@@ -1155,7 +1258,7 @@ class Shot:
         # goruunuyordu, oyunda ise hucre uzaklasinca iplik bosluga bagli
         # kaliyordu. Iplik artik koku (organ) ile uc arasindaki cizgidir.
         if ci >= 5 and not dead:
-            o = T(self.origin)
+            o = T(root)
             pygame.draw.line(s, (85, 95, 125), o, p, L(2))
         elif len(self.trail) > 1 and ci < 3:
             pygame.draw.lines(s, (85, 95, 125), False,
@@ -1178,7 +1281,7 @@ class Shot:
         elif ci == 1:
             # YONLU BOSALTMA: parfum gibi. Cikistan itibaren genisleyen bir
             # KONI, seyrelerek dagilir - fiskirtma degil, sikma.
-            travelled = self.origin.distance_to(self.pos)
+            travelled = root.distance_to(self.pos)
             spread = 6 + travelled * 0.35
             rnd = random.Random(7)
             for k in range(34):
@@ -1192,7 +1295,7 @@ class Shot:
         elif ci == 2:
             # FISKIRTMA: molekulleri hedefe DOGRU firlatir. Bagli boru YOK -
             # dar, hizli, derisik bir jet. Yonlu bosaltmadan farki: dagilmiyor.
-            travelled = min(90.0, self.origin.distance_to(self.pos))
+            travelled = min(90.0, root.distance_to(self.pos))
             rnd = random.Random(11)
             for k in range(22):
                 t = rnd.random()
@@ -1203,7 +1306,7 @@ class Shot:
         elif ci == 3:
             # T6SS: tup FIRLATILMAZ, kilifa bagli kalir - piston gibi.
             # Govdeye bagli govde + uc. Temas sartinin sebebi bu.
-            o = T(self.origin)
+            o = T(root)
             pygame.draw.line(s, (140, 158, 175), o, p, L(9))
             pygame.draw.line(s, (75, 90, 105), o, p, L(2))
             pygame.draw.polygon(s, (215, 220, 225),
@@ -1214,7 +1317,7 @@ class Shot:
             # STILET: FIRLATILMAZ, UZATILIR. Vampyrella ve Pfiesteria
             # pedunkulu gibi hucre iskeletiyle itilen, govdeye BAGLI bir yapi.
             # Menzili = uzayabildigi boy.
-            o = T(self.origin)
+            o = T(root)
             pygame.draw.line(s, (215, 208, 185), o, p, L(5))
             pygame.draw.line(s, (120, 114, 98), o, p, L(1))
             pygame.draw.polygon(s, (245, 240, 220),
@@ -1251,8 +1354,6 @@ class Shot:
         # yuk gostergesi: mermi ne tasiyor
         if self.payload[4] and not self.lumen_blocked and ci >= 2:
             pygame.draw.circle(s, pcol, rot(-2, 0), L(4))
-        if dead and ci >= 3:
-            pygame.draw.circle(s, col, p, L(8), L(2))
 
 
 class Kese:
@@ -3578,6 +3679,14 @@ class Attacker:
         """Silahin ucu - atisin ciktigi nokta."""
         return self.pos + pygame.math.Vector2(self.r + self.weapon_len(), 0)
 
+    def weapon_anchor(self):
+        """Silahin hucreye bagli taban noktasi.
+
+        `muzzle()` atisin cikis ucudur; tether ve fiziksel baglantinin koku
+        ise hucre yuzeyindeki bu noktadir.
+        """
+        return self.pos + pygame.math.Vector2(self.r, 0)
+
     def weapon_len(self):
         return {0: 0, 1: 16, 2: 74, 3: 66, 4: 82,
                 5: 46, 6: 44, 7: 42, 8: 44}.get(self.ci, 46)
@@ -3653,9 +3762,11 @@ class Attacker:
         self.blocked = False
         return True
 
-    def draw(self, s, f, fs, ci, pi, mi, armed):
+    def draw(self, s, f, fs, ci, pi, mi, armed, active_shots=None):
         self.ci, self.pi, self.mi = ci, pi, mi
-        cx = int(self.pos.x - self.recoil)
+        # Geri tepme silahin/merminin durumunda gorunur; hucre govdesini
+        # tasimak, aktif merminin canli baglanti noktasini kaydiriyordu.
+        cx = int(self.pos.x)
         cy = int(self.pos.y)
         cname, cp, _cd = CARRIERS[ci]
         pcol = PAYLOADS[pi][5]
@@ -3677,7 +3788,8 @@ class Attacker:
             pygame.draw.circle(s, (20, 25, 30), (gx, gy), prad, 1)
 
         # --- TASIYICI: her biri farkli cizilir
-        self._draw_weapon(s, cx, cy, ci, mcol, armed, fs)
+        self._draw_weapon(s, cx, cy, ci, mcol, armed, fs,
+                          active_shots=active_shots)
 
         # MIZOSITOZ ile dolan sitoplazma: govde iceriden yesillenir
         if self.filled > 0.0:
@@ -3707,9 +3819,20 @@ class Attacker:
             wl = fs.render(txt, True, col)
             s.blit(wl, (cx - wl.get_width() // 2, cy + self.r + 12 + k * 16))
 
-    def _draw_weapon(self, s, cx, cy, ci, mcol, armed, fs=None):
+    def _draw_weapon(self, s, cx, cy, ci, mcol, armed, fs=None,
+                     active_shots=None):
         L = self.weapon_len()
         tipx = cx + self.r + L
+        if (active_shots and ci >= 3 and
+                any(not getattr(sh, 'dead', False) for sh in active_shots)):
+            # Aktif mermi zaten Shot.draw tarafindan govdeye bagli olarak
+            # ciziliyor. Saldirgan tarafinda ikinci bir tam boy baslik
+            # cizilmesin; burada yalnizca bosalan soket kalsin.
+            from organs.peripheral.weapons.view_weapons import draw_weapon_socket
+            draw_weapon_socket(
+                s, pygame.math.Vector2(cx + self.r, cy),
+                pygame.math.Vector2(1, 0), L, carrier=ci, recoil=0.0)
+            return
         if ci == 0:
             # DIFUZYON: silah yok, molekuller sizip yayiliyor
             for k in range(18):
@@ -4194,8 +4317,12 @@ def spawn_shot(cell, atk, ci, pi, mi, shots):
         return []
     muzzle = atk.muzzle()
     if ci >= 3:
-        shots.append(Shot(cell, muzzle, (1, 0), CARRIERS[ci],
-                          PAYLOADS[pi], MARKERS[mi], ci))
+        shot = Shot(cell, muzzle, (1, 0), CARRIERS[ci],
+                    PAYLOADS[pi], MARKERS[mi], ci)
+        # Laboratuvar saldirgani da hareket eden bir kaynak olabilir. Mermi
+        # cizilirken kokun yeniden hesaplanabilmesi icin sahip baglanir.
+        shot.sahip = atk
+        shots.append(shot)
         return []
     if PAYLOADS[pi][1] is None:
         return []
@@ -4445,7 +4572,7 @@ def main():
         cell.draw(screen, f, f_s)
         for m in mols:
             m.draw(screen)
-        atk.draw(screen, f, f_s, ci, pi, mi, True)
+        atk.draw(screen, f, f_s, ci, pi, mi, True, active_shots=shots)
         # nisan hatti + MENZIL gostergesi
         pygame.draw.line(screen, (48, 56, 76),
                          (int(atk.pos.x), int(atk.pos.y)),

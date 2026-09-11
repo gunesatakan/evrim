@@ -84,46 +84,68 @@ def siddet(x, y, kaynak_listesi=None):
     zeminden aydinlatmaz.
     """
     top = 0.0
-    kes = _kesim()
-    for kx, ky, guc, erim in (kaynaklar() if kaynak_listesi is None
-                              else kaynak_listesi):
-        dx = x - kx; dy = y - ky
-        d = math.sqrt(dx * dx + dy * dy)
-        if d >= erim:
-            continue
-        s = guc * math.exp(-d / lambda_px(erim))
-        if s > guc * kes:
-            top += s
+    for k in (kaynaklar() if kaynak_listesi is None else kaynak_listesi):
+        top += _kaynak_katkisi(x, y, k)[0]
     return top
 
 
-def siddet_ve_yon(x, y, kaynak_listesi=None):
-    """(siddet, yon) - yon, siddetle agirlikli kaynak merkezine dogru.
+def _kaynak_katkisi(x, y, kaynak):
+    """Bir kaynagin siddetini ve yerel siddet gradyanini dondur.
 
-    Fototaksi ISIGIN GELDIGI yonu izler. Alici tek noktadan okuma yapar,
-    ayri ayri kaynak goremez; okudugu sey tek bir aydinliktir. Bu yuzden
-    yon de kaynaklarin siddetle agirlikli ortalamasidir - tam olarak
-    ust uste binen koku bulutlarinda yapilan sey.
+    Isik alani `siddet()` ile cizimde, `siddet_ve_yon()` ile fototakside
+    ayni Beer--Lambert denkleminden uretilmelidir. Iki yerde ayri hesap
+    yapilmasi, ekranda parlak gorunen bir bolgenin hucre tarafinda farkli
+    bir sinyal vermesine yol acabiliyordu.
+
+    Donus: ``(siddet, gradyan_x, gradyan_y)``. Gradyan, siddetin arttigi
+    yonu gosterir; yani kaynaga dogru olan fiziksel yonu.
+    """
+    kx, ky, guc, erim = kaynak
+    dx = kx - x
+    dy = ky - y
+    d = math.sqrt(dx * dx + dy * dy)
+    if d >= erim:
+        return 0.0, 0.0, 0.0
+
+    lam = lambda_px(erim)
+    s = guc * math.exp(-d / lam)
+    if s <= guc * _kesim():
+        return 0.0, 0.0, 0.0
+
+    # I(d) = guc * exp(-d / lambda). dI/dx, dI/dy kaynak yonundedir.
+    # Kaynagin tam merkezinde simetrik alanin tercihli yonu yoktur.
+    if d <= 1e-9:
+        return s, 0.0, 0.0
+    katsayi = s / (lam * d)
+    return s, dx * katsayi, dy * katsayi
+
+
+def siddet_ve_yon(x, y, kaynak_listesi=None):
+    """(siddet, yon) - yerel siddet gradyaninin yonu.
+
+    Fototaksi kaynak merkezlerinin geometrik ortalamasini izlemez. Birden
+    fazla isik ust uste geldiginde hucrenin karar vermesi gereken sey,
+    bulundugu yerde siddetin hangi tarafa dogru arttigidir. Bu nedenle yon,
+    ayni Beer--Lambert alaninin analitik gradyanindan cikarilir. Kaynaklar
+    yakinlik, guc ve sönüm uzunluklarina gore dogal olarak agirliklanir.
+
+    Hucre bir kaynagin tam merkezindeyse alan yerel olarak simetriktir ve
+    tercihli yon yoktur; bu durumda sifir vektor doner.
     """
     import pygame
     top = 0.0
-    vx = vy = 0.0
-    kes = _kesim()
-    for kx, ky, guc, erim in (kaynaklar() if kaynak_listesi is None
-                              else kaynak_listesi):
-        dx = kx - x; dy = ky - y
-        d = math.sqrt(dx * dx + dy * dy)
-        if d >= erim:
-            continue
-        s = guc * math.exp(-d / lambda_px(erim))
-        if s <= guc * kes:
-            continue
+    gx = gy = 0.0
+    for k in (kaynaklar() if kaynak_listesi is None else kaynak_listesi):
+        s, cx, cy = _kaynak_katkisi(x, y, k)
         top += s
-        vx += dx * s
-        vy += dy * s
+        gx += cx
+        gy += cy
     if top <= 0.0:
         return 0.0, pygame.math.Vector2(0.0, 0.0)
-    return top, pygame.math.Vector2(vx / top, vy / top)
+    yon = pygame.math.Vector2(gx, gy)
+    if yon.length_squared() <= 1e-18:
+        return top, pygame.math.Vector2(0.0, 0.0)
+    return top, yon.normalize()
 
 
 def eksen(s):

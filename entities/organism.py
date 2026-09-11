@@ -337,6 +337,11 @@ class Organism(Entity):
         # Genel surusun buyuklugu ve isareti (-1..+1). Uc spektrumun
         # bileskesinden gelir; sifir = hicbir yone cekilmiyor.
         self.current_response = 0.0
+        # Davranis yonunun hangi kanaldan baskin geldigini cytoskeleton'a
+        # ilet: sosyal_oncelik, isik gibi sosyal olmayan bir uyaranin
+        # besin kokusu yuzunden yanlislikla bastirilmasini engeller.
+        self.behavior_social_strength = 0.0
+        self.behavior_light_strength = 0.0
         # --- BAGLANMA ---
         self.bound_target = None    # tuttugum hucre (saldirgan tarafi)
         # Molekul fizigi hucrenin GORELI cercevesinde calisir: hucre
@@ -1191,6 +1196,8 @@ class Organism(Entity):
         # duyusuz bir hucrede hic yazilmiyor ve bir onceki karenin degeri
         # takili kaliyordu.
         self.isik_siddeti = 0.0
+        self.behavior_social_strength = 0.0
+        self.behavior_light_strength = 0.0
         bos = (None, 0.0)
         if not game_settings.BEHAVIOR_ENABLED:
             self.current_response = 0.0
@@ -1240,10 +1247,13 @@ class Organism(Entity):
         _kayma_payi = game_settings.KOKU_SURUKLENME * 120.0
         yaklas_top = 0.0
         kac_top = 0.0
+        sosyal_guc = 0.0
+        isik_guc = 0.0
 
-        def _kat(yon, tepki):
+        def _kat(yon, tepki, sosyal=True):
             """Bir uyaranin surus vektorune katkisi."""
             nonlocal surus, en_guclu, yaklas_top, kac_top
+            nonlocal sosyal_guc, isik_guc
             if abs(tepki) < 0.02 or yon.length_squared() <= 1e-12:
                 return
             surus += yon.normalize() * tepki
@@ -1253,6 +1263,10 @@ class Organism(Entity):
                 yaklas_top += tepki
             else:
                 kac_top -= tepki
+            if sosyal:
+                sosyal_guc += abs(tepki)
+            else:
+                isik_guc += abs(tepki)
 
         # ---------------- ISIK ----------------
         #
@@ -1274,7 +1288,7 @@ class Organism(Entity):
                 if _is > 0.0:
                     self.isik_siddeti = _is
                     _r = self.behavior.isik_tepkisi(isik.eksen(_is))
-                    _kat(_iyon, _r)
+                    _kat(_iyon, _r, sosyal=False)
 
         for t in (others or ()):
             if t is self or t.dead:
@@ -1455,9 +1469,13 @@ class Organism(Entity):
             _kat(_yon_top / _w, _r)
 
         if surus.length_squared() <= 1e-9:
+            self.behavior_social_strength = sosyal_guc
+            self.behavior_light_strength = isik_guc
             self.current_response = 0.0
             return bos
 
+        self.behavior_social_strength = sosyal_guc
+        self.behavior_light_strength = isik_guc
         # Genel surus: yonu bileske, buyuklugu kararlilik (tavanli).
         kararlilik = min(1.0, surus.length())
         # Isaret, hangi egilimin agir bastigini soyler - iskelet "kaciyor
@@ -2041,8 +2059,9 @@ class Organism(Entity):
         _prm = dict(_tasiyici[1])
         _prm['energy'] = float(_prm.get('energy', 0.0)) * max(0.1, float(lg.power))
         _tasiyici[1] = _prm
-        shot = _lab.Shot(zarf, namlu, yon, tuple(_tasiyici), _lab.PAYLOADS[pi],
-                         _lab.MARKERS[mi], ci)
+        shot = _lab.Shot(
+            zarf, namlu, yon, tuple(_tasiyici), _lab.PAYLOADS[pi],
+            _lab.MARKERS[mi], ci, source_scale=_birim, reach=_azami)
         shot.sahip = self
         if pi > 0:
             shot.yuk_sayisi = yuk_n          # stokta ne varsa o kadar
@@ -2086,8 +2105,12 @@ class Organism(Entity):
             _sahip = getattr(sh, 'sahip', None)
             if (_org is not None and _sahip is not None
                     and not getattr(_sahip, 'dead', False)):
-                sh.origin = _org.get_absolute_position(
-                    _sahip.pos, _sahip.direction, _sahip.radius)
+                _yenile = getattr(sh, 'refresh_origin', None)
+                if callable(_yenile):
+                    _yenile()
+                else:
+                    sh.origin = _org.get_absolute_position(
+                        _sahip.pos, _sahip.direction, _sahip.radius)
             # BOY SINIRI. Uc, organdan azami uzunluktan daha uzaga
             # gidemez: iplik kopar, tup geri ceker. Saldirgan uzaklasirsa
             # da ayni sey olur - ip gerilir ve kopar.
@@ -2376,12 +2399,22 @@ class Organism(Entity):
             kalan.append(m)
         self.molekuller = kalan
 
-    def atislari_ciz(self, screen, merkez=None, olcek=1.0):
+    def atislari_ciz(self, screen, merkez=None, olcek=1.0, donustur=None):
         """Bana atilmis mermileri ciz (lab.Shot.draw). Kamera olcegi
         verilirse dunya konumlari merkeze gore buyutulur - uzayan T6SS
-        tupu, stilet, nematosist ipligi yakinlastirmada da gorunur."""
+        tupu, stilet, nematosist ipligi yakinlastirmada da gorunur.
+
+        `donustur`, dunya koordinatlarini tek bir kamera fonksiyonuyla
+        ekrana tasir. Kamera yakinlastirmasinda hedef merkezine gore yeniden
+        olcekleme, atisin iki ucunu farkli referanslara baglayip baglanti
+        kokunu kaydirabiliyordu.
+        """
         atislar = getattr(self, 'atislar', None)
         if not atislar:
+            return
+        if donustur is not None:
+            for sh in atislar:
+                sh.draw(screen, donustur, olcek)
             return
         if merkez is None and olcek == 1.0:
             for sh in atislar:
@@ -2394,8 +2427,12 @@ class Organism(Entity):
         for sh in atislar:
             sh.draw(screen, _don, olcek)
 
-    def molekulleri_ciz(self, screen, merkez=None, olcek=1.0):
-        """Molekulleri ciz. Kamera olcegi verilirse buyutulur."""
+    def molekulleri_ciz(self, screen, merkez=None, olcek=1.0, donustur=None):
+        """Molekulleri ciz. Kamera olcegi verilirse buyutulur.
+
+        Molekul merkezleri de mermilerle ayni dunya->ekran donusumunu
+        kullanir; boyutlari hedef zarfinin cekirdek olceginden gelir.
+        """
         mols = getattr(self, 'molekuller', None)
         if not mols:
             return
@@ -2403,11 +2440,17 @@ class Organism(Entity):
         # Molekul yaricapi da GEOMETRIYLE ayni oranda kuculur: m.rad
         # laboratuvar olceginde (cekirdek 110) verilmis bir sayidir, oldugu
         # gibi cizilince oyundaki hucreden buyuk gorunuyordu.
-        vs = max(0.05, self.radius / 110.0)
+        try:
+            vs = max(0.05, float(self.zarf_arayuzu().hiz_olcegi))
+        except (AttributeError, TypeError, ValueError):
+            vs = max(0.05, self.radius / 110.0)
         for m in mols:
-            d = m.pos - self.pos
-            x = mx + d.x * olcek
-            y = my + d.y * olcek
+            if donustur is not None:
+                x, y = donustur(m.pos)
+            else:
+                d = m.pos - self.pos
+                x = mx + d.x * olcek
+                y = my + d.y * olcek
             r = max(1, int(round(m.rad * vs * olcek)))
             pygame.draw.circle(screen, m.col, (int(x), int(y)), r)
 
@@ -3459,10 +3502,12 @@ class Organism(Entity):
             # scent_intensity: Skalar koku yoğunluğu (float)
             # Davranış tablosu bir şey söylüyorsa o kazanır; sessizse
             # eski sabit av takibine düşülür.
-            drive = behave_dir if behave_dir is not None else prey_dir
             self.cytoskeleton.update(dt, self, unique_threats,
                                      self.direction_memory, scent_intensity,
-                                     drive, behave_resp, self.koku_gradyani)
+                                     prey_dir, behave_resp, self.koku_gradyani,
+                                     behave_dir,
+                                     self.behavior_social_strength >
+                                     self.behavior_light_strength)
         
         # Silah bekleme sayaçları ve yutma sersemliği
         for _o in self.organs:

@@ -10,7 +10,7 @@ import pygame
 from organs.base_organ import BaseOrgan
 from .logic_weapons import (StyletLogic, HarpoonLogic, NematocystLogic,
                             ToxinLogic, LysinLogic, PhagocytosisLogic)
-from .view_weapons import draw_weapon, LAB_BOY
+from .view_weapons import draw_weapon, draw_weapon_socket, LAB_BOY
 
 
 class BaseWeapon(BaseOrgan):
@@ -21,6 +21,13 @@ class BaseWeapon(BaseOrgan):
         super().__init__(attachment_angle, offset_distance=1.0)
         self.logic = self.LOGIC(power)
         self.last_target_pos = None
+        # Bunlar sinif degil, mermiye ait durumdur. Sinif seviyesinde
+        # birakilinca iki ayni silah ilk atistan sonra ayni basligi paylasiyor
+        # gibi gorunebiliyor ve cizim/fizik birbirinden kopuyordu.
+        self.mermi = None
+        self.baslik_t = 0.0
+        self.geri_tepme = 0.0
+        self._atis_sure = 0.0
 
     def aim_angle(self, parent):
         """Organın dünya üzerindeki bakış yönü (radyan)."""
@@ -184,6 +191,15 @@ class BaseWeapon(BaseOrgan):
         if not self.is_deployed(parent):
             birim *= self.RETRACTED_RATIO
         length = LAB_BOY.get(int(ci), 46.0) * birim
+        if self.baslik_disarida():
+            # Atis basligi artik Shot tarafindan, gercek dunya konumunda
+            # cizilir. Burada yalnizca hucreye gomulu soket kalir; tam boy
+            # kapsulu tekrar cizmek onu hucreden ayrilmis ikinci bir silah
+            # gibi gosteriyordu.
+            draw_weapon_socket(
+                screen, pos, outward, length, olcek=k,
+                carrier=int(ci), recoil=0.0)
+            return
         draw_weapon(screen, ad, pos, outward, length,
                     self.logic.ready, self.last_target_pos, olcek=k,
                     carrier=int(ci), marker=int(getattr(self.logic, 'marker', 0)),

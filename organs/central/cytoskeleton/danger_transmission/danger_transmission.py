@@ -44,13 +44,19 @@ class DangerTransmission:
 
     def process_signals(self, dt, organism, nearby_threats, memory_system,
                         scent_intensity, prey_dir=None,
-                        behavior_response=0.0, koku_gradyani=None):
+                        behavior_response=0.0, koku_gradyani=None,
+                        behavior_dir=None, behavior_is_social=None):
         """
         Sinyalleri işler ve hareket yönünü belirler.
         BehavioralState sistemini kullanarak iç duruma göre karar verir.
 
         Args:
             scent_intensity: Skalar koku yoğunluğu (float)
+            prey_dir: Davranış tablosu susarsa kullanılacak görünür av yönü.
+            behavior_dir: Davranış tablosunun seçtiği yön. Işık yönelimi de
+                burada taşınır; bu yönün bir av olması gerekmez.
+            behavior_is_social: Davranış vektörünün baskın kaynağı sosyal ise
+                True. None eski doğrudan çağrılar için sosyal kabul edilir.
 
         Geriye (new_direction, vector_type, vector_value) döner.
         vector_type: 'ESCAPE', 'TRAIL', 'HUNT' veya None
@@ -110,19 +116,22 @@ class DangerTransmission:
         kararlilik = abs(float(behavior_response))
         genome_drives = (getattr(game_settings, 'BEHAVIOR_ENABLED', False)
                          and kararlilik > 0.05
-                         and prey_dir is not None)
+                         and behavior_dir is not None)
+        if behavior_is_social is None:
+            behavior_is_social = True
         # KACIS her zaman onceliklidir - yenmek her seyi bitirir. Ama
         # "kacis" bir emir degil, yeterince guclu bir NEGATIF tepkidir.
         kaciyor = float(behavior_response) <= -game_settings.KACIS_ESIGI
         if genome_drives and not kaciyor:
             b = getattr(organism, 'behavior', None)
-            if b is not None and not b.sosyali_sec(scent_intensity):
+            if (behavior_is_social and b is not None
+                    and not b.sosyali_sec(scent_intensity)):
                 genome_drives = False
         if genome_drives:
-            self.target_direction = prey_dir
+            self.target_direction = behavior_dir
             self._reset_chemotaxis_sampling()
             vec_type = 'ESCAPE' if float(behavior_response) < 0 else 'HUNT'
-            return (self.target_direction, vec_type, prey_dir * 45)
+            return (self.target_direction, vec_type, behavior_dir * 45)
 
         # 2b. Davranis genomu kapaliysa eski sabit refleks
         if not getattr(game_settings, 'BEHAVIOR_ENABLED', False)                 and self.behavioral_state.should_flee():

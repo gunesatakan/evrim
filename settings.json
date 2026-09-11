@@ -2,7 +2,7 @@
     "settings": {
         "WORLD_SCALE": 1.0,
         "ARENA_OLCEK": 2.0,
-        "FOOD_COUNT": 184,
+        "FOOD_COUNT": 214,
         "KAOTROPI_COUNT": 1,
         "OPTROPI_COUNT": 1,
         "NOTROPI_COUNT": 1,
@@ -134,10 +134,10 @@
         "PHAGO_SIZE_RATIO": 0.7,
         "PHAGO_STUN": 1.0,
         "KOKU_BULUT": 80.0,
+        "KOKU_YAYIM": 0.7,
         "KOKU_REF_YARICAP": 22.45,
         "KOKU_TOPLAM_TAVANI": 8.0,
         "KOKU_BULUT_ALFA": 90,
-        "KOKU_YAYIM": 0.7,
         "KOKU_DOYUM": 20.0,
         "DIVERGENCE_NEW_ORGAN": 5.0,
         "DIVERGENCE_UPGRADE": 1.0,
@@ -164,40 +164,71 @@
         "FOOD_SPAWN_RATE": 3.0,
         "FOOD_PATCH_SIZE": 26,
         "FOOD_PATCH_SIGMA": 45.0,
-        "HARITA_ISIKLARI": [],
+        "HARITA_YAMALARI": [
+            [
+                292.2,
+                1333.3,
+                41,
+                95.0
+            ],
+            [
+                1191.5,
+                1370.2,
+                41,
+                95.0
+            ],
+            [
+                2107.8,
+                1358.9,
+                41,
+                95.0
+            ],
+            [
+                1185.8,
+                371.6,
+                91,
+                20.0
+            ]
+        ],
+        "HARITA_ISIKLARI": [
+            [
+                1188.7,
+                374.5,
+                1.0,
+                800.0
+            ],
+            [
+                1188.7,
+                374.5,
+                1.0,
+                800.0
+            ]
+        ],
         "ISIK_KESIM": 0.02,
         "ISIK_ERIM": 0.0,
         "ISIK_BESIN_CARPANI": 2.0,
         "ISIK_ALFA": 85,
-        "HARITA_BASLANGIC": [],
-        "SPAWN_DAGILIM": 30.0,
-        "HARITA_YAMALARI": [
+        "ISIK_RENK": [
+            255,
+            232,
+            150
+        ],
+        "HARITA_BASLANGIC": [
             [
-                590.8,
-                400.9,
-                46,
-                95.0
+                79.4,
+                1540.4
             ],
             [
-                1793.4,
-                1205.3,
-                46,
-                95.0
+                1358.9,
+                1560.3
             ],
             [
-                1790.8,
-                403.5,
-                46,
-                95.0
-            ],
-            [
-                596.0,
-                1205.3,
-                46,
-                95.0
+                2314.9,
+                1529.1
             ]
         ],
-        "FOOD_MAX": 200,
+        "SPAWN_DAGILIM": 30.0,
+        "FOOD_MAX": 344,
         "RIBOSOME_AREA": 20.0,
         "VACUOLE_AREA": 30.0,
         "CILIA_TURN_MULTI": 0.05,
@@ -264,6 +295,13 @@
             "sound": 30.0,
             "ribosome_area": 20.0,
             "vacuole_area": 30.0,
+            "davranis_elle": 0,
+            "koku_bant_zayif": 0.0,
+            "koku_bant_az_zayif": 0.0,
+            "koku_bant_esit": 0.0,
+            "koku_bant_az_guclu": 0.0,
+            "koku_bant_guclu": 0.0,
+            "akraba_tepkisi": 0.0,
             "organs": [
                 {
                     "type": "Membrane",
@@ -315,7 +353,7 @@
                 },
                 {
                     "type": "Chemoreceptor",
-                    "angle": 0.0,
+                    "angle": -0.013887995930967074,
                     "length": 6.0
                 }
             ]
@@ -332,6 +370,13 @@
             "sound": 40.0,
             "ribosome_area": 20.0,
             "vacuole_area": 30.0,
+            "davranis_elle": 0,
+            "koku_bant_zayif": 0.0,
+            "koku_bant_az_zayif": 0.0,
+            "koku_bant_esit": 0.0,
+            "koku_bant_az_guclu": 0.0,
+            "koku_bant_guclu": 0.0,
+            "akraba_tepkisi": 0.0,
             "organs": [
                 {
                     "type": "Membrane",
@@ -400,6 +445,13 @@
             "sound": 30.0,
             "ribosome_area": 20.0,
             "vacuole_area": 30.0,
+            "davranis_elle": 0,
+            "koku_bant_zayif": 0.0,
+            "koku_bant_az_zayif": 0.0,
+            "koku_bant_esit": 0.0,
+            "koku_bant_az_guclu": 0.0,
+            "koku_bant_guclu": 0.0,
+            "akraba_tepkisi": 0.0,
             "organs": [
                 {
                     "type": "Membrane",
@@ -468,6 +520,13 @@
             "sound": 20.0,
             "ribosome_area": 10.0,
             "vacuole_area": 5.0,
+            "davranis_elle": 0,
+            "koku_bant_zayif": 0.0,
+            "koku_bant_az_zayif": 0.0,
+            "koku_bant_esit": 0.0,
+            "koku_bant_az_guclu": 0.0,
+            "koku_bant_guclu": 0.0,
+            "akraba_tepkisi": 0.0,
             "organs": [
                 {
                     "type": "Membrane",
@@ -536,6 +595,13 @@
             "sound": 40.0,
             "ribosome_area": 25.0,
             "vacuole_area": 40.0,
+            "davranis_elle": 0,
+            "koku_bant_zayif": 0.0,
+            "koku_bant_az_zayif": 0.0,
+            "koku_bant_esit": 0.0,
+            "koku_bant_az_guclu": 0.0,
+            "koku_bant_guclu": 0.0,
+            "akraba_tepkisi": 0.0,
             "organs": [
                 {
                     "type": "Membrane",
@@ -589,6 +655,16 @@
                     "type": "Chemoreceptor",
                     "angle": 0.0,
                     "length": 6.0
+                },
+                {
+                    "type": "Cilia",
+                    "angle": 1.5707963267948966,
+                    "length": 3.0
+                },
+                {
+                    "type": "Cilia",
+                    "angle": -1.6001996149989017,
+                    "length": 3.0
                 }
             ]
         },
@@ -604,6 +680,13 @@
             "sound": 10.0,
             "ribosome_area": 15.0,
             "vacuole_area": 20.0,
+            "davranis_elle": 0,
+            "koku_bant_zayif": 0.0,
+            "koku_bant_az_zayif": 0.0,
+            "koku_bant_esit": 0.0,
+            "koku_bant_az_guclu": 0.0,
+            "koku_bant_guclu": 0.0,
+            "akraba_tepkisi": 0.0,
             "organs": [
                 {
                     "type": "Membrane",
@@ -650,13 +733,18 @@
                 },
                 {
                     "type": "Flagella",
-                    "angle": 3.141592653589793,
+                    "angle": 2.7540688478095143,
                     "length": 10.0
                 },
                 {
                     "type": "Chemoreceptor",
                     "angle": 0.0,
                     "length": 6.0
+                },
+                {
+                    "type": "Flagella",
+                    "angle": 3.490658503988659,
+                    "length": 10.0
                 }
             ]
         }

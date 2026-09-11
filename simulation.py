@@ -1456,8 +1456,14 @@ def main(food_count=None, kaotropi_count=None):
                 _ok = _z * _gorunum
                 _mrk = tuval_konumu(o.pos)
                 _kam_lab.hucreyi_ciz(screen, o, _mrk, _ok)
-                o.molekulleri_ciz(screen, _mrk, _ok)
-                o.atislari_ciz(screen, _mrk, _ok)
+                # Mermi ve molekul merkezleri hucreye gore degil, tum
+                # dunya icin ayni afin kamera donusumunden gecsin. Aksi
+                # halde hareketli bir atisin koku hedef merkezine baglanir
+                # ve zoom degistikce temas noktasi gorunurde kayar.
+                o.molekulleri_ciz(screen, olcek=_ok,
+                                  donustur=tuval_konumu)
+                o.atislari_ciz(screen, olcek=_ok,
+                               donustur=tuval_konumu)
             olum_efekt.ciz(screen, tuval_konumu, _z * _gorunum)
             _f = pygame.font.SysFont("consolas", 16)
             screen.blit(_f.render("ZOOM x%.1f  (tekerlek)" % _z, True,

@@ -37,6 +37,54 @@ def _yuk_bilgisi(payload):
         return None, 44.0
 
 
+def draw_weapon_socket(screen, pos, outward, length, olcek=1.0,
+                       carrier=None, recoil=0.0):
+    """Atis sirasinda hucrede kalan gercek silah soketini ciz.
+
+    Atis basligi organin disina ciktiginda organin tam silahini tekrar
+    cizmek, ayni yapinin hem hucre yuzeyinde hem de hedefte iki kez
+    gorunmesine neden oluyordu. Soket, hucreye bagli kalan taban parcasidir;
+    hareketli baslik ve saplanma/sekme durumu `lab.Shot.draw` tarafindan
+    cizilir.
+    """
+    if carrier is None:
+        return
+    try:
+        ci = int(carrier)
+    except (TypeError, ValueError):
+        return
+    u = pygame.math.Vector2(outward)
+    if u.length_squared() < 1e-12:
+        u = pygame.math.Vector2(1, 0)
+    u = u.normalize()
+    v = pygame.math.Vector2(-u.y, u.x)
+    s = float(length) / max(1.0, LAB_BOY.get(ci, 46.0))
+    taban = pygame.math.Vector2(pos) - u * (float(recoil) * s)
+
+    def P(dx, dy):
+        q = taban + u * (dx * s) + v * (dy * s)
+        return (int(round(q.x)), int(round(q.y)))
+
+    def W(n):
+        return max(1, int(round(float(n) * s)))
+
+    # Soketler yuzeye gomulu kalir. Disari uzanan hareketli basligin
+    # baslangic noktasi her tasiyicide ayni fiziksel P(0, 0)'dir.
+    if ci == 3:                         # T6SS kilif tabani
+        pygame.draw.circle(screen, (70, 82, 96), P(0, 0), W(11))
+        pygame.draw.circle(screen, (190, 202, 215), P(0, 0), W(8), W(2))
+        pygame.draw.line(screen, (65, 78, 92), P(0, -8), P(0, 8), W(2))
+    elif ci == 4:                       # stilet geri cekilme manşonu
+        pygame.draw.line(screen, (88, 82, 72), P(-6, 0), P(7, 0), W(9))
+        pygame.draw.line(screen, (220, 210, 185), P(-5, 0), P(5, 0), W(5))
+        pygame.draw.circle(screen, (110, 104, 92), P(0, 0), W(8), W(2))
+    elif ci in (5, 6, 7, 8):           # nematosist kapsul yuvası
+        pygame.draw.circle(screen, (90, 84, 58), P(-3, 0), W(14))
+        pygame.draw.circle(screen, (205, 195, 140), P(-3, 0), W(11), W(3))
+        pygame.draw.circle(screen, (45, 50, 58), P(4, 0), W(5))
+        pygame.draw.line(screen, (220, 210, 160), P(4, -6), P(4, 6), W(2))
+
+
 def _kese(screen, P, W, dx, dy, r, stok, stok_max, renk):
     """Ureticinin DEPO KESESI ve ICINDEKI molekuller.
 
