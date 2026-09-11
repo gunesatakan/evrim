@@ -1339,7 +1339,7 @@ class Molecule:
                  'bounces', 'jig', 'tumble', 'hug_t', 'hug_r', 'hug_sh',
                  'hug_bi', 'gen', 'rad', 'hug_side',
                  'anch_ang', 'anch_bi', 'anch_frac', 'side', 'insert_fail',
-                 'disarida')
+                 'disarida', 'allel')
 
     def __init__(self, cell, pos, vel, pi, depth=-1):
         # HIZ OLCEGI en basta atanmali: jig daha ilk satirlarda kuruluyor.
@@ -1361,6 +1361,10 @@ class Molecule:
         self.side = PAYLOAD_SIDE.get(nm, 'her')
         self.insert_fail = 0
         self.depth = depth
+        # BAKTERIOSIN ALLELI. Bagisiklik proteini toksinle ayni operonda
+        # kodlanir ve yalnizca KENDI allelini baglar; molekul hangi
+        # allelden geldigini tasir, varista hedef zarf buna bakar.
+        self.allel = None
         self.state = 'free'          # free | stuck | arrived | lost
         self.age = 0.0
         self.blocked_by = None
@@ -1496,6 +1500,15 @@ class Molecule:
             if d.length_squared() > 1e-9:
                 self.pos = self.cell.center + d.normalize() * (lo + hi) * 0.5
         self.depth = bi
+        # BAGISIKLIK VARISTA. Bagisik hucrenin bagisiklik proteini vardigi
+        # anda toksini baglar: molekul hedefine ulasmistir ama ETKISIZDIR.
+        # Once bagisiklik atis aninda denetleniyordu (bagisik hedefe hic
+        # atilmiyordu); molekul artik yolundaki ILK zarfa carptigi icin
+        # bagisik bir hucreye de varabilir ve karar burada verilmeli.
+        _bm = getattr(self.cell, 'bagisik_mi', None)
+        if _bm is not None and _bm(self):
+            self.state = 'cleared'
+            return True
         self.state = 'arrived'
         self.age = 0.0
         self._anchor()
@@ -2024,6 +2037,18 @@ class HedefZarf:
         self.kacan = 0             # keseyi delip sitoplazmaya kacan (gozenek acici)
         self.sindirilen = 0        # fagozomda yok edilen
         self.yutulan = 0
+
+    def bagisik_mi(self, mol):
+        """Bu molekul bana etki edebilir mi? Bagisiklik proteini yalnizca
+        KENDI allelinden bakteriosini baglar (Molecule.allel). Allelsiz
+        yuk (lizin) icin bagisiklik yoktur."""
+        allel = getattr(mol, 'allel', None)
+        if allel is None:
+            return False
+        for o in getattr(self.org, 'organs', ()):
+            if getattr(getattr(o, 'logic', None), 'allel', None) == allel:
+                return True
+        return False
 
     # ---- geometri (onbellekli) ----
     def _g(self):

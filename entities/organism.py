@@ -1663,7 +1663,7 @@ class Organism(Entity):
                     # Yuk yalnizca MOLEKUL olarak gider; "hasar" diye ikinci
                     # bir yol yok. Tasiyici molekuler degilse hicbir sey
                     # cikmaz.
-                    self._molekul_birak(t, lg, dt * pay, _namlu)
+                    self._molekul_birak(t, lg, dt * pay, _namlu, komsu_ham)
                     if t.dead:
                         killed.append(t)
                 self.energy -= lg.energy_cost * dt
@@ -1849,14 +1849,24 @@ class Organism(Entity):
                 if yon.length() < 1e-6:
                     yon = pygame.math.Vector2(1, 0)
                 yon = yon.normalize()
+                _allel = getattr(ur, 'allel', None)
                 for _ in range(k):
                     a = math.atan2(yon.y, yon.x) + random.uniform(-0.6, 0.6)
                     hiz = random.uniform(0.5, 1.3) * _lab.MOLECULE_SPEED * zarf.hiz_olcegi
                     p = self.pos + pygame.math.Vector2(random.uniform(-self.radius, self.radius),
                                                        random.uniform(-self.radius, self.radius)) * 0.5
-                    m = _lab.Molecule(zarf, p, pygame.math.Vector2(math.cos(a), math.sin(a)) * hiz, pi)
+                    _yon = pygame.math.Vector2(math.cos(a), math.sin(a))
+                    # Sacilan molekul de yolundaki ILK zarfa carpar.
+                    _kime = self._yoldaki_ilk(p, _yon, hiz / _lab._DRAG_K, komsular, t, True)
+                    _z = zarf
+                    if _kime is not t:
+                        _z = _kime.zarf_arayuzu()
+                        _z.neden = 'patlama'
+                        _z.sahip = self
+                    m = _lab.Molecule(_z, p, _yon * hiz, pi)
+                    m.allel = _allel
                     m.depth = m.band()
-                    t.molekul_ekle(m)
+                    _kime.molekul_ekle(m)
                     sacilan += 1
         return sacilan
 
@@ -1873,6 +1883,52 @@ class Organism(Entity):
                 continue
             return lg
         return None
+
+    def _yoldaki_ilk(self, cikis, yon, azami, komsu, varsayilan, yakin_yedek=False):
+        """`cikis`tan `yon`de giden bir cismin YOLUNDAKI ILK hucre.
+
+        Her silah icin ayni kural: igne de, fiskirtilan molekul de,
+        patlamada sacilan yuk de yolunda kim varsa ONA carpar - davranisin
+        sectigi hedefe degil. Menzil `azami` (ip boyu, tup boyu, molekulun
+        surtunmeyle durdugu mesafe).
+
+        Yolda kimse yoksa: IGNE duz ucar ve iskalar (`varsayilan`, lab
+        fizigi iskayi kendi yasar). MOLEKUL ise surtunmeyle durduktan
+        sonra isil calkantiyla dolasir ve EN YAKIN zarfla karsilasir
+        (`yakin_yedek`): yayinim tasiyicisi (180 derece, ~10 px) icin
+        surusun yonu neredeyse anlamsizdir - temas ettigi hucre neyse odur.
+        Olculdu: yayinan molekullerin ucte biri bitisik C dururken 40 px
+        otedeki B'nin listesine yaziliyordu.
+        """
+        en_yakin, en_t = None, None
+        yakin, yakin_d = None, None
+        for t in (komsu if komsu else [varsayilan]):
+            if t is self or t is None or getattr(t, 'dead', False):
+                continue
+            R = float(t.radius)
+            f = cikis - t.pos
+            if yakin_yedek:
+                d_kenar = f.length() - R
+                if yakin_d is None or d_kenar < yakin_d:
+                    yakin, yakin_d = t, d_kenar
+            b = f.dot(yon)
+            c2 = f.length_squared() - R * R
+            if c2 <= 0.0:
+                t0 = 0.0                       # cikis zaten bu zarfin icinde
+            else:
+                disk = b * b - c2
+                if disk < 0.0:
+                    continue                   # isin bu daireyi kesmiyor
+                t0 = -b - math.sqrt(disk)
+                if t0 < 0.0 or t0 > azami:
+                    continue                   # arkada ya da menzil disinda
+            if en_t is None or t0 < en_t:
+                en_yakin, en_t = t, t0
+        if en_yakin is not None:
+            return en_yakin
+        if yakin_yedek and yakin is not None:
+            return yakin
+        return varsayilan
 
     def _igne_atisi(self, hedef, organ, lg, komsu=None):
         """Igneli silah atesledi: GERCEK bir lab.Shot yola cikar.
@@ -1916,27 +1972,7 @@ class Organism(Entity):
             _azami = LAB_BOY.get(ci, 66.0) * _birim * 1.15
         else:
             _azami = _lab.CARRIER_REACH[ci] * _birim
-        _en_yakin, _en_t = None, None
-        for _t in (komsu if komsu else [hedef]):
-            if _t is self or getattr(_t, 'dead', False):
-                continue
-            _R = float(_t.radius)
-            _f = namlu - _t.pos
-            _b = _f.dot(yon)
-            _c2 = _f.length_squared() - _R * _R
-            if _c2 <= 0.0:
-                _t0 = 0.0                      # namlu zaten bu zarfin icinde
-            else:
-                _disk = _b * _b - _c2
-                if _disk < 0.0:
-                    continue                   # isin bu daireyi kesmiyor
-                _t0 = -_b - math.sqrt(_disk)
-                if _t0 < 0.0 or _t0 > _azami:
-                    continue                   # arkada ya da menzil disinda
-            if _en_t is None or _t0 < _en_t:
-                _en_yakin, _en_t = _t, _t0
-        if _en_yakin is not None and _en_yakin is not hedef:
-            hedef = _en_yakin                  # yolda duran, hedeften once
+        hedef = self._yoldaki_ilk(namlu, yon, _azami, komsu, hedef)
         # YUK: ureticiden, stoktan. Tasiyici en fazla CARRIER_EMIT molekul
         # tasir; stokta daha azi varsa O KADARI gider. Once ya hepsi ya
         # hicbiriydi: stok 11 iken igne BOS gidiyor, 11 molekul kesede
@@ -2020,6 +2056,8 @@ class Organism(Entity):
         shot.azami_uzunluk = _azami
         # Yakalayici ucun dokuda kalabilecegi sure: ipligin ozelligi.
         shot.tutma_suresi = float(game_settings.NEMATOCYST_TETHER_TIME)
+        # Yukun alleli mermiyle gider; biraktigi molekuller onu tasir.
+        shot.allel = getattr(ur, 'allel', None) if pi > 0 else None
         # ORGANIN TEK BASLIGI YOLA CIKTI: geri donene kadar ikincisi yok.
         organ.baslik_gonder(shot)
         # KOK ORGANDA DURUR. T6SS tupu ve stilet govdeye BAGLI yapilardir,
@@ -2083,6 +2121,7 @@ class Organism(Entity):
             _boyu_asti(True)
             if sh.released:
                 for m in sh.released:
+                    m.allel = getattr(sh, 'allel', None)
                     self.molekul_ekle(m)
                 sh.released = []
             # TUTAN IPLIK. Uc tutundugu surece av tutulur; sure sayaci
@@ -2171,7 +2210,7 @@ class Organism(Entity):
             killed.append(hedef)
             self.release_binding()
 
-    def _molekul_birak(self, hedef, lg, dt, namlu=None):
+    def _molekul_birak(self, hedef, lg, dt, namlu=None, komsu=None):
         """Hedefin zarfina molekul sal. Birakildiysa True.
 
         Salim hizi silahin atis temposuna baglidir; her karede bir avuc
@@ -2220,12 +2259,28 @@ class Organism(Entity):
         # en fazla alti tane ciziliyor ama stoktan n tanesi dusuluyordu;
         # fark hicbir yerde olmayan, yoktan harcanmis maddeydi. Cikan
         # sey uretilen seydir - eksigi de fazlasi da yok.
+        # MOLEKUL DE YOLUNDAKI ILK ZARFA CARPAR. Molekul hedefin listesinde
+        # yasar ve yalnizca onun zarfini gorur; B'ye fiskirtilan toksin
+        # arada duran C'nin icinden geciyordu - igneyle ayni hata. Her
+        # molekul kendi dogrultusunda taranir; menzili surtunmeyle
+        # durdugu mesafedir (v0 / _DRAG_K). Bagisik hucreye varan molekul
+        # orada etkisiz kalir (HedefZarf.bagisik_mi) - atis aninda
+        # elenmek yerine.
+        _allel = getattr(lg, 'allel', None)
         for _ in range(n):
             a = taban + random.uniform(-yari, yari)
             hiz = v0 * random.uniform(0.8, 1.2)
-            v = pygame.math.Vector2(math.cos(a), math.sin(a)) * hiz
-            m = _lab.Molecule(zarf, pygame.math.Vector2(cikis), v, pi)
-            hedef.molekul_ekle(m)
+            _yon = pygame.math.Vector2(math.cos(a), math.sin(a))
+            _kime = self._yoldaki_ilk(cikis, _yon, hiz / _lab._DRAG_K, komsu, hedef, True)
+            if _kime is hedef:
+                _z = zarf
+            else:
+                _z = _kime.zarf_arayuzu()
+                _z.neden = zarf.neden
+                _z.sahip = self
+            m = _lab.Molecule(_z, pygame.math.Vector2(cikis), _yon * hiz, pi)
+            m.allel = _allel
+            _kime.molekul_ekle(m)
         return True
 
     def sindirim_keseleri(self):
