@@ -1574,6 +1574,13 @@ class Organism(Entity):
         killed = []
         if self.dead or self.stun_timer > 0:
             return killed
+        # FIZIK ICIN HAM KOMSU LISTESI. Davranis yalnizca hedef alinanlara
+        # ates ettirir ama mermi yolunda kim varsa ona carpar - hedef
+        # olmayan bir hucre de. Isin taramasi (bkz. _igne_atisi) bu
+        # listeyi kullanir; filtrelenmis liste ona dar gelir. Ornege
+        # YAZILMAZ, parametre olarak gecer: bolunme deepcopy ile calisir
+        # ve komsu referanslari butun populasyonu kopyalatirdi.
+        komsu_ham = candidates
         # Davranış tablosu "saldır" demediyse silah kullanılmaz.
         # Bu olmadan hücreler menzildeki HERKESE ateş edip kendi türünü
         # yok ediyordu (ölçüldü: nematosistli optropiler birbirini kırdı).
@@ -1707,7 +1714,7 @@ class Organism(Entity):
                 organ.atis_isaretle(pygame.math.Vector2(t.pos))
                 # Her batista secili yuk iceri gider (varsa). Stiletin asil
                 # isi ise asagida: EMMEK.
-                self._igne_atisi(t, organ, lg)
+                self._igne_atisi(t, organ, lg, komsu_ham)
                 if t.dead:
                     self.release_binding()
                     killed.append(t)
@@ -1723,7 +1730,7 @@ class Organism(Entity):
                 # DELMEK OLDURMEZ - delik kapanir. Olduren, varsa YUKTUR:
                 # igne secili yuku sitoplazmaya birakir, dozu esikler
                 # yargilar (lab.PAYLOAD_THRESHOLD). Zirh teslimati kisar.
-                self._igne_atisi(t, organ, lg)
+                self._igne_atisi(t, organ, lg, komsu_ham)
                 # Nematosist ipi artik LAB FIZIGINDEN gelir: yalnizca
                 # VOLVENT tipi (Shot._enter -> cell.tethered) ava sarilir,
                 # glutinant yapistirir, izoriza ceker, penetrant deler.
@@ -1867,7 +1874,7 @@ class Organism(Entity):
             return lg
         return None
 
-    def _igne_atisi(self, hedef, organ, lg):
+    def _igne_atisi(self, hedef, organ, lg, komsu=None):
         """Igneli silah atesledi: GERCEK bir lab.Shot yola cikar.
 
         Laboratuvarda kurulan sistem oldugu gibi calisir - fizik ikinci
@@ -1893,6 +1900,43 @@ class Organism(Entity):
         if not (0 <= ci < len(_lab.CARRIERS)):
             return None
         mi = mi if 0 <= mi < len(_lab.MARKERS) else 0
+        # ---- ISIN TARAMASI: mermi YOLUNDAKI ILK ZARFA carpar ----
+        #
+        # Mermi hedefin listesinde yasar ve yalnizca o hedefin zarfini
+        # gorur. Davranis B'yi hedef aldiginda, isin uzerinde duran C'nin
+        # icinden hicbir sey olmamis gibi gecip gidiyordu (olculdu:
+        # C'nin merkezine 6 px yaklasip B'ye vardi). Bir cisim yolunda
+        # kim varsa ona carpar; hedef secimi davranisin, carpma fizigin.
+        namlu = organ.get_absolute_position(self.pos, self.direction, self.radius)
+        _a = organ.aim_angle(self)
+        yon = pygame.math.Vector2(math.cos(_a), math.sin(_a))
+        _birim = float(self.radius) / 110.0 * float(getattr(lg, 'power', 1.0))
+        if ci in (3, 4):
+            from organs.peripheral.weapons.view_weapons import LAB_BOY
+            _azami = LAB_BOY.get(ci, 66.0) * _birim * 1.15
+        else:
+            _azami = _lab.CARRIER_REACH[ci] * _birim
+        _en_yakin, _en_t = None, None
+        for _t in (komsu if komsu else [hedef]):
+            if _t is self or getattr(_t, 'dead', False):
+                continue
+            _R = float(_t.radius)
+            _f = namlu - _t.pos
+            _b = _f.dot(yon)
+            _c2 = _f.length_squared() - _R * _R
+            if _c2 <= 0.0:
+                _t0 = 0.0                      # namlu zaten bu zarfin icinde
+            else:
+                _disk = _b * _b - _c2
+                if _disk < 0.0:
+                    continue                   # isin bu daireyi kesmiyor
+                _t0 = -_b - math.sqrt(_disk)
+                if _t0 < 0.0 or _t0 > _azami:
+                    continue                   # arkada ya da menzil disinda
+            if _en_t is None or _t0 < _en_t:
+                _en_yakin, _en_t = _t, _t0
+        if _en_yakin is not None and _en_yakin is not hedef:
+            hedef = _en_yakin                  # yolda duran, hedeften once
         # YUK: ureticiden, stoktan. Tasiyici en fazla CARRIER_EMIT molekul
         # tasir; stokta daha azi varsa O KADARI gider. Once ya hepsi ya
         # hicbiriydi: stok 11 iken igne BOS gidiyor, 11 molekul kesede
@@ -1917,15 +1961,13 @@ class Organism(Entity):
         zarf = hedef.zarf_arayuzu()
         zarf.neden = ad
         zarf.sahip = self
-        namlu = organ.get_absolute_position(self.pos, self.direction, self.radius)
+        # (namlu ve yon yukarida, isin taramasindan once hesaplandi)
         # MERMI ORGANIN BAKIS YONUNDE UCAR - hedefin merkezine "nisanlanmaz".
         # Laboratuvarda igne saldirganin bakis yonunde gider; carpma acisi
         # geometriden dogar (merkeze denk gelirse dik, kenara denk gelirse
         # egik) ve sekme buna baglidir: kaygan mukus egik gelen igneyi
         # savurur. Merkeze nisanlaninca her atis 0 derece geliyor,
         # surtunme konisi hic calismiyordu - mukus bos bir katmandi.
-        _a = organ.aim_angle(self)
-        yon = pygame.math.Vector2(math.cos(_a), math.sin(_a))
         # IGNE UCU HEDEFIN ZARFININ DISINDAN BASLAR. Temas halindeki
         # hucrelerde namlu zarfin icinde kalabiliyor (zarf dis yaricapi
         # temas yaricapindan buyuk) ve lab.Shot disaridan girmeyi bekler
@@ -1975,12 +2017,7 @@ class Organism(Entity):
         # uzatir. Uc bu boydan uzaga gidemez: ya geri ceker (tup) ya
         # kopar (iplik). Eskiden sekip iskalayan bir stilet 130 px
         # uzaga ucup gidiyordu - govdeye bagli bir yapi icin imkansiz.
-        _birim = float(self.radius) / 110.0 * float(getattr(lg, 'power', 1.0))
-        if ci in (3, 4):
-            from organs.peripheral.weapons.view_weapons import LAB_BOY
-            shot.azami_uzunluk = LAB_BOY.get(ci, 66.0) * _birim * 1.15
-        else:
-            shot.azami_uzunluk = _lab.CARRIER_REACH[ci] * _birim
+        shot.azami_uzunluk = _azami
         # Yakalayici ucun dokuda kalabilecegi sure: ipligin ozelligi.
         shot.tutma_suresi = float(game_settings.NEMATOCYST_TETHER_TIME)
         # ORGANIN TEK BASLIGI YOLA CIKTI: geri donene kadar ikincisi yok.
@@ -2016,9 +2053,22 @@ class Organism(Entity):
             # BOY SINIRI. Uc, organdan azami uzunluktan daha uzaga
             # gidemez: iplik kopar, tup geri ceker. Saldirgan uzaklasirsa
             # da ayni sey olur - ip gerilir ve kopar.
+            #
+            # Denetim guncellemeden ONCE ve SONRA yapilir. Yalnizca once
+            # bakilinca uc son adimda (karede ~2 px) siniri gecip bir kare
+            # boyunca sinirin otesinde yasiyordu (olculdu: 17.4 px, sinir
+            # 15.5). Sonra bakildiginda uc azami boya KIRPILIR: iplik
+            # gerildigi yerde durur, otesine gecemez.
             _azami = getattr(sh, 'azami_uzunluk', None)
-            if (_azami is not None and not sh.dead
-                    and (sh.pos - sh.origin).length() > _azami):
+
+            def _boyu_asti(_kirp):
+                if _azami is None or sh.dead:
+                    return False
+                _v = sh.pos - sh.origin
+                if _v.length() <= _azami:
+                    return False
+                if _kirp and _v.length() > 1e-6:
+                    sh.pos = sh.origin + _v.normalize() * _azami
                 sh.dead = True
                 sh.koptu = True
                 sh.feeding = False
@@ -2026,7 +2076,11 @@ class Organism(Entity):
                     zarf.feeder = None
                 if getattr(zarf, 'pulling', None) is sh:
                     zarf.pulling = None
+                return True
+
+            _boyu_asti(False)
             sh.update(dt)
+            _boyu_asti(True)
             if sh.released:
                 for m in sh.released:
                     self.molekul_ekle(m)
