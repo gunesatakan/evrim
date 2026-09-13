@@ -261,6 +261,10 @@ DEFAULT_SETTINGS = {
     "IP_DAYANIM_STILET": 1500.0,
     # Emilen sitoplazmanin saniyede yeniden yapilan orani (0..1).
     "EMILEN_TOPARLANMA": 0.02,
+    # T6SS: kasilan kilifin sokulup yenisinin kurulma suresi (sn) ve
+    # firlatilan Hcp tupunun hedefte cozunme suresi (sn).
+    "T6SS_KILIF_KURULUM": 1.5,
+    "T6SS_ENKAZ_OMRU": 0.6,
     # Surekli bakim gideri (karar: savunma gelistirmeleri surekli enerji yakar)
     "COST_WALL": 0.25, "COST_OUTER": 0.15, "COST_CAPSULE": 0.20,
     "COST_EFFLUX": 0.10, "COST_REPAIR": 0.15, "COST_SLIP": 0.15,

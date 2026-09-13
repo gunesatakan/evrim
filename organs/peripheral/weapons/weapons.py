@@ -199,12 +199,16 @@ class BaseWeapon(BaseOrgan):
             # gibi gosteriyordu.
             draw_weapon_socket(
                 screen, pos, outward, length, olcek=k,
-                carrier=int(ci), recoil=0.0,
-                activity=max(0.0, self._atis_sure / self.ATIS_GORUNME),
-                owner_color=getattr(parent, 'color', None))
+                carrier=int(ci), recoil=0.0)
             return
+        # KURULUM ORANI: organ gercek durumuyla cizilir. Bosalmis kapsul ya
+        # da kasilmis kilif, yeniden kurulana kadar dolu gorunmez.
+        _bek = float(getattr(self.logic, 'cooldown', 0.0) or 0.0)
+        kurulum = 1.0 if _bek <= 0.0 else max(
+            0.0, min(1.0, 1.0 - float(self.logic.cooldown_timer) / _bek))
         draw_weapon(screen, ad, pos, outward, length,
                     self.logic.ready, self.last_target_pos, olcek=k,
+                    kurulum=kurulum,
                     carrier=int(ci), marker=int(getattr(self.logic, 'marker', 0)),
                     recoil=float(getattr(self, 'geri_tepme', 0.0)),
                     merkez=parent.pos,

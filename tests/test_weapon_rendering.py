@@ -126,39 +126,70 @@ class WeaponRenderingTests(unittest.TestCase):
             self.assertAlmostEqual(carrier_scale(radius * 4, 1000, 3),
                                    4 * carrier_scale(radius, 1000, 3))
 
-    def test_harpoon_detaches_instead_of_bending_sideways(self):
-        owner = _WeaponOwner()
-        owner.dead = False
-        owner.color = (255, 100, 30)
-        organ = Harpoon()
-        shot = lab.Shot(_Cell(), pygame.Vector2(55, 20), pygame.Vector2(1, 0),
-                        lab.CARRIERS[3], lab.PAYLOADS[0], lab.MARKERS[0], 3,
-                        source_scale=0.2)
-        shot.sahip, shot.organ = owner, organ
-        owner.direction = pygame.Vector2(0, 1)
-        shot.update(0.01)
-        self.assertEqual(shot.t6_phase, 'retracting')
-        shot.update(0.2)
-        self.assertTrue(shot.dead)
-        self.assertEqual(shot.pos, shot.attachment_origin())
+    def _t6ss_sahnesi(self, hedef_y=0.0):
+        import math
+        import random
+        from systems.world import Dunya
+        from organs.registry import organ_class
+        random.seed(1)
+        dunya = Dunya()
+        saldirgan, hedef = dunya.hucreler[:2]
+        organ = organ_class('Harpoon')()
+        organ.attachment_angle = 0.0
+        saldirgan.add_organ(organ)
+        uretici = organ_class('Toxin')()
+        uretici.logic.payload = 6
+        uretici.logic.stok = float(lab.STOCK_MAX)
+        uretici.attachment_angle = math.pi
+        saldirgan.add_organ(uretici)
+        saldirgan.recalculate_physics()
+        saldirgan.direction.update(1, 0)
+        saldirgan.pos.update(600, 400)
+        hedef.pos.update(600 + saldirgan.radius + hedef.radius + 2.0, 400 + hedef_y)
+        for hucre in (saldirgan, hedef):
+            hucre.onceki_pos = pygame.Vector2(hucre.pos)
+            hucre.energy = 900.0
+            hucre.molekuller = []
+        saldirgan.attack_targets = {id(hedef)}
+        return saldirgan, hedef, organ
 
-    def test_injection_is_timed_and_never_duplicates_payload(self):
-        cell = _Cell()
-        cell.motion = pygame.Vector2()
-        shot = lab.Shot(cell, pygame.Vector2(90, 100), pygame.Vector2(1, 0),
-                        lab.CARRIERS[3], lab.PAYLOADS[1], lab.MARKERS[0], 3,
-                        source_scale=0.2)
-        shot.t6_phase = 'injecting'
-        shot.injection_total = 12
-        with patch.object(shot, '_release_payload') as release:
-            for _ in range(28):
-                shot.update(0.01)
-            self.assertEqual(sum(c.args[0] for c in release.call_args_list), 12)
-            self.assertEqual(shot.t6_phase, 'retracting')
-            shot.update(0.2)
-            shot.update(0.2)
-            self.assertEqual(sum(c.args[0] for c in release.call_args_list), 12)
+    def test_t6ss_contracts_in_one_frame_and_tube_is_not_retracted(self):
+        saldirgan, hedef, organ = self._t6ss_sahnesi()
+        saldirgan.fire_weapons(1 / 30.0, [hedef])
+        # Kilif tek karede kasildi: tup organdan ayrildi, kilif yeniden kuruluyor.
+        self.assertIsNone(organ.mermi)
+        self.assertFalse(organ.logic.ready)
+        self.assertGreaterEqual(organ.logic.cooldown, 1.0)
+        birakilan = len(hedef.molekuller)
+        enkaz = getattr(organ, 'enkaz', None)
+        if birakilan:
+            self.assertIsNotNone(enkaz)
+            self.assertFalse(hasattr(enkaz, 't6_phase'))
+        for _ in range(30):
+            saldirgan.mermileri_guncelle(1 / 30.0)
+        # Yuk bir kez birakilir; enkaz cozunur ve kaybolur.
+        self.assertEqual(len(hedef.molekuller) - birakilan, 0)
+        self.assertIsNone(getattr(organ, 'enkaz', None))
 
+    def test_t6ss_fires_only_when_its_axis_reaches_the_target(self):
+        saldirgan, hedef, organ = self._t6ss_sahnesi(hedef_y=46.0)
+        for _ in range(3):
+            saldirgan.fire_weapons(1 / 30.0, [hedef])
+        self.assertTrue(organ.logic.ready)
+        self.assertIsNone(getattr(organ, 'enkaz', None))
+
+    def test_t6ss_sheath_drawing_follows_rebuild(self):
+        from organs.peripheral.weapons.view_weapons import draw_weapon
+        yuzey = pygame.Surface((320, 240))
+        cagri = {}
+        for kurulum in (0.1, 0.6, 1.0):
+            with patch("pygame.draw.polygon") as poligon, patch("pygame.draw.line") as cizgi:
+                draw_weapon(yuzey, "Harpoon", pygame.Vector2(160, 120), pygame.Vector2(1, 0),
+                            20.0, True, olcek=1.0, carrier=3, kurulum=kurulum)
+            cagri[kurulum] = (poligon.call_count, cizgi.call_count)
+        # Mizrak ucu (ucgen) ve ic tup yalnizca kilif tamamlaninca cizilir.
+        self.assertGreater(cagri[1.0][0], cagri[0.6][0])
+        self.assertGreater(cagri[1.0][1], cagri[0.6][1])
 
 if __name__ == "__main__":
     unittest.main()

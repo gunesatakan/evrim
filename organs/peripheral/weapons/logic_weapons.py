@@ -276,6 +276,17 @@ class HarpoonLogic(WeaponLogic):
     """
     KEY = "HARPOON"; CHANNEL = 'mechanical'; CONTACT = True
 
+    @property
+    def cooldown(self):
+        """Bekleme bir sayac degil KILIFIN YENIDEN KURULUMUDUR.
+
+        Kasilan kilif ClpV ile sokulur, yenisi baseplate uzerinde halka
+        halka dizilir; ic tup ve mizrak ancak kilif tamamlaninca yerindedir.
+        HARPOON_COOLDOWN 0,3 sn idi - bir kilifi sokup yeniden kurmaya
+        yetmez. Kurulum suresi T6SS_KILIF_KURULUM'dan asagi inemez.
+        """
+        return max(float(self._s("COOLDOWN")), float(game_settings.T6SS_KILIF_KURULUM))
+
 
 class NematocystLogic(WeaponLogic):
     VARSAYILAN_TASIYICI = 5

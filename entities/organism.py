@@ -2122,8 +2122,21 @@ class Organism(Entity):
             kok = organ.get_absolute_position(self.pos, self.direction, self.radius)
             if shot.anlik_bosalt(kok, _azami):
                 self._capa_kaydet(shot, hedef)
-                shot.ip = True
-                shot.ip_boy = max(1.0, self._ip_geometrisi(shot)[0])
+                if ci == 3:
+                    # T6SS: KILIF KASILIR, TUP FIRLATILIR. Tup geri cekilmez;
+                    # Hcp tupu ve mizrak hedefin icinde kalip cozunur. Once
+                    # tup 0,28 sn enjekte edip 0,18 sn geri cekiliyordu ve
+                    # hucreler dondukce "rijit baglanti" kopup 122 atista tek
+                    # enjeksiyon olmuyordu. Kasilan kilif saldirganda kalir
+                    # ve ancak sokulup yeniden kurulunca organ yeniden atar.
+                    shot.enkaz = True
+                    shot.enkaz_t = 0.0
+                    shot.enkaz_omru = float(game_settings.T6SS_ENKAZ_OMRU)
+                    shot.enkaz_yon = (math.atan2(yon.y, yon.x)
+                                      - math.atan2(hedef.direction.y, hedef.direction.x))
+                else:
+                    shot.ip = True
+                    shot.ip_boy = max(1.0, self._ip_geometrisi(shot)[0])
             else:
                 shot.dead = True
             if shot.released:
@@ -2131,154 +2144,50 @@ class Organism(Entity):
                     m.allel = shot.allel
                     hedef.molekul_ekle(m)
                 shot.released = []
-            if shot.dead:
+            if shot.dead or getattr(shot, 'enkaz', False):
                 self._mermi_bitti(shot, hedef)
                 if organ.mermi is shot:
                     organ.baslik_geri()
+                if getattr(shot, 'enkaz', False) and not shot.dead:
+                    organ.enkaz = shot
         return shot
-
-    def atislari_guncelle(self, dt):
-        """Bana atilmis mermileri ilerlet; biraktiklari yuku zarfima al."""
-        if not self.atislar:
-            return
-        try:
-            from lab import VOLVENT as _lab_VOLVENT
-        except Exception:
-            _lab_VOLVENT = 6
-        kalan = []
-        zarf = self.zarf_arayuzu()
-        for sh in self.atislar:
-            # KOKU TAZELE: silah govdeye bagli, saldirgan hareket ediyor.
-            _org = getattr(sh, 'organ', None)
-            _sahip = getattr(sh, 'sahip', None)
-            if (_org is not None and _sahip is not None
-                    and not getattr(_sahip, 'dead', False)):
-                _yenile = getattr(sh, 'refresh_origin', None)
-                if callable(_yenile):
-                    _yenile()
-                else:
-                    sh.origin = _org.get_absolute_position(
-                        _sahip.pos, _sahip.direction, _sahip.radius)
-            # BOY SINIRI. Uc, organdan azami uzunluktan daha uzaga
-            # gidemez: iplik kopar, tup geri ceker. Saldirgan uzaklasirsa
-            # da ayni sey olur - ip gerilir ve kopar.
-            #
-            # Denetim guncellemeden ONCE ve SONRA yapilir. Yalnizca once
-            # bakilinca uc son adimda (karede ~2 px) siniri gecip bir kare
-            # boyunca sinirin otesinde yasiyordu (olculdu: 17.4 px, sinir
-            # 15.5). Sonra bakildiginda uc azami boya KIRPILIR: iplik
-            # gerildigi yerde durur, otesine gecemez.
-            _azami = getattr(sh, 'azami_uzunluk', None)
-
-            def _boyu_asti(_kirp):
-                if _azami is None or sh.dead:
-                    return False
-                _v = sh.pos - sh.origin
-                if _v.length() <= _azami:
-                    return False
-                if _kirp and _v.length() > 1e-6:
-                    sh.pos = sh.origin + _v.normalize() * _azami
-                if sh.ci == 3 and hasattr(sh, '_start_retraction'):
-                    if _v.length_squared() > 1e-12:
-                        sh.pos = sh.origin + _v.normalize() * _azami
-                    sh._pending = False
-                    sh.miss_reason = sh.miss_reason or 'rijit tup erisimi asildi'
-                    if sh.t6_phase != 'complete':
-                        sh._start_retraction()
-                    return True
-                sh.dead = True
-                sh.koptu = True
-                sh.feeding = False
-                if getattr(zarf, 'feeder', None) is sh:
-                    zarf.feeder = None
-                if getattr(zarf, 'pulling', None) is sh:
-                    zarf.pulling = None
-                return True
-
-            _boyu_asti(False)
-            sh.update(dt)
-            _boyu_asti(True)
-            if sh.released:
-                for m in sh.released:
-                    m.allel = getattr(sh, 'allel', None)
-                    self.molekul_ekle(m)
-                sh.released = []
-            # TUTAN IPLIK. Uc tutundugu surece av tutulur; sure sayaci
-            # degil, ipligin varligi tutar. Av her karede kurtulmayi dener
-            # (kayganlik/kapsul direnci - tutunmayla ayni fizik); kurtulursa
-            # iplik siyrilir ve mermi biter.
-            if getattr(sh, 'holding', False) and not sh.dead:
-                atk = getattr(sh, 'sahip', None)
-                if atk is None or atk.dead:
-                    sh.holding = False; sh.dead = True
-                else:
-                    if sh.ci == _lab_VOLVENT:
-                        self.tether_timer = max(self.tether_timer, 2.0 * dt + 1e-3)
-                        self.tether_from = atk
-                    res = self.binding_resistance
-                    rate = game_settings.BIND_BREAK_RATE * res / (1.0 + res)
-                    if rate > 0 and random.random() < 1.0 - math.exp(-rate * dt):
-                        sh.holding = False; sh.dead = True
-                        sh.miss_reason = 'av kurtuldu'
-                        if zarf.pulling is sh:
-                            zarf.pulling = None
-            # IZORIZA: avlanma degil hareket - saldirgan kendini ceker.
-            if zarf.pulling is sh:
-                atk = getattr(sh, 'sahip', None)
-                if atk is None or atk.dead:
-                    zarf.pulling = None
-                else:
-                    fark = self.pos - atk.pos
-                    d = fark.length()
-                    hedef_d = self.radius + atk.radius + 2.0
-                    if d > hedef_d + 1.0:
-                        adim = min(game_settings.IZORIZA_HIZ * dt, d - hedef_d)
-                        atk.pos += fark.normalize() * adim
-                    else:
-                        # Temas kuruldu: kancanin isi bitti, birakir.
-                        zarf.pulling = None
-                        sh.holding = False
-                        sh.dead = True
-            # Emen stilet (mizositoz) bag surdukce yerinde kalir.
-            if sh.feeding:
-                atk = getattr(sh, 'sahip', None)
-                if atk is None or atk.dead or atk.bound_target is not self:
-                    sh.feeding = False
-                    sh.dead = True
-            if sh.dead:
-                # BASLIK GERI DONDU. Organ ancak simdi yeniden kurulmaya
-                # baslar (bkz. BaseWeapon.baslik_geri).
-                sh.bitti = True
-                sh.olum_t = getattr(sh, 'olum_t', 0.0) + dt
-                if sh.olum_t > 0.35 and not sh.released:
-                    # Listeden dusen mermi zarfta bayat referans birakmasin:
-                    # izoriza cekmesi dusmus bir mermiye bagli kalip
-                    # sonsuza kadar "cekiliyor" gorunuyordu.
-                    if getattr(zarf, 'pulling', None) is sh:
-                        zarf.pulling = None
-                    if getattr(zarf, 'feeder', None) is sh:
-                        zarf.feeder = None
-                    continue            # cizim payi bitti
-            kalan.append(sh)
-        self.atislar = kalan
 
     # ---------------- MERMILER VE IPLER ORGANINDIR ----------------
 
-    #: Tek karede bosalan tasiyicilar (nematosist tipleri).
-    ANLIK_TASIYICI = (5, 6, 7, 8)
+    def atislari_guncelle(self, dt):
+        """Eski ad (hedef tarafi). Mermiler artik organindir: her hucre kendi
+        organlarinin mermilerini gunceller; eski cagiranlar icin yonlendirme."""
+        self.mermileri_guncelle(dt)
+
+    #: Tek karede bosalan tasiyicilar: T6SS kilifi (3) ve nematosist tipleri.
+    ANLIK_TASIYICI = (3, 5, 6, 7, 8)
 
     def mermilerim(self):
-        """Organlarimin su an disarida olan mermileri ve ipleri."""
+        """Organlarimin su an disarida olan mermileri, ipleri ve T6SS enkazi."""
         out = []
         for organ in getattr(self, 'organs', ()):
             sh = getattr(organ, 'mermi', None)
             if sh is not None and not getattr(sh, 'dead', False):
                 out.append(sh)
+            e = getattr(organ, 'enkaz', None)
+            if e is not None and not getattr(e, 'dead', False):
+                out.append(e)
         return out
 
     def mermileri_guncelle(self, dt):
         """Kendi organlarimin mermilerini ilerlet: sahibi benim."""
         for organ in getattr(self, 'organs', ()):
+            e = getattr(organ, 'enkaz', None)
+            if e is not None:
+                h = getattr(e, 'hedef', None)
+                e.enkaz_t += dt
+                if h is None or h.dead or e.enkaz_t >= e.enkaz_omru:
+                    e.dead = True
+                    organ.enkaz = None
+                else:
+                    e.pos = self._capa_dunya(e, h)
+                    a = math.atan2(h.direction.y, h.direction.x) + e.enkaz_yon
+                    e.dir = pygame.math.Vector2(math.cos(a), math.sin(a))
             sh = getattr(organ, 'mermi', None)
             if sh is None:
                 continue
@@ -2344,14 +2253,6 @@ class Organism(Entity):
                 return False
             if kirp and v.length() > 1e-6:
                 sh.pos = sh.origin + v.normalize() * _azami
-            if sh.ci == 3 and hasattr(sh, '_start_retraction'):
-                if v.length_squared() > 1e-12:
-                    sh.pos = sh.origin + v.normalize() * _azami
-                sh._pending = False
-                sh.miss_reason = sh.miss_reason or 'rijit tup erisimi asildi'
-                if sh.t6_phase != 'complete':
-                    sh._start_retraction()
-                return True
             sh.dead = True
             sh.koptu = True
             sh.feeding = False
@@ -2409,6 +2310,9 @@ class Organism(Entity):
             sh = getattr(organ, 'mermi', None)
             if sh is not None:
                 self._ipi_kopar(organ, sh, neden)
+            if getattr(organ, 'enkaz', None) is not None:
+                organ.enkaz.dead = True
+                organ.enkaz = None
 
     def _capa_kaydet(self, sh, hedef):
         """Ucun hedefe tutundugu yeri HEDEFIN KENDI CERCEVESINDE sakla.

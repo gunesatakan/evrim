@@ -799,14 +799,6 @@ class Shot:
         self.contact_point = None
         self.contact_normal = None
         self.impact_state = 'flying'
-        self.animation_age = 0.0
-        self.injection_age = 0.0
-        self.injection_duration = 0.28
-        self.injection_total = 0
-        self.injection_sent = 0
-        self.t6_phase = 'extending'
-        self.retract_age = 0.0
-        self.retract_length = 0.0
         self.trail = [pygame.math.Vector2(pos)]
         self.delivered = None
         self.miss_reason = None
@@ -1007,75 +999,12 @@ class Shot:
         self.origin = self.attachment_origin()
         return self.origin
 
-    def _start_retraction(self):
-        if self.t6_phase == 'retracting':
-            return
-        self.t6_phase = 'retracting'
-        self.retract_age = 0.0
-        self.retract_length = self.pos.distance_to(self.attachment_origin())
-        self.dead = False
-
-    def _rigid_axis(self):
-        owner = getattr(self, 'sahip', None)
-        organ = getattr(self, 'organ', None)
-        if owner is not None and organ is not None and not owner.dead:
-            a = organ.aim_angle(owner)
-            return pygame.math.Vector2(math.cos(a), math.sin(a))
-        return self.dir
-
     def update(self, dt):
         # Tek karede bosalmis bir mermi laboratuvar ucusu yasamaz: oyunda
         # onu sahibi olan organ tasir (ip, capa; bkz. Organism).
         if getattr(self, 'anlik', False):
             return
-        self.animation_age += dt
-        if self.ci != 3:
-            return self._update_physics(dt)
-        axis = self._rigid_axis()
-        root = self.attachment_origin()
-        if (getattr(getattr(self, 'sahip', None), 'dead', False)
-                and self.t6_phase not in ('retracting', 'complete')):
-            self._pending = False
-            self._start_retraction()
-        if self.t6_phase == 'retracting':
-            self.retract_age += dt
-            fraction = max(0.0, 1.0 - self.retract_age / 0.18)
-            self.pos = root + axis * self.retract_length * fraction
-            if fraction == 0:
-                self.dead = True
-                self.t6_phase = 'complete'
-            return
-        if self.t6_phase == 'complete':
-            return
-        offset = self.pos - root
-        # A rigid tube cannot follow a rotating cell like a rope. Stop delivery
-        # when the live socket and contact cease to align.
-        lateral = abs(offset.cross(axis))
-        if (getattr(self, 'organ', None) is not None and
-                (offset.dot(axis) < -2 * self.vs or lateral > max(0.5, 5 * self.vs))):
-            self.miss_reason = 'rijit baglanti ayrildi'
-            self._pending = False
-            self._start_retraction()
-            return
-        if self.t6_phase == 'injecting':
-            self.pos += self.cell.motion
-            if abs((self.pos - root).cross(axis)) > max(0.5, 5 * self.vs):
-                self._start_retraction()
-                return
-            self.injection_age = min(self.injection_duration, self.injection_age + dt)
-            due = int(self.injection_total * self.injection_age / self.injection_duration + 1e-9)
-            self._release_payload(due - self.injection_sent)
-            self.injection_sent = due
-            if self.injection_age >= self.injection_duration:
-                self._start_retraction()
-            return
         self._update_physics(dt)
-        if self.dead:
-            if self.injection_total > self.injection_sent and not self.glanced:
-                self.t6_phase = 'injecting'
-                self.dead = False
-            else:
-                self._start_retraction()
 
     def _update_physics(self, dt):
         # Koku fizik hesabindan once guncellenir; ates eden hucre hareket
@@ -1347,9 +1276,6 @@ class Shot:
             return
         self._pending = False
         count = int(getattr(self, 'yuk_sayisi', CARRIER_EMIT[self.ci]))
-        if self.ci == 3:
-            self.injection_total = count
-            return
         self._release_payload(count)
 
     def _release_payload(self, count):
@@ -1395,6 +1321,27 @@ class Shot:
         gore: penetrant avin icindeki dikenli uc, volvent ava sarilmis
         halkalar, glutinant yapiskan damla, izoriza kanca.
         """
+        if self.ci == 3:
+            # T6SS ENKAZI: kasilan kilifin firlattigi Hcp tupu ve VgrG/PAAR
+            # mizragi hedefin icinde kalir ve proteazlarla cozunur. Geri
+            # cekilmez; kilif saldirganda kalir (organ onu cizer).
+            if not getattr(self, 'enkaz', False):
+                return
+            omur = max(1e-6, float(getattr(self, 'enkaz_omru', 0.6)))
+            kalan = max(0.0, 1.0 - float(getattr(self, 'enkaz_t', 0.0)) / omur)
+            u = pygame.math.Vector2(self.dir)
+            if u.length_squared() < 1e-9:
+                return
+            u = u.normalize()
+            n = pygame.math.Vector2(-u.y, u.x)
+            boy = 12.0 * sv * kalan
+            if boy > 0.2:
+                pygame.draw.line(s, (140, 158, 175), T(self.pos - u * boy), T(self.pos), L(3))
+            pygame.draw.polygon(s, (215, 220, 225), [
+                T(self.pos + u * (4.0 * sv * kalan)),
+                T(self.pos - u * (2.0 * sv) + n * (2.5 * sv * kalan)),
+                T(self.pos - u * (2.0 * sv) - n * (2.5 * sv * kalan))])
+            return
         yol = self.ip_noktalari or [root, self.pos]
         pts = [T(q) for q in yol]
         if self.ci == STYLET_INDEX:
@@ -1475,46 +1422,6 @@ class Shot:
         if getattr(self, 'anlik', False):
             if not dead:
                 self._anlik_ciz(s, T, L, sv, root)
-            return
-
-        if ci == 3:
-            # One rigid apparatus: attacking-cell socket -> contact -> real payload.
-            # All endpoints use the same world-to-screen transform.
-            o = T(root)
-            pygame.draw.line(s, (140, 175, 195), o, p, L(4))
-            pygame.draw.line(s, (65, 85, 100), o, p, L(1))
-            axis = self.pos - root
-            if axis.length_squared() > 1e-12:
-                axis = axis.normalize()
-            else:
-                axis = self._rigid_axis()
-            side = pygame.math.Vector2(-axis.y, axis.x)
-            pygame.draw.polygon(s, (220, 238, 245),
-                [p, T(self.pos - axis * 8 * sv + side * 3 * sv),
-                 T(self.pos - axis * 8 * sv - side * 3 * sv)])
-            owner = getattr(self, 'sahip', None)
-            owner_color = getattr(owner, 'color', (150, 220, 255))
-            pygame.draw.circle(s, owner_color, o, L(9), L(2))
-            if owner is not None and hasattr(owner, 'pos') and hasattr(owner, 'radius'):
-                # Highlight the firing patch of membrane in the owner's colour.
-                # Points are generated in world space, so camera zoom cannot move it.
-                aim = math.atan2(self._rigid_axis().y, self._rigid_axis().x)
-                arc = [T(owner.pos + pygame.math.Vector2(
-                    math.cos(aim - 0.35 + j * 0.7 / 12),
-                    math.sin(aim - 0.35 + j * 0.7 / 12)) * owner.radius)
-                    for j in range(13)]
-                pygame.draw.lines(s, owner_color, False, arc, L(4))
-            # Rear mounting collar identifies the producer even in a crowded pair.
-            rear = root - self._rigid_axis() * (18 * sv)
-            pygame.draw.line(s, owner_color, T(rear), o, L(6))
-            if self.t6_phase == 'injecting' and self.injection_total > 0:
-                progress = self.injection_age / self.injection_duration
-                for j in range(3):
-                    t = (progress * 2 + j / 3) % 1.0
-                    pygame.draw.circle(s, pcol, T(root.lerp(self.pos, t)), L(2))
-                pygame.draw.circle(s, pcol, p, L(5), L(1))
-            elif self.glanced:
-                self._draw_impact_marker(s, T, p, L)
             return
 
         # Serbest olmayan bir baslik artik organin tam boy kopyasi gibi
