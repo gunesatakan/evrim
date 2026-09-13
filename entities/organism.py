@@ -1886,6 +1886,8 @@ class Organism(Entity):
                         _z.sahip = self
                     m = _lab.Molecule(_z, p, _yon * hiz, pi)
                     m.allel = _allel
+                    # Molekul hedefin icinde DOGAMAZ; ortama, yuzeye cikar.
+                    m.ortama_birak()
                     m.depth = m.band()
                     _kime.molekul_ekle(m)
                     sacilan += 1
@@ -2501,6 +2503,9 @@ class Organism(Entity):
                 _z.sahip = self
             m = _lab.Molecule(_z, pygame.math.Vector2(cikis), _yon * hiz, pi)
             m.allel = _allel
+            # Organin ucu komsuya bastirilmis olabilir: salgi o hucrenin
+            # zarfinin icinde degil, degdigi yuzeyde dogar.
+            m.ortama_birak()
             _kime.molekul_ekle(m)
         return True
 
@@ -2537,11 +2542,13 @@ class Organism(Entity):
         return z
 
     def molekul_ekle(self, mol):
-        """Bu hucrenin zarfinda dolasan bir molekul."""
+        """Bu hucrenin zarfinda dolasan bir molekul. Eklendiyse True."""
         if not hasattr(self, 'molekuller'):
             self.molekuller = []
         if len(self.molekuller) < 240:      # ekran ve CPU icin ust sinir
             self.molekuller.append(mol)
+            return True
+        return False
 
     def molekulleri_guncelle(self, dt):
         """Molekul fizigi: lab.Molecule'un KENDI update'i calisir.
@@ -2550,14 +2557,17 @@ class Organism(Entity):
 
         TEMIZLENME MUHASEBESI. Liste once 12 saniyede kirpiliyordu, oysa
         BAGLI molekul lab.py'de 16 saniyede temizlenir (CLEARANCE).
-        Molekul o ana varamadan listeden dusuyor, dolayisiyla
-        `clear_one()` HIC cagrilmiyor ve zarftaki varis sayaci bir daha
-        asla azalmiyordu. Sonuc: toksin omur boyu birikiyordu - bir
+        Molekul o ana varamadan listeden dusuyor ve zarftaki varis sayaci
+        bir daha asla azalmiyordu. Sonuc: toksin omur boyu birikiyordu - bir
         saldiridan sag cikan hucre sayaci sonsuza dek tasiyor, aylar
         sonraki zayif bir sizinti onu bir sonraki kademeye ANINDA
         gecirebiliyordu. Oysa lab.py'nin kendi yorumu tersini soyluyor:
         "baglanan molekul sonsuza kadar orada durmaz - hucre onarir,
         pompalar disari atar".
+
+        Doz artik ayri bir sayac degil, zarfa BAGLI molekullerin sayisidir
+        (bkz. lab.HedefZarf.arrived); molekul hangi yoldan giderse dozu da
+        kendiliginden duser.
         """
         # FAGOZOMLAR: sitostomla yutulan molekuller keselerde sindirilir;
         # gozenek acici yuk keseyi delip sitoplazmaya kacar (Kese.update).
@@ -2570,7 +2580,6 @@ class Organism(Entity):
         if not mols:
             return
         import lab as _lab
-        zarf = self.zarf_arayuzu()
         # Her iki sure de sigsin: bagli molekul 16 sn'de, ucan molekul
         # 9 sn'de biter. Tavan yalnizca bir emniyet supabi.
         tavan = _lab.CLEARANCE + _lab.MOLECULE_LIFE
@@ -2589,10 +2598,10 @@ class Organism(Entity):
                 # onarimi bunlari da atar.
                 m.age += dt
             if m.age >= tavan:
-                # Yine de dusuruyorsak muhasebeyi ELDE kapatiriz;
-                # aksi halde sayac sizar.
-                if m.state == 'arrived':
-                    zarf.clear_one(m.pi)
+                # Yine de dusuruyorsak DURUMUNU da kapatiriz: doz bagli
+                # molekullerden sayilir, listeden sessizce dusen bagli bir
+                # molekul sonsuza dek sayilirdi.
+                m.state = 'cleared'
                 continue
             kalan.append(m)
         self.molekuller = kalan

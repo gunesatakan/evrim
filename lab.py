@@ -253,28 +253,281 @@ LAYER_ORDER = {'Mukus': 0.0, 'Kapsul': 0.18, 'S-layer': 1.0,
 MAX_SHEETS = 4
 BOUNCE_TRAP = 26          # bu kadar carpip gecemeyen molekul sikisti sayilir
 
+# LIF KALINLIGI (molekul capi biriminde). Jel ve duvar katmanlarindaki her
+# alt tabaka, polimer liflerinden (kapsul polisakkaridi, peptidoglikan
+# zinciri) olusan INCE ama KALINLIGI OLAN bir halkadir; delikler lifin
+# kesildigi yerlerdir. Once tabaka kalinliksiz bir cizgiydi ve yalnizca
+# molekulun MERKEZI o cizgiyle sinaniyordu: molekulun dairesi lifin icine
+# girebiliyor, ekranda da kalin bloklarin icinden geciyor gorunuyordu.
+# Simdi molekulun DAIRESI lifle carpisir ve cizilen lif bu liftir.
+LIF_KALINLIK = 0.3
+# Temas payi (gozenek biriminde): yuzeye degen molekul sayisal olarak lifin
+# icine dusmesin diye birakilan cok kucuk aralik.
+TEMAS_PAYI = 0.01
+# Yedek koruma kac kez devreye girdi? Fizik dogruysa HIC girmemeli;
+# degismez testi bunu denetler.
+KORUMA_TETIK = 0
+
+_IKI_PI = 2.0 * math.pi
+# Aci karsilastirmalarinda kayan nokta payi (radyan): deligin tam kenarina
+# oturan molekul, konumu bir kez daha hesaplaninca disarida kalmasin.
+_ACI_PAYI = 1e-9
+
+
+def _en_yakin_uzaklik(p, q):
+    """Orijinin p-q dogru parcasina en yakin mesafesi."""
+    d = q - p
+    L2 = d.length_squared()
+    if L2 < 1e-12:
+        return p.length()
+    t = max(0.0, min(1.0, -p.dot(d) / L2))
+    return (p + d * t).length()
+
 
 class Sheet:
-    """Bir katmanin kalinligi icindeki TEK bir gozenekli tabaka."""
+    """Bir katmanin kalinligi icindeki TEK bir tabaka - GERCEK KALINLIKTA.
 
-    __slots__ = ('r', 'pores', 'solid')
+    `r` tabakanin orta yaricapi, `h` yari kalinligi. Delikler tabakanin
+    kesildigi ACI araliklaridir; ust uste binen iki delik tek bir aciklik
+    olur (onceden her delik ayri sinaniyordu ve iki komsu deligin
+    birlesiminden gecebilecek molekul takiliyordu). Fizik molekulun
+    dairesini bu tabakayla carpistirir; cizim de ayni tabakanin KATI
+    parcalarini cizer. Ikisi tek bir nesneden okunur.
+    """
 
-    def __init__(self, r, pores, solid):
+    __slots__ = ('r', 'pores', 'solid', 'h', 'acik', 'tam_acik', '_bas')
+
+    def __init__(self, r, pores, solid, h=0.0):
         self.r = r
         self.pores = pores        # [(merkez_aci, genislik_px), ...]
         self.solid = solid        # delik yok - hicbir sey gecemez
+        self.h = h                # yari kalinlik (px)
+        self.acik = [] if solid else self._birlestir(r, pores)
+        self.tam_acik = (len(self.acik) == 1
+                         and self.acik[0][1] - self.acik[0][0] >= _IKI_PI - 1e-9)
+        self._bas = [a0 for a0, _a1 in self.acik]
+
+    @staticmethod
+    def _birlestir(r, pores):
+        """Delikleri birlesik, sirali aci araliklarina cevir: [(a0, a1)].
+
+        0 <= a0 < 2pi; yalnizca SON aralik 2pi'yi asabilir (sarma).
+        """
+        ar = []
+        for a, w in pores:
+            yari = (w * 0.5) / max(r, 1e-9)
+            if yari <= 0.0:
+                continue
+            if yari >= math.pi:
+                return [(0.0, _IKI_PI)]
+            a0 = (a - yari) % _IKI_PI
+            ar.append((a0, a0 + 2.0 * yari))
+        if not ar:
+            return []
+        ar.sort()
+        out = [ar[0]]
+        for a0, a1 in ar[1:]:
+            if a0 <= out[-1][1]:
+                if a1 > out[-1][1]:
+                    out[-1] = (out[-1][0], a1)
+            else:
+                out.append((a0, a1))
+        # Sarma: sondaki aralik 2pi'yi asip bastakileri ortuyorsa birlesir.
+        while len(out) > 1 and out[-1][1] - _IKI_PI >= out[0][0]:
+            ilk = out.pop(0)
+            son = out[-1]
+            out[-1] = (son[0], max(son[1], ilk[1] + _IKI_PI))
+        if out[-1][1] - out[0][0] >= _IKI_PI and len(out) == 1:
+            return [(0.0, _IKI_PI)]
+        return out
+
+    def pencere(self, ang, dia_px):
+        """Bu acidaki dairenin sigdigi aciklik: (alt, ust, aci) ya da None.
+
+        Dairenin merkezi acikligin kenarlarindan en az yaricapi kadar
+        icerde olmalidir. Donen `aci`, `ang` ile ayni yonu gosteren ama
+        pencereyle ayni sarmada yazilmis degerdir.
+        """
+        if self.tam_acik:
+            return (-math.inf, math.inf, ang)
+        if self.solid or not self.acik:
+            return None
+        m = dia_px * 0.5 / max(self.r, 1e-9)
+        x0 = ang % _IKI_PI
+        i = _bisect_right(self._bas, x0) - 1
+        son = len(self.acik) - 1
+        for j in ((i, son) if i != son else (i,)):
+            if j < 0:
+                continue
+            a0, a1 = self.acik[j]
+            for x in (x0, x0 + _IKI_PI):
+                if a0 + m - _ACI_PAYI <= x <= a1 - m + _ACI_PAYI:
+                    return (a0 + m, a1 - m, x)
+        return None
 
     def opening_for(self, ang, dia_px):
-        """Bu acida, bu capa yetecek bir delik var mi?"""
-        if self.solid:
-            return False
-        for a, w in self.pores:
-            if w < dia_px:
+        """Bu acida, bu capa yetecek bir aciklik var mi?"""
+        return self.pencere(ang, dia_px) is not None
+
+    def pencere_ara(self, t0, t1, dia_px):
+        """t0'dan t1'e kayan dairenin ILK sigdigi aci (yoksa None).
+
+        Kayma kareler arasinda da SUREKLIDIR: dar ama yeterli bir delik
+        iki ornek arasina dusse bile molekul onun uzerinden gecmistir.
+        """
+        if self.tam_acik:
+            return t0
+        if self.solid or not self.acik:
+            return None
+        m = dia_px * 0.5 / max(self.r, 1e-9)
+        ileri = t1 >= t0
+        alt, ust = (t0, t1) if ileri else (t1, t0)
+        taban = math.floor(alt / _IKI_PI) * _IKI_PI
+        en_iyi = None
+        for a0, a1 in self.acik:
+            w0, w1 = a0 + m, a1 - m
+            if w0 > w1:
                 continue
-            d = abs((ang - a + math.pi) % (2 * math.pi) - math.pi)
-            if d * self.r <= (w - dia_px) * 0.5:
-                return True
-        return False
+            for k in (-1, 0, 1):
+                s0 = w0 + taban + k * _IKI_PI
+                s1 = w1 + taban + k * _IKI_PI
+                if s1 < alt or s0 > ust:
+                    continue
+                # Kenarin tam uzerine degil, bir kil payi icine oturur.
+                ic = min(1e-6, (s1 - s0) * 0.5)
+                x = max(s0 + ic, alt) if ileri else min(s1 - ic, ust)
+                if not (s0 <= x <= s1):
+                    continue
+                if en_iyi is None or (x < en_iyi if ileri else x > en_iyi):
+                    en_iyi = x
+        return en_iyi
+
+    def kati_araliklar(self):
+        """Tabakanin KATI (lif) parcalari: acikliklarin tumleyeni."""
+        if self.tam_acik:
+            return []
+        if self.solid or not self.acik:
+            return [(0.0, _IKI_PI)]
+        out = []
+        n = len(self.acik)
+        for i in range(n):
+            bas = self.acik[i][1]
+            son = self.acik[i + 1][0] if i + 1 < n else self.acik[0][0] + _IKI_PI
+            if son > bas + 1e-9:
+                out.append((bas, son))
+        return out
+
+
+def _bisect_right(dizi, x):
+    lo, hi = 0, len(dizi)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if x < dizi[mid]:
+            hi = mid
+        else:
+            lo = mid + 1
+    return lo
+
+
+def katman_tabakalari(katmanlar, dis_r, ppu, pore_px):
+    """Aktif katmanlarin tabakalari, bant bant (disaridan ice).
+
+    Zarf (oyun) ve LabCell (laboratuvar) AYNI kurucuyu kullanir; delik
+    uretimi deterministiktir (katman adiyla tohumlanir).
+
+    Kalinlik:
+      - Lipit cift katmani (delik yok): bandin tamami katidir.
+      - Kristal katman (S-layer): protein orgusu katmanin kendisidir;
+        her tabaka kendi dilimini doldurur, delikler kanal olur.
+      - Jel ve duvar: tabaka LIF_KALINLIK kalinliginda bir lif halkasidir,
+        aradaki bosluk suyla dolu serbest alandir.
+    """
+    out = []
+    r = dis_r
+    lif_h = LIF_KALINLIK * pore_px * 0.5
+    for l in katmanlar:
+        inner = r - l.t * ppu
+        if l.mesh <= 0 or l.porosity <= 0:
+            out.append([Sheet((r + inner) * 0.5, [], True, (r - inner) * 0.5)])
+            r = inner
+            continue
+        pw = l.mesh * pore_px
+        order = LAYER_ORDER.get(l.name, 0.5)
+        # Ince delikli kalin katman COK TABAKALIDIR: molekul her
+        # tabakada ayri bir delik bulmak zorunda kalir.
+        #
+        # Kristal bir katman (S-layer) gercekte TEK bir tabakadir.
+        # Duzensiz bir JEL ise uc boyutlu bir agdir; tek 2B tabaka
+        # olarak cizince ekranda birkac dev bosluk gibi gorunuyordu.
+        # En az uc tabaka hem dokuyu bir orgü gibi okutuyor hem de
+        # fizikce daha dogru.
+        taban = 1 if order >= 0.9 else 3
+        n_sheet = max(taban, min(MAX_SHEETS,
+                                 int(round(l.t / max(l.mesh, 0.4)))))
+        dilim = (r - inner) / n_sheet
+        h = dilim * 0.5 if order >= 0.9 else min(lif_h, dilim * 0.5)
+        rnd = random.Random(sum(ord(c) for c in l.name) * 977)
+        band = []
+        for k in range(n_sheet):
+            rr = inner + (r - inner) * (k + 0.5) / n_sheet
+            n = max(3, int(2 * math.pi * rr * l.porosity / max(pw, 0.2)))
+            pores = []
+            for j in range(n):
+                a = 2 * math.pi * j / n
+                if order < 1.0:
+                    # Duzensiz katmanda delikler hem KAYAR hem de
+                    # genislikleri degisir; alt tabakalar hizalanmaz.
+                    a += (1 - order) * rnd.uniform(-math.pi / n, math.pi / n)
+                    w = pw * (1 + (1 - order) * rnd.uniform(-0.4, 0.4))
+                else:
+                    w = pw
+                pores.append((a % (2 * math.pi), w))
+            band.append(Sheet(rr, pores, False, h))
+        out.append(band)
+        r = inner
+    return out
+
+
+def _halka_dilimi(r0, r1, s0, s1):
+    """[s0, s1] acilari arasinda, r0-r1 yaricaplari arasinda halka dilimi."""
+    n = max(1, int(math.ceil((s1 - s0) / 0.05)))
+    pts = []
+    for j in range(n + 1):
+        a = s0 + (s1 - s0) * j / n
+        pts.append((math.cos(a) * r1, math.sin(a) * r1))
+    for j in range(n, -1, -1):
+        a = s0 + (s1 - s0) * j / n
+        pts.append((math.cos(a) * r0, math.sin(a) * r0))
+    return pts
+
+
+def lif_poligonlari(tabakalar):
+    """Cizim: gozenekli her tabakanin KATI parcalari.
+
+    Donus: [(bant, yari_kalinlik, [poligon, ...]), ...] - tabaka tabaka,
+    boylece cizim ekranda gorunmeyecek kadar ince lifleri toptan atlar.
+    Lipit cift katmani burada yok; o bandin kendisidir.
+    """
+    out = []
+    for bi, band in enumerate(tabakalar):
+        for sh in band:
+            if sh.solid or sh.tam_acik:
+                continue
+            polys = []
+            for s0, s1 in sh.kati_araliklar():
+                # Tek poligon yarim turdan uzun olmasin (dolgu dikisi)
+                parca = max(1, int(math.ceil((s1 - s0) / math.pi)))
+                for k in range(parca):
+                    a = s0 + (s1 - s0) * k / parca
+                    b = s0 + (s1 - s0) * (k + 1) / parca
+                    polys.append(_halka_dilimi(sh.r - sh.h, sh.r + sh.h, a, b))
+            out.append((bi, sh.h, polys))
+    return out
+
+
+def katman_bosluk_rengi(renk):
+    """Gozenekli katmanin ACIK alani: katmanin renginden koyu, delik rengine yakin."""
+    return tuple(int(c * 0.28 + p * 0.72) for c, p in zip(renk, PORE_COL))
 
 # ESIKLER: kac molekul VARIRSA ne olur. (dusuk, orta, olumcul)
 # alfa-hemolizin'in 7'si gercek bir sayidir: yedi monomer birlesip BIR
@@ -1575,8 +1828,12 @@ class Kese:
             # yuku dogrudan sitoplazmaya birakarak keseyi ATLAR.
             self.teslim = True
             if effect_class(self.pi) == 'gozenek':
-                self.cell.receive(self.pi)
+                # Kacan yuk bir SAYI degil, hucrede duran bir moleküldur:
+                # gorunur, dozu olusturur ve suresi dolunca temizlenir.
                 self.cell.kacan += 1
+                _kac = getattr(self.cell, 'keseden_kacan', None)
+                if _kac is not None:
+                    _kac(self)
             else:
                 self.cell.sindirilen += 1
         if self.teslim:
@@ -1620,7 +1877,7 @@ class Molecule:
                  'bounces', 'jig', 'tumble', 'hug_t', 'hug_r', 'hug_sh',
                  'hug_bi', 'gen', 'rad', 'hug_side',
                  'anch_ang', 'anch_bi', 'anch_frac', 'side', 'insert_fail',
-                 'disarida', 'allel', 'injected')
+                 'disarida', 'allel', 'injected', 'geo', 'hug_k')
 
     def __init__(self, cell, pos, vel, pi, depth=-1):
         # HIZ OLCEGI en basta atanmali: jig daha ilk satirlarda kuruluyor.
@@ -1653,7 +1910,10 @@ class Molecule:
         self.jig = pygame.math.Vector2(THERMAL * self.vs, 0).rotate(random.uniform(0, 360))
         self.tumble = TUMBLE * random.uniform(0.5, 1.5)
         self.gen = cell.generation
-        self.rad = max(2, int(round(dia * PORE_PX * 0.5)))
+        # Laboratuvar olcegindeki FIZIKSEL yaricap. Once tam sayiya
+        # yuvarlaniyordu (en az 2); cizilen molekul fizikteki molekulden
+        # %8'e kadar buyuk ya da kucuk cikiyordu.
+        self.rad = dia * PORE_PX * 0.5
         # Bir molekulun kendi basina zardan gecmesi ile bir igne tarafindan
         # dogrudan sitoplazmaya birakilmasi ayni sey degildir. Bu bayrak
         # yalnizca Shot._emit tarafindan acilir; cizim ve koruma katmani,
@@ -1664,6 +1924,7 @@ class Molecule:
         self.hug_sh = None
         self.hug_bi = -1
         self.hug_side = 1.0      # +1 disaridan tutunuyor, -1 iceriden
+        self.hug_k = -1          # tutundugu tabakanin sirasi (flat_sheets)
         self.anch_ang = 0.0
         self.anch_bi = None      # bagliysa: kilitlendigi bant
         self.anch_frac = 0.5
@@ -1683,6 +1944,8 @@ class Molecule:
         # katmanli hucrede need = 0 ve iceriden zara varan her molekul
         # bagl aniyordu. Kokene bakmak durumu degil TARIHI sorar.
         self.disarida = self.band() <= self.need
+        # Son gorulen zarf geometrisi: degisirse molekul ortamiyla tasinir.
+        self.geo = self._geo_imza()
 
     # -------------------------------------------------------------- konum
     def band(self):
@@ -1718,8 +1981,8 @@ class Molecule:
         inner = bounds[bi + 1] if bi + 1 < len(bounds) else self.cell.core_r
         return inner, outer
 
-    def _anchor(self):
-        """Bağlı molekülü hücreye KİLİTLE.
+    def _anchor(self, bi=None):
+        """Bağlı/takılı molekülü hücreye KİLİTLE.
 
         Konumu mutlak degil, hucreye GORE saklanir: hangi bant, bandin
         neresinde ve hangi acida. Boylece hucre yuzerken de siserken de
@@ -1727,16 +1990,20 @@ class Molecule:
         tutulunca hucre kacarken katmanlar molekulun ustunden supuruyor,
         sitoplazmadaki molekul hicbir delikten gecmeden kendini duvarda
         buluyordu.
+
+        Kilit BELIRLI bir banda gore tutulur: baglandigi ya da takildigi
+        katman. Oran 0-1 disina tasabilir - zarin dis yuzune degerek duran
+        bir molekulun merkezi bandin disindadir ve orada kalmalidir. Once
+        oran bandin icine kirpiliyordu; yuzeydeki molekul capa kurulunca
+        zarin icine cekiliyordu.
         """
         d = self.pos - self.cell.center
         self.anch_ang = math.atan2(d.y, d.x)
-        bi = self.band()
+        if bi is None:
+            bi = self.band()
         self.anch_bi = bi
         lo, hi = self._band_radii(bi)
-        # Oran tam 0 ya da 1 olursa molekul iki bandin TAM sinirinda kalir
-        # ve band() sinifi her karede degisebilir. Bandin icine cekiyoruz.
-        self.anch_frac = 0.5 if hi - lo < 1e-6 else max(0.06, min(0.94,
-                                                                  (hi - d.length()) / (hi - lo)))
+        self.anch_frac = 0.5 if hi - lo < 1e-6 else (hi - d.length()) / (hi - lo)
 
     def _apply_anchor(self):
         if self.anch_bi is None:
@@ -1745,6 +2012,19 @@ class Molecule:
         r = hi - self.anch_frac * (hi - lo)
         self.pos = self.cell.center + pygame.math.Vector2(
             math.cos(self.anch_ang), math.sin(self.anch_ang)) * r
+
+    def yaricap_px(self):
+        """Molekulun FIZIKSEL yaricapi, hedef zarfin gozenek olceginde.
+
+        Zarf kuculunce delikler de kuculur (Zarf.pore_px); cap global
+        PORE_PX ile alininca oyun hucresinde her molekul delikten 5 kat
+        buyuk cikiyor, duvar HERKESE kapaniyordu.
+        """
+        return self.dia * getattr(self.cell, 'pore_px', PORE_PX) * 0.5
+
+    def _pay(self):
+        """Temas payi: yuzeye degen molekul sayisal olarak lifin icine dusmesin."""
+        return TEMAS_PAYI * getattr(self.cell, 'pore_px', PORE_PX)
 
     def _membrane_t(self):
         for l in self.cell.active():
@@ -1768,7 +2048,8 @@ class Molecule:
                     self.state = 'stuck'
                     self.blocked_by = 'Hucre zari (yerlesemedi)'
                     self.depth = max(-1, bi - 1)
-                    self._anchor()
+                    self.hug_t = 0.0
+                    self._anchor(bi)
                 return False
         # BELIRLI BIR KATMANA baglanan yuk, o katmana capalanir.
         # 'enaz' modunda (norotoksin gibi yuzeye degmesi yeten yukler)
@@ -1777,14 +2058,9 @@ class Molecule:
         # capasini oraya kuruyordu - kanal blokeri sitoplazmada yuzuyordu.
         # Hedefi bir katman olan yuk her zaman O KATMANDA durur; yalnizca
         # sitoplazma hedefli yuk (ZONE_TARGET None) iceride kalir.
-        if pos is not None:
-            self.pos = pos
         if self.zone is not None and ZONE_TARGET[self.zone] is not None:
             bi = self.need
-            lo, hi = self._band_radii(bi)
-            d = self.pos - self.cell.center
-            if d.length_squared() > 1e-9:
-                self.pos = self.cell.center + d.normalize() * (lo + hi) * 0.5
+        self.pos = self._baglanma_konumu(bi, self.pos if pos is None else pos)
         self.depth = bi
         # BAGISIKLIK VARISTA. Bagisik hucrenin bagisiklik proteini vardigi
         # anda toksini baglar: molekul hedefine ulasmistir ama ETKISIZDIR.
@@ -1797,8 +2073,85 @@ class Molecule:
             return True
         self.state = 'arrived'
         self.age = 0.0
-        self._anchor()
-        self.cell.receive(self.pi)
+        self.hug_t = 0.0
+        self._anchor(bi)
+        # DOZ bu moleküldur: zarf bagli molekulleri sayar (bkz. receive).
+        self.cell.receive(self)
+        return True
+
+    def _baglanma_konumu(self, bi, temas):
+        """Baglanan molekulun MERKEZI: hangi katmana, hangi yuzden.
+
+        - Lipit cift katmanina YERLESEN yuk (gozenek acici) zarin icindedir.
+          Zardan kalin bir molekul geldigi yuze tasar ama karsi yuzu asmaz:
+          disaridan gelen gozenek acicinin dairesi sitoplazmaya sarkmaz.
+        - Zarin YUZEYINE tutunan yuk (kanal blokeri) zarin disinda, ona
+          degerek durur.
+        - Gozenekli katmana (duvar) ya da sitoplazmaya baglanan yuk degdigi
+          yerde kalir.
+        """
+        c = self.cell.center
+        v = temas - c
+        if v.length_squared() < 1e-12:
+            v = pygame.math.Vector2(1, 0)
+        yon = v.normalize()
+        lo, hi = self._band_radii(bi)
+        rho = self.yaricap_px()
+        act = self.cell.active()
+        kati = 0 <= bi < len(act) and (act[bi].mesh <= 0 or act[bi].porosity <= 0)
+        if kati:
+            if self.mode == 'tam':
+                r = (lo + hi) * 0.5
+                r = max(r, lo + rho) if self.disarida else min(r, hi - rho)
+            else:
+                r = (hi + rho + self._pay()) if self.disarida else (lo - rho - self._pay())
+        else:
+            r = min(max(v.length(), lo), hi)
+        return c + yon * r
+
+    def ortama_birak(self):
+        """Salgilanan (igneyle ENJEKTE EDILMEYEN) molekul zarfin DISINDA dogar.
+
+        Salgi organi komsu hucreye bastirilmis olabilir (yumusak temas,
+        ortusme payi); organin ucu o hucrenin zarfinin icinde kalir. Molekul
+        bir hucrenin icinde dogamaz: salgi ortama, degdigi yuzeye cikar.
+        Once boyle dogan molekul ya bir lifin ya zarin icinde basliyordu ya
+        da sitoplazmada dogup yedek korumaya takiliyordu.
+        """
+        if self.injected:
+            return
+        # Molekulun konumu hucrenin ONCEKI merkezine gore okunur (bkz.
+        # _hareket); dogum yeri de ayni cercevede yazilir.
+        c = getattr(self.cell, 'prev_center', self.cell.center)
+        v = self.pos - c
+        dis = self.cell.outer_r + self.yaricap_px() + self._pay()
+        if v.length_squared() >= dis * dis:
+            return
+        if v.length_squared() < 1e-12:
+            v = -self.vel if self.vel.length_squared() > 1e-12 else pygame.math.Vector2(1, 0)
+        self.pos = c + v.normalize() * dis
+        self.depth = -1
+        self.disarida = True
+        self.geo = self._geo_imza()
+
+    def keseden_bagla(self):
+        """Fagozomu delip kacan gozenek acici: kesenin yerinde BAGLIDIR.
+
+        Once kacis yalnizca sayaca bir ekliyordu: ekranda bir molekul
+        yoktu ve o doz hic dusmuyordu. Simdi doz bu moleküldur ve suresi
+        dolunca o da temizlenir.
+        """
+        bi = len(self.cell.boundaries())
+        self.depth = bi
+        self.disarida = False
+        _bm = getattr(self.cell, 'bagisik_mi', None)
+        if _bm is not None and _bm(self):
+            self.state = 'cleared'
+            return False
+        self.state = 'arrived'
+        self.age = 0.0
+        self._anchor(bi)
+        self.cell.receive(self)
         return True
 
     def _arrived_here(self, band, inward=True):
@@ -1822,66 +2175,59 @@ class Molecule:
         return (self.side == 'dis') == bool(inward)
 
     def _cytoplasm_guard(self):
-        """Zari gecemeyen dis kaynakli yuk cekirdege sizmissa durdur.
+        """Zari gecemeyen dis kaynakli SERBEST yuk cekirdege sizmissa durdur.
 
-        Normal yol, ``flat_sheets`` sirasi sayesinde bunu zaten engeller.
-        Yine de tek karelik buyuk adim, cakisik hucresel geometri veya eski
-        bir kayittan gelen baslangic konumu gibi durumlarda gorsel ile fizik
-        arasinda yalanci bir sizinti olusmamali. Igneyle iceri birakilan yuk
-        ``injected`` oldugu icin bu korumadan muaftir; o yuk zaten zarin
-        icinden fiziksel olarak tasinmistir.
+        Normal fizik bunu engeller: molekulun dairesi zarin kendisiyle
+        carpisir. Bu yalnizca bir emniyet supabidir ve KORUMA_TETIK ile
+        sayilir; degismez testi sifir bekler.
+
+        Bagli ve takili molekullere BAKMAZ, onlar capalarina gore yerlesir.
+        Once bu kontrol capadan ONCE calisiyordu: hucre sisince zara bagli
+        peptitlerin eski konumu yeni cekirdegin icinde kaliyor, koruma
+        onlari "takildi"ya ceviriyor ve dozlari hic dusmuyordu (16 bagli
+        peptitten 15'i).
+
+        Durdurulan molekul zarin DIS yuzune, ona degerek konur. Igneyle
+        iceri birakilan yuk (`injected`) muaftir.
         """
-        if self.zone is not None and not self.injected:
-            bounds = self.cell.boundaries()
-            if bounds and self.band() >= len(bounds):
-                d = self.pos - self.cell.center
-                if d.length_squared() < 1e-9:
-                    d = pygame.math.Vector2(1, 0)
-                # En ic katmanin ortasinda guvenli bir durak: molekul
-                # sitoplazmaya gecmez, bir sonraki karede de hareket etmez.
-                r = (self.cell.core_r + bounds[-1]) * 0.5
-                self.pos = self.cell.center + d.normalize() * r
-                self.state = 'stuck'
-                self.blocked_by = 'Hucre zari (geometri korumasi)'
-                self.depth = len(bounds) - 1
-                self.disarida = True
-                self._anchor()
-                return True
-        return False
+        global KORUMA_TETIK
+        if self.state != 'free' or self.zone is None or self.injected:
+            return False
+        bounds = self.cell.boundaries()
+        if not bounds:
+            return False
+        # Molekulun konumu hucrenin ONCEKI merkezine gore yazilmistir (bkz.
+        # _hareket); o karede kayan hucreyi yeni merkezden olcmek, yuzeydeki
+        # molekulu cekirdegin icinde sanabilir.
+        pc = getattr(self.cell, 'prev_center', self.cell.center)
+        if self.pos.distance_to(pc) >= self.cell.core_r:
+            return False
+        KORUMA_TETIK += 1
+        d = self.pos - pc
+        if d.length_squared() < 1e-9:
+            d = pygame.math.Vector2(1, 0)
+        zi = len(bounds) - 1
+        _lo, hi = self._band_radii(zi)
+        self.pos = self.cell.center + d.normalize() * (hi + self.yaricap_px() + self._pay())
+        self.state = 'stuck'
+        self.blocked_by = 'Hucre zari (geometri korumasi)'
+        self.depth = zi
+        self.disarida = True
+        self.hug_t = 0.0
+        self._anchor(zi)
+        return True
 
     def cizim_yaricapi(self, olcek=1.0):
-        """Molekulu fiziksel olarak bulundugu bolgeyle sinirli ciz.
+        """Cizilen yaricap = FIZIKSEL yaricap (kamera olcegiyle).
 
-        Molekulun merkezini zarda tutmak tek basina yeterli degildir:
-        buyuk bir molekulun tam dairesi sitoplazma sinirinin altina
-        tasabilir. Bu, zardan gecmis gibi gorunen bir cizim yalani uretir.
-        Yalnizca igneyle gercekten enjekte edilmis ve cekirdekte bulunan
-        yuk serbesttir; digerleri bulunduklari katmanin ic-disisina
-        kirpilir. Bu, sitoplazma hedefli bir yuk zar tabakasinda takildigi
-        anda bile yanlislikla cekirdekte gorunmesini engeller.
+        Once cizim molekulu bulundugu bandin sinirlarina kirpiyordu: buyuk
+        bir molekulun dairesi zari asip sitoplazmaya sarkmasin diye. Oysa
+        sarkma bir cizim sorunu degil KONUM sorunuydu, kirpma da molekulu
+        oldugundan kucuk gosteriyordu. Artik fizik molekulun dairesini
+        liflerle ve zarla carpistiriyor, baglanan molekulu de dairesi
+        karsi yuzu asmayacak yere koyuyor; molekul gercek boyunda cizilir.
         """
-        olcek = max(0.0, float(olcek))
-        tam = self.rad * self.vs * olcek
-        if self.zone is None:
-            return tam
-
-        bounds = self.cell.boundaries()
-        d = self.pos.distance_to(self.cell.center)
-        if not bounds:
-            return tam if d > self.cell.core_r else 0.0
-        band = self.band()
-        if band < 0:
-            return tam
-        if band >= len(bounds):
-            # Bu durum yalnizca igneyle iceri birakilmis bir yuzey yukunde
-            # fiziksel olarak mesrudur. Diger durumlarda _cytoplasm_guard
-            # bir sonraki fizik adiminda molekulu durdurur; aradaki tek
-            # karede de onu ekrana basmayarak yalani kapatiriz.
-            return tam if self.injected else 0.0
-        lo, hi = self._band_radii(band)
-        ic_mesafe = max(0.0, d - lo)
-        dis_mesafe = max(0.0, hi - d)
-        return min(tam, ic_mesafe * olcek, dis_mesafe * olcek)
+        return self.yaricap_px() * max(0.0, float(olcek))
 
     # ------------------------------------------------------------ hareket
     def update(self, dt):
@@ -1892,12 +2238,14 @@ class Molecule:
         # 12/12 sitoplazmada kaliyor). Kayan hucre molekulu artik gercekten
         # ITEREK tasiyor - duvar ona carpiyor.
         if self.gen != self.cell.generation:
-            # Hucre yenilendi - bu molekul eski nesle ait. Sayaci
-            # dusurmeden yok olur; sayaclar zaten sifirlandi.
+            # Hucre yenilendi - bu molekul eski nesle ait ve yok olur.
             self.state = 'cleared'
             return
-        if self._cytoplasm_guard():
+        if self.state in ('lost', 'cleared'):
             return
+        # Zarfin geometrisi degistiyse (sisme, emilerek kuculme, buyume,
+        # katman incelmesi) molekul BULUNDUGU ORTAMLA birlikte tasinir.
+        self._geometri_izle()
         if self.state == 'arrived':
             self._apply_anchor()
             self.age += dt
@@ -1905,13 +2253,14 @@ class Molecule:
             # molekulu iceri sokmaz - baglandiktan sonra atar.
             sure = CLEARANCE / (1.0 + getattr(self.cell, 'efflux', 0.0) * EFFLUX_GAIN)
             if self.age > sure:
+                # Doz bagli molekullerin SAYISIDIR: durum degisince doz da
+                # kendiliginden duser, ayrica sayac dusurulmez.
                 self.state = 'cleared'
-                self.cell.clear_one(self.pi)
             return
         if self.state == 'stuck':
             self._apply_anchor()
             return
-        if self.state in ('lost', 'cleared'):
+        if self._cytoplasm_guard():
             return
         self.age += dt
         if self.age > MOLECULE_LIFE:
@@ -1933,64 +2282,13 @@ class Molecule:
         if self.hug_t > 0.0:
             if self._hug_step(c, dt):
                 return
-        # BAGIL hareket: d0 hucrenin ONCEKI merkezine, d1 YENISINE gore.
-        # Ikisini de yeni merkeze gore olcmek, hucrenin o karede yaptigi
-        # yer degistirmeyi hesabin disinda birakiyordu; kayan hucre
-        # katmanlarini molekulun ustunden gecirip butun gozenek fizigini
-        # atlatabiliyordu. Simdi hucrenin hareketi de bir gecis denemesi
-        # uretiyor - duvar molekule carpiyor.
-        d0 = self.pos.distance_to(self.cell.prev_center)
-        nxt = self.pos + (self.vel + self.jig) * dt
-        d1 = nxt.distance_to(c)
-        # Molekul capi, HEDEF ZARFIN gozenek olceginde: zarf kuculunce
-        # delikler de kuculur (Zarf.pore_px); cap global PORE_PX ile
-        # alininca oyun hucresinde her molekul delikten 5 kat buyuk
-        # cikiyor, duvar HERKESE kapaniyordu - peptit bile gecemiyordu.
-        dia_px = self.dia * getattr(self.cell, 'pore_px', PORE_PX)
         # HANGI TARAFTAN geliyor? Bunu karedeki hareket yonunden turetmek
         # yanlisti: sitoplazmada zipzip gezen bir molekul bazi karelerde
         # iceri dogru gider ve "disaridan geliyor" sayilirdi. Dogru olcut
         # su an HANGI BANTTA oldugu - hedef banttan disaridaysa dis yuze,
         # icerideyse ic yuze denk gelir.
-        dis_taraf = self.disarida
-
-        if d1 != d0:
-            # Elek CIFT YONLUDUR. Once yalnizca iceri girisi test ediyordum;
-            # o zaman molekul disari bedavaya cikiyor, zarfin icinde
-            # tutunamiyor ve arama sansi bulamadan kayboluyordu. Gercek bir
-            # gozenek her iki yonu de ayni sekilde kisitlar - molekulun
-            # katmanda HAPSOLMASI aramayi mumkun kilan sey.
-            lo, hi = (d1, d0) if d1 < d0 else (d0, d1)
-            inward = d1 < d0
-            crossings = [(rr, bi, sh) for rr, bi, sh in self.cell.flat_sheets()
-                         if lo <= rr < hi]
-            if not inward:
-                crossings.reverse()          # disari cikarken icten disa
-            for rr, bi, sh in crossings:
-                # Varis her iki yonde de gecerli: hedef katmanina icerden
-                # ulasan bir molekul de oraya baglanir.
-                if self._arrived_here(bi, dis_taraf):
-                    # Molekul BAGLANDIGI TABAKANIN uzerine konur, gitmek
-                    # uzere oldugu noktaya degil. `nxt` cogu zaman tabakayi
-                    # asmis oluyordu (r=108, zar 110-124) ve capa bir sonraki
-                    # bandi kaydediyordu - molekul zara baglandi diye
-                    # sayilirken sitoplazmada gorunuyordu.
-                    yon = nxt - c
-                    bind_pos = (c + yon.normalize() * rr
-                                if yon.length_squared() > 1e-9 else nxt)
-                    if self._bind(bi, bind_pos):
-                        return
-                    if self.state == 'stuck':
-                        return
-                    # Yerlesemedi: konum ISLENMEDI, zarin yuzunde kalir ve
-                    # asagidaki elege dusup seker; sonra tekrar dener.
-                if sh.opening_for(self._angle_at(nxt, c), dia_px):
-                    continue                      # delikten gecti
-                # KATI KISMA CARPTI: geldigi tarafa seker, aramaya devam.
-                self._bounce(c, rr, dia_px, 1.0 if inward else -1.0)
-                self.hug_sh, self.hug_bi = sh, bi
-                return
-        self.pos = nxt
+        if self._hareket(c, dt, self.disarida):
+            return
         ag = self.cell.agza_girdi(self.pos)
         if ag is not None:
             # SITOSTOM YUTTU: molekul dunyadan cikar, keseyle iceri gider.
@@ -2010,6 +2308,262 @@ class Molecule:
         if self._arrived_here(self.depth, self.disarida):
             self._bind(self.depth)
 
+    def _hareket(self, c, dt, dis_taraf):
+        """Bir karelik hareket: molekulun DAIRESI liflere ve zara carpar.
+
+        BAGIL hareket: baslangic hucrenin ONCEKI merkezine, hedef YENISINE
+        gore olculur. Ikisini de yeni merkeze gore olcmek hucrenin o karede
+        yaptigi yer degistirmeyi disarida birakiyordu; kayan hucre
+        katmanlarini molekulun ustunden geciriyordu. Simdi duvar molekule
+        carpar.
+
+        Yol molekul yaricapindan kisa adimlara bolunur: hicbir lif ya da
+        deligin iki kenari arasindaki kati parca iki adim arasinda kalamaz.
+        Elek CIFT YONLUDUR: disaridan iceri de iceriden disari da ayni
+        lifler kisitlar.
+
+        Donus True: kare bitti (yuzeye carpti, baglandi ya da takildi).
+        """
+        pc = getattr(self.cell, 'prev_center', c)
+        rho = self.yaricap_px()
+        dia = 2.0 * rho
+        p = self.pos - pc
+        hedef = self.pos + (self.vel + self.jig) * dt - c
+        flat = self.cell.flat_sheets()
+        # Baslangic bir lifin icindeyse (igne ucunun kaldigi yer, bolunme,
+        # eski bir kayit) once en yakin SERBEST yere cikar. Carpisma listesi
+        # bundan SONRA kurulur: kurtarilan konum yolun baslangicini degistirir.
+        if not self._serbest_mi(p, flat, rho, dia):
+            p = self._kurtar_konum(p, rho, dia)
+        # Yol hicbir tabakanin carpisma bolgesine yaklasmiyorsa dogrudan git.
+        # Pay yol uzunlugu kadar genis: kanal duvarinda ya da deligin
+        # agzinda kayan molekul duz yoldan sapar, en fazla yol boyu kadar.
+        yol = (hedef - p).length()
+        alt = _en_yakin_uzaklik(p, hedef) - rho - yol
+        ust = max(p.length(), hedef.length()) + rho + yol
+        ilgili = [(rr, bi, sh) for rr, bi, sh in flat
+                  if not sh.tam_acik and rr - sh.h < ust and rr + sh.h > alt]
+        if not ilgili:
+            self.pos = c + hedef
+            return False
+        delta = hedef - p
+        n = max(1, int(math.ceil(delta.length() / max(rho, 1e-6))))
+        adim = delta / n
+        for _ in range(n):
+            q = p + adim
+            dq = q.length()
+            dp = p.length()
+            aq = math.atan2(q.y, q.x)
+            engel = None
+            for rr, bi, sh in ilgili:
+                if abs(dq - rr) >= sh.h + rho:
+                    continue
+                onceden = abs(dp - rr) < sh.h + rho
+                if not onceden and self._arrived_here(bi, dis_taraf):
+                    # Hedef katmanina DEGDI - iki yonde de gecerli: hedefine
+                    # iceriden ulasan molekul de oraya baglanir.
+                    self.pos = c + p
+                    if self._bind(bi, c + q):
+                        return True
+                    if self.state == 'stuck':
+                        return True
+                    # Yerlesemedi: zarin yuzunde kalir, asagida seker ve
+                    # sonra yeniden dener.
+                if sh.pencere(aq, dia) is not None:
+                    continue                      # deligin icinde
+                engel = (rr, bi, sh, onceden)
+                break
+            if engel is None:
+                p = q
+                continue
+            rr, bi, sh, onceden = engel
+            if not sh.solid:
+                ap = math.atan2(p.y, p.x)
+                if onceden:
+                    # KANAL DUVARI: molekul deligin icindeydi ve yana kaydi.
+                    # Duvar boyunca kayar, deligin disina tasmaz.
+                    w = sh.pencere(ap, dia)
+                    if w is not None:
+                        lo_a, hi_a, x = w
+                        fark = (aq - x + math.pi) % _IKI_PI - math.pi
+                        a2 = min(max(x + fark, lo_a), hi_a)
+                        q2 = pygame.math.Vector2(math.cos(a2), math.sin(a2)) * dq
+                        if self._serbest_mi(q2, ilgili, rho, dia):
+                            p = q2
+                            continue
+                    break                         # bu karede daha ilerleyemez
+                if sh.pencere(ap, dia) is not None:
+                    # DELIGIN AGZI: molekul acikligin hizasinda. Kenar onun
+                    # yanal hareketini durdurur, iceri dogru ilerler.
+                    q2 = p * (dq / max(dp, 1e-9))
+                    if self._serbest_mi(q2, ilgili, rho, dia):
+                        p = q2
+                        continue
+            # YUZEYE CARPTI: geldigi tarafta, yuzeye degerek kayar.
+            self.pos = c + p
+            self._bounce(c, rr, sh, dia, 1.0 if dp >= rr else -1.0, ilgili)
+            self.hug_bi = bi
+            self.hug_k = next((i for i, e in enumerate(flat) if e[2] is sh), -1)
+            return True
+        self.pos = c + p
+        return False
+
+    @staticmethod
+    def _serbest_mi(q, ilgili, rho, dia):
+        """Bu konumdaki daire hicbir tabakanin katı parcasina degmiyor mu?"""
+        dq = q.length()
+        aq = math.atan2(q.y, q.x)
+        for rr, _bi, sh in ilgili:
+            if abs(dq - rr) < sh.h + rho and sh.pencere(aq, dia) is None:
+                return False
+        return True
+
+    def _kurtar_konum(self, p, rho, dia):
+        """Katı bir tabakanin icinde kalan dairenin en yakin SERBEST yeri.
+
+        Adaylar: degdigi tabakalarin iki yuzu (radyal) ve ayni yaricapta en
+        yakin deliklerin kenarlari (tegetsel). En yakin serbest aday secilir.
+        Radyal kacis zari (katı tabaka) ASLA kesmez; igneyle birakilmamis bir
+        molekul kapali bir lifi de kesemez - igne ise lifleri delerek gecmistir.
+        Hicbir aday serbest degilse konum oldugu gibi kalir.
+        """
+        d = p.length()
+        if d < 1e-9:
+            return p
+        tum = self.cell.flat_sheets()
+        a = math.atan2(p.y, p.x)
+        pay = self._pay()
+        adaylar = []
+        for rr, _bi, sh in tum:
+            if sh.tam_acik or abs(d - rr) >= sh.h + 5.0 * rho:
+                continue
+            for yan in (-1.0, 1.0):
+                x = rr + yan * (sh.h + rho + pay)
+                if x <= 0.0:
+                    continue
+                lo, hi = (d, x) if d < x else (x, d)
+                kesiyor = False
+                for rr2, _b2, sh2 in tum:
+                    if lo < rr2 < hi and (sh2.solid or (not self.injected
+                                                        and sh2.pencere(a, dia) is None)):
+                        kesiyor = True
+                        break
+                if not kesiyor:
+                    adaylar.append((abs(x - d), x, a))
+            if not sh.solid and abs(d - rr) < sh.h + rho:
+                m = rho / max(rr, 1e-9)
+                for a0, a1 in sh.acik:
+                    if a0 + m > a1 - m:
+                        continue
+                    for kenar in (a0 + m, a1 - m):
+                        fark = (kenar - a + math.pi) % _IKI_PI - math.pi
+                        adaylar.append((abs(fark) * d, d, a + fark))
+        adaylar.sort(key=lambda t: t[0])
+        for _uzak, x, aci in adaylar:
+            q = pygame.math.Vector2(math.cos(aci), math.sin(aci)) * x
+            if self._serbest_mi(q, tum, rho, dia):
+                return q
+        return p
+
+    # ---------------------------------------------------------- geometri
+    def _geo_imza(self):
+        return (tuple(self.cell.boundaries()), float(self.cell.core_r),
+                tuple(l.name for l in self.cell.active()))
+
+    def _geometri_izle(self):
+        """Zarfin geometrisi degistiyse molekulu ORTAMIYLA birlikte tasi.
+
+        Sisme, stiletle emilerek kuculme, buyume ya da katman incelmesi
+        katmanlarin yaricapini degistirir. Molekul mutlak konumda kalinca
+        katmanlar onun ustunden hicbir delik testi yapilmadan geciyordu
+        (olculdu: sismede duvarin disindaki 24 molekulun 24'u duvarin
+        icine, sisme inince duvardaki 24 molekulun 24'u disariya).
+
+        Fiziksel karsiligi:
+          - katmanin icindeki molekul katmanla birlikte esner (bandin
+            icindeki orani ayni kalir);
+          - disaridaki molekulu buyuyen hucre SUYLA birlikte iter: iki
+            boyutta sikistirilamaz akista alan korunur (r'^2 - R'^2 =
+            r^2 - R^2); kuculen hucrede su geri akar ama molekul yuzeyi
+            gecemez;
+          - sitoplazmadaki molekul cekirdekle ayni oranda kayar.
+        Bagli ve takili molekuller capalariyla zaten tasinir; capalandiklari
+        katman YOK OLDUYSA serbest kalirlar.
+        """
+        b = self.cell.boundaries()
+        core = float(self.cell.core_r)
+        eski_b, eski_c, eski_ad = self.geo
+        if (len(b) == len(eski_b) and abs(core - eski_c) < 1e-9
+                and all(abs(x - y) < 1e-9 for x, y in zip(b, eski_b))):
+            return
+        eski = self.geo
+        adlar = tuple(l.name for l in self.cell.active())
+        yeni = (tuple(b), core, adlar)
+        self.geo = yeni
+        if adlar != eski_ad:
+            _n = zone_min_depth(self.zone, self.cell.active()) if self.zone else 0
+            self.hedef_yok = _n is None
+            self.need = len(adlar) if _n is None else _n
+        if self.state in ('arrived', 'stuck') and self.anch_bi is not None:
+            if adlar == eski_ad:
+                return
+            if self.anch_bi >= len(eski_ad):
+                self.anch_bi = len(adlar)          # sitoplazma
+                return
+            if self.anch_bi < 0:
+                return
+            ad = eski_ad[self.anch_bi]
+            if ad in adlar:
+                yeni_bi = adlar.index(ad)
+                self.depth += yeni_bi - self.anch_bi
+                self.anch_bi = yeni_bi
+                return
+            # Capalandigi katman YOK OLDU: molekul serbest kalir.
+            self.state = 'free'
+            self.anch_bi = None
+            self.age = 0.0
+        pc = getattr(self.cell, 'prev_center', self.cell.center)
+        v = self.pos - pc
+        r = v.length()
+        if r > 1e-9:
+            self.pos = pc + v * (self._yaricap_esle(r, eski, yeni) / r)
+        if self.hug_t > 0.0:
+            fl = self.cell.flat_sheets()
+            k = self.hug_k
+            if adlar == eski_ad and 0 <= k < len(fl) and fl[k][1] == self.hug_bi:
+                self.hug_sh = fl[k][2]
+                self.hug_r = fl[k][0]
+            else:
+                self.hug_t = 0.0
+
+    @staticmethod
+    def _yaricap_esle(r, eski, yeni):
+        """Eski geometrideki bir yaricapin yeni geometrideki karsiligi."""
+        B0, c0, ad0 = eski
+        B1, c1, ad1 = yeni
+        if not B0 or not B1:
+            return r * (c1 / c0) if c0 > 1e-9 else r
+        if r >= B0[0]:
+            return math.sqrt(max(r * r + B1[0] * B1[0] - B0[0] * B0[0], B1[0] * B1[0]))
+        for i in range(len(B0)):
+            ic0 = B0[i + 1] if i + 1 < len(B0) else c0
+            if r < ic0:
+                continue
+            ad = ad0[i] if i < len(ad0) else None
+            if ad not in ad1:
+                # Katman kalkti: molekul onun yerini alan ilk ic katmanin
+                # dis sinirina iner.
+                for ad_ic in ad0[i + 1:]:
+                    if ad_ic in ad1:
+                        return B1[ad1.index(ad_ic)]
+                return c1
+            j = ad1.index(ad)
+            ic1 = B1[j + 1] if j + 1 < len(B1) else c1
+            t0 = B0[i] - ic0
+            f = (B0[i] - r) / t0 if t0 > 1e-9 else 0.5
+            return B1[j] - f * (B1[j] - ic1)
+        return r * (c1 / c0) if c0 > 1e-9 else r
+
     @staticmethod
     def _angle_at(pos, c):
         return math.atan2(pos.y - c.y, pos.x - c.x) % (2 * math.pi)
@@ -2022,8 +2576,12 @@ class Molecule:
     def _hug_step(self, c, dt):
         """Yüzeye tutunmuş: teğet süpürerek delik arar.
 
-        Her karede BASKA bir aciyi dener. Delik bulursa iceri gecer;
-        sure dolarsa yuzeyden ayrilir ve ortama geri karisir.
+        Molekul lifin YUZEYINDE, ona degerek kayar (lifin yari kalinligi +
+        kendi yaricapi). Kayma SUREKLIDIR: iki kare arasinda uzerinden
+        gectigi, dairesinin sigdigi bir delik bulunmus sayilir. Delik
+        bulunca deligin agzina oturur ve iceri dogru ilerler; gecisi sonraki
+        karelerin hareketi yapar, molekul tabakanin obur yanina isinlanmaz.
+        Sure dolarsa yuzeyden ayrilir ve ortama geri karisir.
         True donerse bu kare islendi demektir.
         """
         self.hug_t -= dt
@@ -2031,54 +2589,60 @@ class Molecule:
         if sh is None:
             self.hug_t = 0.0
             return False
-        n = self.pos - c
-        if n.length_squared() < 1e-9:
-            n = pygame.math.Vector2(1, 0)
-        n = n.normalize()
-        tang = pygame.math.Vector2(-n.y, n.x)
-        if self.vel.dot(tang) < 0:
-            tang = -tang
-        # Molekul capi, HEDEF ZARFIN gozenek olceginde: zarf kuculunce
-        # delikler de kuculur (Zarf.pore_px); cap global PORE_PX ile
-        # alininca oyun hucresinde her molekul delikten 5 kat buyuk
-        # cikiyor, duvar HERKESE kapaniyordu - peptit bile gecemiyordu.
-        dia_px = self.dia * getattr(self.cell, 'pore_px', PORE_PX)
-        # yuzey boyunca kay - BULUNDUGU tarafta kalarak
-        yuzey = self.hug_r + self.hug_side * (dia_px * 0.5 + 0.4 * self._olcek())
-        self.pos = c + (n * yuzey + tang * self.vel.length() * dt)
-        self.pos = c + (self.pos - c).normalize() * yuzey
-        if sh.opening_for(self._angle_at(self.pos, c), dia_px):
-            # DELIGI BULDU: KARSI tarafa gecer (hangi yonden geldiyse)
-            karsi = self.hug_r - self.hug_side * dia_px * 0.6
-            yon = (self.pos - c).normalize()
-            self.pos = c + yon * karsi
+        rho = self.yaricap_px()
+        dia_px = 2.0 * rho
+        v = self.pos - c
+        if v.length_squared() < 1e-9:
+            v = pygame.math.Vector2(1, 0)
+        n = v.normalize()
+        sag = pygame.math.Vector2(-n.y, n.x)          # acinin arttigi yon
+        yon = 1.0 if self.vel.dot(sag) >= 0.0 else -1.0
+        yuzey = self.hug_r + self.hug_side * (sh.h + rho + self._pay())
+        t0 = math.atan2(v.y, v.x)
+        t1 = t0 + yon * self.vel.length() * dt / max(yuzey, 1e-6)
+        # Buyuk molekul yuzeyde kayarken KOMSU tabakaya da degebilir
+        # (tabakalar arasi bosluk ondan darsa): o tabakanin deliginin
+        # disina kayamaz, kenara gelince geri doner.
+        for rr2, bi2, sh2 in self.cell.flat_sheets():
+            if bi2 == bi and abs(rr2 - self.hug_r) < 1e-9:
+                continue
+            if sh2.tam_acik or abs(yuzey - rr2) >= sh2.h + rho:
+                continue
+            w = sh2.pencere(t0, dia_px)
+            if w is None:
+                self.hug_t = 0.0             # burada durulamaz: yuzeyden ayril
+                return False
+            lo_a, hi_a, x = w
+            alt_s, ust_s = t0 - (x - lo_a), t0 + (hi_a - x)
+            if not (alt_s <= t1 <= ust_s):
+                t1 = min(max(t1, alt_s), ust_s)
+                self.vel = -self.vel
+        bulunan = sh.pencere_ara(t0, t1, dia_px)
+        if bulunan is not None:
+            u = pygame.math.Vector2(math.cos(bulunan), math.sin(bulunan))
+            self.pos = c + u * yuzey
             self.hug_t = 0.0
-            self.vel = yon * (-self.hug_side) * max(THERMAL * self.vs, self.vel.length())
-            self.depth = self.band()
-            bi = self.depth
-            # Tutunurken delikten gectiyse: hug_side +1 ise disaridan
-            # iceri gecmistir.
-            if self._arrived_here(bi, self.hug_side > 0):
-                # Konum ZATEN dogru: molekul delikten gecip karsi tarafa
-                # yerlesti ve bi onun BULUNDUGU banttan turetildi. Buraya
-                # hug_r'yi (yeni gecilen tabakanin yaricapi) yazmak ikisini
-                # tutarsiz kiliyordu - zar bandina baglanip duvarda
-                # gorunuyordu.
-                self._bind(bi)
+            self.vel = u * (-self.hug_side) * max(THERMAL * self.vs, self.vel.length())
             return True
+        self.pos = c + pygame.math.Vector2(math.cos(t1), math.sin(t1)) * yuzey
         if self.hug_t <= 0.0:
+            # Kayma boyunca yuzeyle TEMASTAYDI: hedef katmaniysa ayrilmadan
+            # once bir kez daha yerlesmeyi dener (gozenek acici zara).
+            if self._arrived_here(bi, self.hug_side > 0):
+                if self._bind(bi, self.pos) or self.state != 'free':
+                    return True
             self.bounces += 1
             if self.bounces >= BOUNCE_TRAP:
                 self.state = 'stuck'
                 self.blocked_by = self.cell.active()[bi].name
                 self.depth = max(-1, bi - 1)
-                self._anchor()
+                self._anchor(bi)
             else:
                 # yuzeyden ayrildi, GELDIGI ortama geri karisiyor
                 self.vel = n * self.hug_side * max(THERMAL * self.vs, self.vel.length()) * 0.6
         return True
 
-    def _bounce(self, c, rr, dia_px, side):
+    def _bounce(self, c, rr, sh, dia_px, side, ilgili=None):
         """Katı kısma çarptı: savrulmaz, yüzey boyunca KAYAR.
 
         Ilk surum molekulu radyal olarak geri firlatiyordu; acik alana
@@ -2101,15 +2665,17 @@ class Molecule:
         self.vel = tang * sp
         self.jig = pygame.math.Vector2(THERMAL * self.vs, 0).rotate(random.uniform(0, 360))
         self.tumble = TUMBLE * random.uniform(0.5, 1.5)
-        # GELDIGI TARAFA geri it. Once her zaman DIS tarafa itiliyordu;
-        # iceriden gelen bir molekul engele carpinca duvarin obur yanina
-        # irakliyor, yani tam da gecemedigi tabakadan gecmis oluyordu.
-        # Elek boylece tek yonlu kaliyordu: disaridan iceri hicbir sey
-        # giremiyor ama sitoplazmadaki her sey disari sizabiliyordu.
-        self.pos = c + n * (rr + side * (dia_px * 0.5 + 0.4 * self._olcek()))
+        # GELDIGI TARAFTA, yuzeye DEGEREK durur: tabakanin yari kalinligi +
+        # kendi yaricapi. Iceriden gelen molekul tabakanin ic yuzunde kalir;
+        # once her zaman DIS tarafa itiliyordu ve gecemedigi tabakadan
+        # gecmis oluyordu.
+        yuz = c + n * (rr + side * (sh.h + dia_px * 0.5 + self._pay()))
+        if ilgili is None or self._serbest_mi(yuz - c, ilgili, dia_px * 0.5, dia_px):
+            self.pos = yuz
         self.hug_t = HUG_TIME
         self.hug_r = rr
         self.hug_side = side
+        self.hug_sh = sh
 
     def draw(self, s):
         if self.state in ('lost', 'cleared'):
@@ -2188,7 +2754,9 @@ class Zarf:
               for bi, band in enumerate(self._sheets) for sh in band]
         fl.sort(key=lambda x: -x[0])
         self._flat = fl
-        self._polys = self._build_polys()
+        # Cizim poligonlari TEMBEL: fizik icin kurulan zarflarin cogu hic
+        # yakindan cizilmez.
+        self._polys = None
 
     # ---------- geometri ----------
     def active(self):
@@ -2212,72 +2780,15 @@ class Zarf:
     def flat_sheets(self):
         return self._flat
 
-    def pore_polys(self):
+    def lif_polys(self):
+        """Katı lif parcalarinin cizim poligonlari (bkz. lif_poligonlari)."""
+        if self._polys is None:
+            self._polys = lif_poligonlari(self._sheets)
         return self._polys
 
     # ---------- insa ----------
     def _build_sheets(self):
-        out = []
-        r = self.outer_r
-        for l in self.active():
-            inner = r - l.t * self.ppu
-            if l.mesh <= 0 or l.porosity <= 0:
-                out.append([Sheet((r + inner) * 0.5, [], True)])
-                r = inner
-                continue
-            pw = l.mesh * self.pore_px
-            order = LAYER_ORDER.get(l.name, 0.5)
-            taban = 1 if order >= 0.9 else 3
-            n_sheet = max(taban, min(MAX_SHEETS,
-                                     int(round(l.t / max(l.mesh, 0.4)))))
-            rnd = random.Random(sum(ord(c) for c in l.name) * 977)
-            band = []
-            for k in range(n_sheet):
-                rr = inner + (r - inner) * (k + 0.5) / n_sheet
-                n = max(3, int(2 * math.pi * rr * l.porosity / max(pw, 0.2)))
-                pores = []
-                for j in range(n):
-                    a = 2 * math.pi * j / n
-                    if order < 1.0:
-                        a += (1 - order) * rnd.uniform(-math.pi / n, math.pi / n)
-                        w = pw * (1 + (1 - order) * rnd.uniform(-0.4, 0.4))
-                    else:
-                        w = pw
-                    pores.append((a % (2 * math.pi), w))
-                band.append(Sheet(rr, pores, False))
-            out.append(band)
-            r = inner
-        return out
-
-    def _build_polys(self):
-        out = []
-        r = self.outer_r
-        for l, band in zip(self.active(), self._sheets):
-            inner = r - l.t * self.ppu
-            n_sheet = len(band)
-            for k, sh in enumerate(band):
-                if sh.solid:
-                    continue
-                r1 = r - (r - inner) * k / n_sheet
-                r0 = r - (r - inner) * (k + 1) / n_sheet
-                order = LAYER_ORDER.get(l.name, 0.5)
-                rnd = random.Random(int(sh.r * 31) + k)
-                for a, w in sh.pores:
-                    h = (w * 0.5) / max(sh.r, 0.001)
-                    steps = max(3, min(9, int(w / 12) + 3))
-                    ru = (1 - order) * (r1 - r0) * 0.22
-                    pts = []
-                    for j in range(steps + 1):
-                        ang = a - h + 2 * h * j / steps
-                        rr = r1 + (rnd.uniform(-ru, ru) if ru else 0.0)
-                        pts.append((math.cos(ang) * rr, math.sin(ang) * rr))
-                    for j in range(steps, -1, -1):
-                        ang = a - h + 2 * h * j / steps
-                        rr = r0 + (rnd.uniform(-ru, ru) if ru else 0.0)
-                        pts.append((math.cos(ang) * rr, math.sin(ang) * rr))
-                    out.append(pts)
-            r = inner
-        return out
+        return katman_tabakalari(self.active(), self.outer_r, self.ppu, self.pore_px)
 
 
 _ZARF_ONBELLEK = {}
@@ -2326,35 +2837,54 @@ def zarf_ciz(screen, zar_logic, merkez, cekirdek_r, ince=False,
     cx = merkez[0] * olcek + kaydir[0]
     cy = merkez[1] * olcek + kaydir[1]
     icx, icy = int(cx), int(cy)
+    tabakalar = z.sheets()
 
-    # Halkalar: distan ice, her katman kendi renginde
+    # Halkalar: distan ice. Gozenekli katmanin bandi ACIK ALANDIR (suyla
+    # dolu jel); katı olan liflerdir. Lifler ekranda secilemeyecek kadar
+    # inceyken bant eskisi gibi katmanin renginde kalir, yakinlastikca
+    # acik alan koyulasir ve lifler kendi renginde belirir.
     r = z.outer_r
     halkalar = []
-    for l in z.active():
+    for bi, l in enumerate(z.active()):
         inner = r - l.t * z.ppu
         px = max(1, int(round((r - inner) * olcek)))
-        pygame.draw.circle(screen, l.color, (icx, icy), int(r * olcek), px)
-        halkalar.append((l, r * olcek, inner * olcek))
+        band = tabakalar[bi] if bi < len(tabakalar) else []
+        renk = l.color
+        gorunurluk = 0.0
+        if gozenek and band and not band[0].solid:
+            gorunurluk = lif_gorunurlugu(band[0].h, olcek)
+            renk = renk_karistir(l.color, katman_bosluk_rengi(l.color), gorunurluk)
+        pygame.draw.circle(screen, renk, (icx, icy), int(r * olcek), px)
+        halkalar.append((l, r * olcek, inner * olcek, gorunurluk))
         r = inner
 
     if gozenek:
-        # GERCEK GOZENEKLER. Cok kucukken (oyun olceginde ~1 px) poligon
-        # cizmek anlamsiz; o durumda halkalar duz kalir ve yakinlasinca
-        # delikler ortaya cikar.
-        for pts in z.pore_polys():
-            if len(pts) < 3:
+        # GERCEK LIFLER: fizigin carpistirdigi tabakalar, ayni poligonlar.
+        aktif = z.active()
+        for bi, h, polys in z.lif_polys():
+            if lif_gorunurlugu(h, olcek) <= 0.0:
                 continue
-            ekran = [(cx + px * olcek, cy + py * olcek) for px, py in pts]
-            xs = [q[0] for q in ekran]; ys = [q[1] for q in ekran]
-            if (max(xs) - min(xs)) < 1.2 and (max(ys) - min(ys)) < 1.2:
-                continue
-            pygame.draw.polygon(screen, PORE_COL, ekran)
-        # Sinir cemberleri deliklerin USTUNE: acikligi yuksek katman
-        # (mukus %85) yoksa kirik bir halka gibi gorunuyor.
-        for l, dis, ic in halkalar:
-            pygame.draw.circle(screen, tuple(max(0, c - 40) for c in l.color),
-                               (icx, icy), int(dis), 1)
+            renk = aktif[bi].color
+            for pts in polys:
+                pygame.draw.polygon(screen, renk,
+                                    [(cx + px * olcek, cy + py * olcek) for px, py in pts])
+        # Sinir cemberi yalnizca lifler henuz secilemiyorsa: yakinda bant
+        # siniri fiziksel bir sey degildir, cizgi onu bir zar gibi gosterirdi.
+        for l, dis, ic, gorunurluk in halkalar:
+            if gorunurluk < 1.0:
+                pygame.draw.circle(screen, tuple(max(0, c - 40) for c in l.color),
+                                   (icx, icy), int(dis), 1)
     return z.outer_r
+
+
+def lif_gorunurlugu(h, olcek):
+    """Lif ekranda ne kadar secilebiliyor: 0 (piksel alti) .. 1 (net)."""
+    kal = 2.0 * h * olcek
+    return max(0.0, min(1.0, (kal - 0.7) / 1.3))
+
+
+def renk_karistir(a, b, t):
+    return tuple(int(round(x + (y - x) * t)) for x, y in zip(a, b))
 
 
 class HedefZarf:
@@ -2362,7 +2892,7 @@ class HedefZarf:
 
     Molekul fizigi 500 satirlik tek bir sinifta ve yalnizca ON BIR sey
     okuyor: active, center, prev_center, core_r, outer_r, flat_sheets,
-    generation, receive, clear_one, agza_girdi, yut. Bu kadarini bir
+    generation, receive, agza_girdi, yut. Bu kadarini bir
     adaptorle karsilamak, fizigi ikinci kez yazmaktan hem kisa hem de
     dogru: ekosistemdeki molekul ile laboratuvardaki molekul AYNI KODU
     calistirir, dolayisiyla ayni delikten gecer ya da ayni yerde takilir.
@@ -2371,15 +2901,18 @@ class HedefZarf:
     sayisi PAYLOAD_THRESHOLD kademelerini asinca etki uygulanir.
     """
 
-    __slots__ = ('org', '_zarf', '_key', 'arrived', 'tier_of', 'sahip',
+    __slots__ = ('org', '_zarf', '_key', 'tier_of', 'sahip',
                  'neden', 'feeder', 'alarm', 'pulling',
-                 'keseler', 'kacan', 'sindirilen', 'yutulan')
+                 'keseler', 'kacan', 'sindirilen', 'yutulan', 'bagli')
 
     def __init__(self, org):
         self.org = org
         self._zarf = None
         self._key = None
-        self.arrived = {}
+        # DOZ = hedefe BAGLI molekuller. Ayri bir sayac tutulmaz: sayac
+        # ile gorunen molekuller birbirinden ayrisabiliyordu (sisme sirasinda
+        # 16 bagli peptitten 15'i 'takildi'ya donuyor, dozlari hic dusmuyordu).
+        self.bagli = []
         self.tier_of = {}
         self.sahip = None          # molekulu atan hucre (hasar sahibi)
         self.neden = None          # olum nedeni: hangi silah enjekte etti
@@ -2590,17 +3123,35 @@ class HedefZarf:
         return True
 
     # ---- varis muhasebesi ----
-    def clear_one(self, pi):
-        if self.arrived.get(pi):
-            self.arrived[pi] -= 1
+    @property
+    def arrived(self):
+        """yuk -> su an BAGLI molekul sayisi (doz budur).
 
-    def receive(self, pi):
-        n = self.arrived.get(pi, 0) + 1
-        self.arrived[pi] = n
-        tier = count_tier(pi, n)
+        Bagli molekul temizlenince, katmani kalkinca ya da nesli
+        degisince durumu degisir ve kendiliginden sayilmaz olur; dozu
+        dusurmeyi unutan bir yol kalmaz.
+        """
+        return _bagli_say(self)
+
+    def receive(self, mol):
+        """Bir molekul hedefine BAGLANDI. Doz = bagli molekul sayisi."""
+        if all(m is not mol for m in self.bagli):
+            self.bagli.append(mol)
+        pi = mol.pi
+        tier = count_tier(pi, self.arrived.get(pi, 0))
         if tier > self.tier_of.get(pi, TIER_NONE):
             self.tier_of[pi] = tier
             self._etki(pi, tier)
+
+    def keseden_kacan(self, kese):
+        """Fagozomu delip kacan gozenek acici hucrede GORUNUR ve bagli kalir."""
+        m = Molecule(self, kese.konum(), pygame.math.Vector2(), kese.pi)
+        m.injected = True
+        ekle = getattr(self.org, 'molekul_ekle', None)
+        if ekle is None or not ekle(m):
+            return None             # listeye giremeyen molekul doz da olamaz
+        m.keseden_bagla()
+        return m
 
     def _etki(self, pi, tier):
         """Kademe yukseldi: LABORATUVARLA AYNI MEKANIZMA.
@@ -2619,6 +3170,17 @@ class HedefZarf:
         cls = effect_class(pi)
         mech = EFFECT_CLASS[cls][1] if cls in EFFECT_CLASS else 'halt'
         org.doz_etkisi(tier, mech, self.neden or 'molekul')
+
+
+def _bagli_say(zarf):
+    """Zarfa bagli molekulleri say; artik bagli olmayanlari listeden at."""
+    nesil = zarf.generation
+    zarf.bagli = [m for m in zarf.bagli
+                  if m.state == 'arrived' and m.gen == nesil]
+    out = {}
+    for m in zarf.bagli:
+        out[m.pi] = out.get(m.pi, 0) + 1
+    return out
 
 
 def zarf_orani(zar_logic):
@@ -2833,8 +3395,14 @@ def hucreyi_ciz(screen, entity, ekran_merkez, olcek=1.0, gozenek=True):
         cek = entity.radius
         dis_r = cek
         if zar is not None:
-            dis_r = zarf_ciz(screen, zar, entity.pos, cek, ince=True,
-                             gozenek=gozenek)
+            # Zarf FIZIGIN olceginde kurulur (molekulun kullandigi nesnenin
+            # aynisi) ve kamera olcegiyle buyutulerek cizilir. Olceklenmis
+            # bir cekirdekle yeniden kurmak ayni deliklerin bir KOPYASINI
+            # uretiyordu; tam sayi yuvarlamasi bir tabakanin delik sayisini
+            # degistirirse cizilen delikler fizigin deliklerinden ayrilirdi.
+            dis_r = zarf_ciz(screen, zar, (0.0, 0.0), cek / max(olcek, 1e-9),
+                             ince=True, gozenek=gozenek, olcek=olcek,
+                             kaydir=(entity.pos.x, entity.pos.y))
         # Sayisal yuvarlamalar birikmesin: dis sinir tanim geregi budur.
         dis_r = dis_sinir
         entity.radius = dis_r
@@ -2971,7 +3539,8 @@ class LabCell:
         self.escaped = 0.0      # ne kadar uzaklasti
         self.slow_until = 0.0   # yavaslatildi (doz esigi 1)
         self.paralyzed = False  # felcli (doz esigi 2) - hic kacamaz
-        self.arrived = {}       # yuk -> VARAN molekul sayisi (doz budur)
+        self.bagli = []         # hedefe BAGLI molekuller (doz budur)
+        self.cikan = []         # hucrenin dunyaya biraktigi molekuller
         self.tier_of = {}       # yuk -> o yukun ulastigi kademe
         self.last_pi = None
         self.last_tier = TIER_NONE
@@ -3020,18 +3589,21 @@ class LabCell:
         # gorunen nokta sayisi ile sayac birbirini tutmuyordu.
         self.generation += 1
 
+    @property
+    def arrived(self):
+        """yuk -> su an BAGLI molekul sayisi (doz budur). Temizlenen
+        molekul sayilmaz olur; ETKI kalir (kademe geri inmez)."""
+        return _bagli_say(self)
+
     def count_of(self, pi):
         return self.arrived.get(pi, 0)
 
-    def clear_one(self, pi):
-        """Bagli bir molekul temizlendi. Sayac duser, ETKI kalir."""
-        if self.arrived.get(pi):
-            self.arrived[pi] -= 1
-
-    def receive(self, pi):
-        """Bir molekul hedefine vardi. Doz = varan sayisi."""
-        n = self.arrived.get(pi, 0) + 1
-        self.arrived[pi] = n
+    def receive(self, mol):
+        """Bir molekul hedefine BAGLANDI. Doz = bagli molekul sayisi."""
+        if all(m is not mol for m in self.bagli):
+            self.bagli.append(mol)
+        pi = mol.pi
+        n = self.count_of(pi)
         self.last_pi = pi
         tier = count_tier(pi, n)
         self.last_tier = tier
@@ -3091,6 +3663,19 @@ class LabCell:
             g[0] += random.uniform(-7, 7) * dt
             g[1] += random.uniform(-7, 7) * dt
 
+    def keseden_kacan(self, kese):
+        """Fagozomu delip kacan gozenek acici hucrede GORUNUR ve bagli kalir."""
+        m = Molecule(self, kese.konum(), pygame.math.Vector2(), kese.pi)
+        m.injected = True
+        self.cikan.append(m)
+        m.keseden_bagla()
+        return m
+
+    def cikanlari_al(self):
+        """Hucrenin bu karede dunyaya biraktigi molekuller (bir kez)."""
+        out, self.cikan = self.cikan, []
+        return out
+
     def spill(self):
         """Patladi: tasidigi molekuller ortama SACILIR.
 
@@ -3107,8 +3692,10 @@ class LabCell:
             if d.length() < 1e-6:
                 d = pygame.math.Vector2(1, 0)
             v = d.normalize() * random.uniform(0.5, 1.3) * MOLECULE_SPEED
-            out.append(Molecule(self, start, v, self.stock_pi,
-                                depth=len(self.active())))
+            m = Molecule(self, start, v, self.stock_pi, depth=len(self.active()))
+            # Liziste zar yirtilmistir: yuk hucrenin icinden ORTAMA cikar.
+            m.ortama_birak()
+            out.append(m)
         self.stock = []
         return out
 
@@ -3503,91 +4090,18 @@ class LabCell:
             self._flat = fl
         return self._flat
 
-    def pore_polys(self):
-        """Deliklerin cizim poligonlari. Geometri degisince yeniden uretilir."""
+    def lif_polys(self):
+        """Katı lif parcalarinin cizim poligonlari. Geometri degisince yeniden."""
         self.sheets()
         if self._poly_key != self._geom_key:
             self._poly_key = self._geom_key
-            self._polys = self._build_polys()
+            self._polys = lif_poligonlari(self._sheets)
         return self._polys
 
-    def _build_polys(self):
-        out = []
-        r = self.outer_r
-        for l, band in zip(self.active(), self._sheets):
-            inner = r - l.t * PX_PER_UNIT
-            n_sheet = len(band)
-            for k, sh in enumerate(band):
-                if sh.solid:
-                    continue
-                # bu alt tabakanin radyal dilimi
-                r1 = r - (r - inner) * k / n_sheet
-                r0 = r - (r - inner) * (k + 1) / n_sheet
-                order = LAYER_ORDER.get(l.name, 0.5)
-                rnd = random.Random(int(sh.r * 31) + k)
-                for a, w in sh.pores:
-                    h = (w * 0.5) / sh.r          # yari aci
-                    steps = max(3, min(9, int(w / 12) + 3))
-                    # DUZENSIZ katmanda delik agzi pürüzlüdür - jel bir agin
-                    # kesiti makineyle kesilmis gibi duz olmaz.
-                    ru = (1 - order) * (r1 - r0) * 0.22
-                    pts = []
-                    for j in range(steps + 1):    # dis yay
-                        ang = a - h + 2 * h * j / steps
-                        rr_ = r1 - rnd.uniform(0, ru)
-                        pts.append((math.cos(ang) * rr_, math.sin(ang) * rr_))
-                    for j in range(steps + 1):    # ic yay (geri)
-                        ang = a + h - 2 * h * j / steps
-                        rr_ = r0 + rnd.uniform(0, ru)
-                        pts.append((math.cos(ang) * rr_, math.sin(ang) * rr_))
-                    out.append(pts)
-            r = inner
-        return out
-
     def _build_sheets(self):
-        out = []
-        r = self.outer_r
-        for l in self.active():
-            inner = r - l.t * PX_PER_UNIT
-            if l.mesh <= 0 or l.porosity <= 0:
-                # Lipit cift katmani: delik YOKTUR. Gecmek isteyen yarmak
-                # ya da bir kanal proteini kullanmak zorundadir.
-                out.append([Sheet((r + inner) * 0.5, [], True)])
-                r = inner
-                continue
-            pw = l.mesh * PORE_PX
-            order = LAYER_ORDER.get(l.name, 0.5)
-            # Ince delikli kalin katman COK TABAKALIDIR: molekul her
-            # tabakada ayri bir delik bulmak zorunda kalir.
-            #
-            # Kristal bir katman (S-layer) gercekte TEK bir tabakadir.
-            # Duzensiz bir JEL ise uc boyutlu bir agdir; tek 2B tabaka
-            # olarak cizince ekranda birkac dev bosluk gibi gorunuyordu.
-            # En az uc tabaka hem dokuyu bir orgü gibi okutuyor hem de
-            # fizikce daha dogru.
-            taban = 1 if order >= 0.9 else 3
-            n_sheet = max(taban, min(MAX_SHEETS,
-                                     int(round(l.t / max(l.mesh, 0.4)))))
-            rnd = random.Random(sum(ord(c) for c in l.name) * 977)
-            band = []
-            for k in range(n_sheet):
-                rr = inner + (r - inner) * (k + 0.5) / n_sheet
-                n = max(3, int(2 * math.pi * rr * l.porosity / pw))
-                pores = []
-                for j in range(n):
-                    a = 2 * math.pi * j / n
-                    if order < 1.0:
-                        # Duzensiz katmanda delikler hem KAYAR hem de
-                        # genislikleri degisir; alt tabakalar hizalanmaz.
-                        a += (1 - order) * rnd.uniform(-math.pi / n, math.pi / n)
-                        w = pw * (1 + (1 - order) * rnd.uniform(-0.4, 0.4))
-                    else:
-                        w = pw
-                    pores.append((a % (2 * math.pi), w))
-                band.append(Sheet(rr, pores, False))
-            out.append(band)
-            r = inner
-        return out
+        # Oyundaki Zarf ile AYNI kurucu: laboratuvardaki delik ekosistemdeki
+        # deligin ta kendisidir, yalnizca olcek farklidir.
+        return katman_tabakalari(self.active(), self.outer_r, PX_PER_UNIT, PORE_PX)
 
     @property
     def outer_r(self):
@@ -3739,24 +4253,38 @@ class LabCell:
             s.blit(t2, (cx - t2.get_width() // 2, cy + 12))
             return
 
-        for l, outer, inner in rings:
-            pygame.draw.circle(s, l.color, (cx, cy), int(outer))
+        # Gozenekli katmanin bandi ACIK ALANDIR (suyla dolu jel); katı olan
+        # liflerdir. Lipit cift katmani bandin tamamiyla katidir.
+        tabakalar = self.sheets()
+        for bi, (l, outer, inner) in enumerate(rings):
+            band = tabakalar[bi] if bi < len(tabakalar) else []
+            renk = l.color
+            if band and not band[0].solid:
+                renk = renk_karistir(l.color, katman_bosluk_rengi(l.color),
+                                     lif_gorunurlugu(band[0].h, 1.0))
+            pygame.draw.circle(s, renk, (cx, cy), int(outer))
         core_col = (30, 34, 48)
         if self.effect == 'sabotaj':
             k = min(1.0, self.effect_t / 2.5)
             core_col = (int(30 + 60 * k), max(0, int(34 - 20 * k)), int(48 + 40 * k))
         pygame.draw.circle(s, core_col, (cx, cy), int(self.core_r))
 
-        # GERCEK GOZENEKLER: cizilen delikler molekulun gectigi deliklerin
-        # ta kendisidir. Onceki _pores() yalnizca dekoratif bir yaklasimdi
-        # ve fizikle hicbir baglantisi yoktu.
-        for pts in self.pore_polys():
-            pygame.draw.polygon(s, PORE_COL,
-                                [(cx + px, cy + py) for px, py in pts])
-        # Sinir cemberleri deliklerin USTUNE cizilir: aksi halde acikligi
-        # yuksek bir katman (mukus %90 acik) kirik bir halka gibi gorunuyor
-        # ve hangi bandin nerede bittigi okunmuyordu.
-        for l, outer, inner in rings:
+        # GERCEK LIFLER: cizilen katı parcalar molekulun carptigi liflerin
+        # ta kendisidir; aradaki bosluklar gectigi deliklerdir.
+        aktif = self.active()
+        for bi, h, polys in self.lif_polys():
+            if lif_gorunurlugu(h, 1.0) <= 0.0:
+                continue
+            for pts in polys:
+                pygame.draw.polygon(s, aktif[bi].color,
+                                    [(cx + px, cy + py) for px, py in pts])
+        # Sinir cemberi yalnizca katı bandin (zar) kenarlarinda ve lifleri
+        # secilemeyen katmanda: gozenekli bandin siniri fiziksel bir sey
+        # degildir, cizgi onu bir zar gibi gosterirdi.
+        for bi, (l, outer, inner) in enumerate(rings):
+            band = tabakalar[bi] if bi < len(tabakalar) else []
+            if band and not band[0].solid and lif_gorunurlugu(band[0].h, 1.0) >= 1.0:
+                continue
             pygame.draw.circle(s, tuple(max(0, c - 40) for c in l.color),
                                (cx, cy), int(outer), 2)
             if inner > 2:
@@ -4592,7 +5120,9 @@ def spawn_shot(cell, atk, ci, pi, mi, shots):
         a = base + random.uniform(-half, half)
         sp = v0 * random.uniform(0.8, 1.2)
         v = pygame.math.Vector2(math.cos(a), math.sin(a)) * sp
-        out.append(Molecule(cell, muzzle, v, pi))
+        m = Molecule(cell, muzzle, v, pi)
+        m.ortama_birak()          # namlu hucreye dayanmissa yuzeyde dogar
+        out.append(m)
     return out
 
 
@@ -4796,6 +5326,7 @@ def main():
         # noktalardir - kime ne yaptigi gozle gorulur.
         if cell.burst:
             mols += cell.spill()
+        mols += cell.cikanlari_al()
         for m in mols:
             m.update(dt)
         if cell.generation != son_nesil:
@@ -4808,7 +5339,19 @@ def main():
         n_before = len(mols)
         mols = [m for m in mols if m.state not in ('lost', 'cleared')]
         seyrelen += n_before - len(mols)
-        del mols[:-900]
+        if len(mols) > 900:
+            # Ekran siniri: once en eski SERBEST/TAKILI molekuller gider.
+            # Bagli molekul listeden atilirsa hic temizlenmez ve dozu
+            # sonsuza dek sayilirdi.
+            fazla = len(mols) - 900
+            kalan = []
+            for m in mols:
+                if fazla > 0 and m.state != 'arrived':
+                    m.state = 'lost'
+                    fazla -= 1
+                    continue
+                kalan.append(m)
+            mols = kalan
 
         atk.update(dt, ci, cell.feeder is not None)
         atk.synth(dt, pi)
