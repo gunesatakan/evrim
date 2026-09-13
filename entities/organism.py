@@ -2029,14 +2029,18 @@ class Organism(Entity):
         # hicbiriydi: stok 11 iken igne BOS gidiyor, 11 molekul kesede
         # bekliyordu. Olculdu - ekosistemde 229 nematosist atisinin 221'i
         # bos. Atilan, uretilenin ta kendisidir: eksigi de fazlasi da yok.
+        # KAPSULUN ICINDEKI YUK gider (bkz. BaseWeapon._yuk_doldur); ates
+        # aninda ureticiden cekilmez. Bagisik bir hedefe varan molekul
+        # orada etkisiz kalir (Molecule.allel, HedefZarf.bagisik_mi).
         pi = 0
-        yuk_n = 0
-        ur = self._uretici_bul(hedef)
-        gerek = _lab.CARRIER_EMIT[ci]
-        if ur is not None and gerek > 0:
-            yuk_n = min(int(gerek), int(ur.stok))
-        if yuk_n >= 1 and ur.yuk_cek(yuk_n):
-            pi = int(ur.payload)
+        yuk_n = int(getattr(lg, 'kapsul_yuk', 0) or 0)
+        _kapsul_allel = getattr(lg, 'kapsul_allel', None)
+        _kpi = int(getattr(lg, 'kapsul_pi', 0) or 0)
+        if not (yuk_n >= 1 and 0 < _kpi < len(_lab.PAYLOADS)):
+            yuk_n = 0
+        if yuk_n >= 1:
+            pi = _kpi
+            lg.kapsul_yuk = 0
             # ACMA BEDELI: katlanmis protein lumenden gecmez; saperon ve
             # ATPaz ister (T3SS). Lab: unfold_cost(yuk, tasiyici).
             try:
@@ -2109,7 +2113,7 @@ class Organism(Entity):
         # Yakalayici ucun dokuda kalabilecegi sure: ipligin ozelligi.
         shot.tutma_suresi = float(game_settings.NEMATOCYST_TETHER_TIME)
         # Yukun alleli mermiyle gider; biraktigi molekuller onu tasir.
-        shot.allel = getattr(ur, 'allel', None) if pi > 0 else None
+        shot.allel = _kapsul_allel if pi > 0 else None
         # MERMI ORGANINDIR, HEDEFIN DEGIL. Once hedefin listesine yaziliyordu:
         # hedef olunce iplik ayni karede yok oluyor, organ da 12 saniye
         # "baslik disarida" kilitli kaliyordu. Iplik kapsulden cikar ve
@@ -2122,6 +2126,10 @@ class Organism(Entity):
             kok = organ.get_absolute_position(self.pos, self.direction, self.radius)
             if shot.anlik_bosalt(kok, _azami):
                 self._capa_kaydet(shot, hedef)
+                if ci == 7:
+                    # Glutinant damlasi avin zarinda durur (cizim, bkz.
+                    # _yapiskan_ciz); yapiskanlik suresi zarfta yazilidir.
+                    hedef.yapiskan_capa = shot.capa_yerel
                 if ci == 3:
                     # T6SS: KILIF KASILIR, TUP FIRLATILIR. Tup geri cekilmez;
                     # Hcp tupu ve mizrak hedefin icinde kalip cozunur. Once
@@ -2618,12 +2626,38 @@ class Organism(Entity):
         for sh in atislar:
             sh.draw(screen, _don, olcek)
 
+    def _yapiskan_ciz(self, screen, merkez=None, olcek=1.0, donustur=None):
+        """GLUTINANT LEKESI: yapisan damla avin zarinda durur, kurudukca kuculur.
+
+        Once yapisma hicbir sekilde gorunmuyordu; avin uzerinde yalnizca bir
+        sure sayaci vardi ve temas aninda bir halka-ok isareti ciziliyordu.
+        """
+        kalan = float(getattr(self, 'yapiskan', 0.0) or 0.0)
+        capa = getattr(self, 'yapiskan_capa', None)
+        if kalan <= 0.0 or capa is None:
+            return
+        a, rn = capa
+        ang = math.atan2(self.direction.y, self.direction.x) + a
+        p = self.pos + pygame.math.Vector2(math.cos(ang), math.sin(ang)) * (rn * float(self.radius))
+        if donustur is not None:
+            x, y = donustur(p)
+        else:
+            mx, my = (merkez if merkez is not None else self.pos)
+            x = mx + (p.x - self.pos.x) * olcek
+            y = my + (p.y - self.pos.y) * olcek
+        oran = max(0.0, min(1.0, kalan / max(1e-6, float(game_settings.STICKY_TIME))))
+        r = max(1, int(round(2.5 * olcek * (0.4 + 0.6 * oran))))
+        yuz = pygame.Surface((r * 2 + 2, r * 2 + 2), pygame.SRCALPHA)
+        pygame.draw.circle(yuz, (200, 235, 140, int(90 + 120 * oran)), (r + 1, r + 1), r)
+        screen.blit(yuz, (int(x) - r - 1, int(y) - r - 1))
+
     def molekulleri_ciz(self, screen, merkez=None, olcek=1.0, donustur=None):
         """Molekulleri ciz. Kamera olcegi verilirse buyutulur.
 
         Molekul merkezleri de mermilerle ayni dunya->ekran donusumunu
         kullanir; boyutlari hedef zarfinin cekirdek olceginden gelir.
         """
+        self._yapiskan_ciz(screen, merkez, olcek, donustur)
         mols = getattr(self, 'molekuller', None)
         if not mols:
             return
@@ -3205,6 +3239,21 @@ class Organism(Entity):
         # hayalet olurdu. Yalnizca bolunen taraf tutmaya devam eder.
         if getattr(other, 'yutulan_besin', None) is not None:
             other.yutulan_besin = None
+        # URETICI STOGU VE KAPSUL YUKU DE BOLUNUR. deepcopy stogu iki yavruya
+        # da tam kopyaliyordu: her bolunme toksin stogunu ikiye katliyordu -
+        # yoktan madde. Kese sitoplazmayla birlikte ikiye ayrilir; bir kapsul
+        # ise bolunemez, icindeki yuku tek yavru tasir.
+        for _o1, _o2 in zip(self.organs, other.organs):
+            _l1 = getattr(_o1, 'logic', None)
+            _l2 = getattr(_o2, 'logic', None)
+            if _l1 is None or _l2 is None:
+                continue
+            if getattr(_l1, 'URETICI', False):
+                _top = float(getattr(_l1, 'stok', 0.0))
+                _l1.stok = float(math.ceil(_top / 2.0))
+                _l2.stok = _top - _l1.stok
+            if int(getattr(_l1, 'kapsul_yuk', 0) or 0) > 0:
+                _l2.kapsul_yuk = 0
 
         # Sayacı hemen artır: aynı karede birden fazla hücre bölünebilir ve
         # hepsi kare başında okunan aynı nüfus değerini görürse tavan aşılır.

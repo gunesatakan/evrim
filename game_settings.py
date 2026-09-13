@@ -265,6 +265,8 @@ DEFAULT_SETTINGS = {
     # firlatilan Hcp tupunun hedefte cozunme suresi (sn).
     "T6SS_KILIF_KURULUM": 1.5,
     "T6SS_ENKAZ_OMRU": 0.6,
+    # Ureticiden igneli silahin kapsulune/tupune saniyede gecen molekul.
+    "YUK_DOLUM_HIZI": 24.0,
     # Surekli bakim gideri (karar: savunma gelistirmeleri surekli enerji yakar)
     "COST_WALL": 0.25, "COST_OUTER": 0.15, "COST_CAPSULE": 0.20,
     "COST_EFFLUX": 0.10, "COST_REPAIR": 0.15, "COST_SLIP": 0.15,

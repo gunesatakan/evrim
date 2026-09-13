@@ -78,11 +78,10 @@ def draw_weapon_socket(screen, pos, outward, length, olcek=1.0,
         pygame.draw.line(screen, (88, 82, 72), P(-6, 0), P(7, 0), W(9))
         pygame.draw.line(screen, (220, 210, 185), P(-5, 0), P(5, 0), W(5))
         pygame.draw.circle(screen, (110, 104, 92), P(0, 0), W(8), W(2))
-    elif ci in (5, 6, 7, 8):           # nematosist kapsul yuvası
-        pygame.draw.circle(screen, (90, 84, 58), P(-3, 0), W(14))
-        pygame.draw.circle(screen, (205, 195, 140), P(-3, 0), W(11), W(3))
-        pygame.draw.circle(screen, (45, 50, 58), P(4, 0), W(5))
-        pygame.draw.line(screen, (220, 210, 160), P(4, -6), P(4, 6), W(2))
+    elif ci in (5, 6, 7, 8):           # BOSALMIS KAPSUL: sarmal yok, kapak acik
+        pygame.draw.circle(screen, (150, 142, 100), P(-20, 0), W(18))
+        pygame.draw.circle(screen, (120, 110, 70), P(-20, 0), W(18), W(2))
+        pygame.draw.line(screen, (120, 110, 70), P(-2, -5), P(-4, -9), W(2))
 
 
 def _kese(screen, P, W, dx, dy, r, stok, stok_max, renk):
@@ -170,6 +169,8 @@ def draw_weapon(screen, name, pos, outward, length, ready, firing_at=None,
     tipx = length / max(1e-6, s)          # lab cercevesinde ucun dx'i
     if ci == 3:
         tipx = 5.0
+    elif ci in (5, 6, 7, 8):
+        tipx = 4.0                         # tetik kili zarin hemen ustunde
 
     if name == "Phagocytosis":
         # SITOSTOM (hucre agzi) - lab tasiyicisi degil, kendi cizimi.
@@ -250,26 +251,43 @@ def draw_weapon(screen, name, pos, outward, length, ready, firing_at=None,
         pygame.draw.polygon(screen, (210, 200, 175), [P(-2, -half), P(tipx, 0), P(-2, half)])
         pygame.draw.polygon(screen, (120, 115, 100), [P(-2, -half), P(tipx, 0), P(-2, half)], 1)
     elif ci in (5, 6, 7, 8):
-        # NEMATOSIST ailesi: basincli kapsul. Tipe gore uc farkli.
-        bx = 18
-        pygame.draw.circle(screen, (200, 190, 130), P(bx, 0), W(22))
-        pygame.draw.circle(screen, (120, 110, 70), P(bx, 0), W(22), W(2))
-        for k in range(5):
-            pygame.draw.circle(screen, (150, 140, 95), P(bx, 0), W(19 - k * 4), 1)
-        if ci == 5:      # penetrant: sivri delici
-            pygame.draw.polygon(screen, (215, 205, 150), [P(bx + 20, -10), P(tipx, 0), P(bx + 20, 10)])
-        elif ci == 6:    # volvent: sarmal iplik
-            for k in range(8):
-                t = k / 7.0
-                pygame.draw.circle(screen, (235, 225, 170),
-                                   P(bx + 20 + t * (tipx - bx - 20), 8 * math.sin(t * 9)), W(3))
-        elif ci == 7:    # glutinant: yapiskan damla
-            pygame.draw.circle(screen, (200, 235, 140), P(tipx - 4, 0), W(10))
-            pygame.draw.circle(screen, (90, 130, 60), P(tipx - 4, 0), W(10), W(2))
-        else:            # izoriza: kanca
-            pygame.draw.line(screen, (200, 220, 245), P(bx + 20, 0), P(tipx, 0), W(3))
-            pygame.draw.line(screen, (200, 220, 245), P(tipx, 0), P(tipx - 9, -9), W(3))
-            pygame.draw.line(screen, (200, 220, 245), P(tipx, 0), P(tipx - 9, 9), W(3))
+        # NEMATOSIST KAPSULU HUCRENIN ICINDE. Once kapsul zarin DISINA
+        # cizilmisti (merkezi +18, yaricapi 22): hucreye yapismis bir top
+        # gibi duruyordu. Gercek kapsul sitoplazmadadir; zarda yalnizca
+        # kapagi ve tetik kili vardir. Kurulum orani kapsulun GERCEK
+        # durumudur: bosaldiktan sonra sarmal yoktur, yeniden kuruldukca
+        # dolar; tetik ancak kapsul hazirken yerindedir. Kapsule dolmus yuk
+        # kapsulun icinde tek tek molekul olarak durur.
+        kk = max(0.0, min(1.0, float(kurulum)))
+        bx = -20.0
+        pygame.draw.circle(screen, (200, 190, 130) if kk >= 1.0 else (160, 152, 108),
+                           P(bx, 0), W(18))
+        pygame.draw.circle(screen, (120, 110, 70), P(bx, 0), W(18), W(2))
+        for k in range(int(round(4 * kk))):
+            pygame.draw.circle(screen, (150, 140, 95), P(bx, 0), W(15 - k * 3.5), 1)
+        if _yuk_renk is not None and _stok > 0:
+            n_yuk = min(int(_stok), 24)
+            mr = max(1, W(1.6))
+            for i in range(n_yuk):
+                a = i * 2.399963
+                rr = 12.0 * math.sqrt((i + 0.5) / max(1.0, n_yuk))
+                pygame.draw.circle(screen, _yuk_renk,
+                                   P(bx + math.cos(a) * rr, math.sin(a) * rr), mr)
+        pygame.draw.line(screen, (120, 110, 70), P(-2, -5), P(-2, 5), W(2))
+        if kk >= 1.0:
+            if ci == 5:      # penetrant: stilet ucu kapagin arkasinda
+                pygame.draw.polygon(screen, (215, 205, 150), [P(-6, -3), P(4, 0), P(-6, 3)])
+            elif ci == 6:    # volvent: kapaga dayali kisa sarmal
+                for k in range(4):
+                    t = k / 3.0
+                    pygame.draw.circle(screen, (235, 225, 170),
+                                       P(-6 + t * 8, 3 * math.sin(t * 6)), W(1.5))
+            elif ci == 7:    # glutinant: kapakta yapiskan damla
+                pygame.draw.circle(screen, (200, 235, 140), P(1, 0), W(3))
+            else:            # izoriza: kanca
+                pygame.draw.line(screen, (200, 220, 245), P(-6, 0), P(3, 0), W(1.5))
+                pygame.draw.line(screen, (200, 220, 245), P(3, 0), P(0, -3), W(1.5))
+                pygame.draw.line(screen, (200, 220, 245), P(3, 0), P(0, 3), W(1.5))
     else:
         pygame.draw.line(screen, col, taban, tip, _p(2))
 

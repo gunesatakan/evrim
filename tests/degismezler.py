@@ -17,7 +17,8 @@ ekosistem kosusunda HER KAREDE asagidakileri denetler:
   8. Ip ya da stilet tupuyle bagli iki hucre derin ic ice olamaz (temas
      payi + birkac piksel). (Bolunmede yavrunun komsusunun ustune dogmasi
      silahlardan bagimsiz, ayri bir konudur; burada sinanmaz.)
-  5. Stok bir hacimdir: 0 ile STOCK_MAX arasinda.
+  5. Stok bir hacimdir: 0 ile STOCK_MAX arasinda; igneli silahin kapsul
+     yuku 0 ile tasiyicinin kapasitesi arasinda.
   6. Molekul durumu gecerli kumede; capalanmis molekul kendi bandinda.
 
 Calistirma:  python tests/degismezler.py   (30-60 sn surer)
@@ -61,6 +62,11 @@ def denetle(d, kare, ihlaller):
             if lg is not None and getattr(lg, 'URETICI', False):
                 if not (0.0 <= lg.stok <= lab.STOCK_MAX + 1e-6):
                     ihlaller.append((kare, 'stok hacim disi', (o.uid, lg.stok)))
+            ky = int(getattr(lg, 'kapsul_yuk', 0) or 0) if lg is not None else 0
+            ci = getattr(lg, 'carrier', None) if lg is not None else None
+            if ky and not (isinstance(ci, int) and 0 <= ci < len(lab.CARRIER_EMIT)
+                           and 0 <= ky <= lab.CARRIER_EMIT[ci]):
+                ihlaller.append((kare, 'kapsul yuku kapasite disi', (o.uid, ky, ci)))
         # 6. molekuller
         for m in getattr(o, 'molekuller', ()):
             if not sonlu(m.pos):

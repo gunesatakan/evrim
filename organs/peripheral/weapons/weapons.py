@@ -7,6 +7,7 @@ havuzda bulunurlar (karar 1).
 import math
 
 import pygame
+import game_settings
 from organs.base_organ import BaseOrgan
 from .logic_weapons import (StyletLogic, HarpoonLogic, NematocystLogic,
                             ToxinLogic, LysinLogic, PhagocytosisLogic)
@@ -137,10 +138,65 @@ class BaseWeapon(BaseOrgan):
             if not self.baslik_disarida() or self.baslik_t >= self.BASLIK_SURESI:
                 self.baslik_geri()
         self.logic.update(dt)
+        self._yuk_doldur(dt, parent)
         self._atis_sure = getattr(self, '_atis_sure', 0.0) - dt
         if self._atis_sure <= 0.0:
             self.last_target_pos = None
         self.geri_tepme = max(0.0, getattr(self, 'geri_tepme', 0.0) - dt * 60.0)
+
+    #: Yukunu organin icine dolduran tasiyicilar (lab CARRIER_EMIT > 0):
+    #: T6SS tupu, stilet, penetrant nematosist.
+    YUK_TASIYAN = (3, 4, 5)
+
+    def _yuk_doldur(self, dt, parent):
+        """YUK ORGANIN ICINE DOLAR, atis aninda degil.
+
+        Once igne ates ettigi anda hucrenin toksin ureticisinden yuk
+        cekiyordu. Ayni uretici stogunu komsulara puskurtup bitirdigi icin
+        igneler cogu zaman bos gidiyordu (olculdu: harpun atislarinin
+        %62'si, penetrantin yarisi 0-1 molekulle). Knidosit zehrini
+        kapsulun icine, kapsul olgunlasirken doldurur. Uretici stogundan
+        kapsule gecen molekul artik bu organindir: puskurtulemez, yalnizca
+        bu organ atesleyince hedefe gider.
+        """
+        lg = self.logic
+        ci = getattr(lg, 'carrier', None)
+        if parent is None or not self.LAB_TASIYICI or ci not in self.YUK_TASIYAN:
+            return
+        if self.baslik_disarida():
+            return
+        try:
+            import lab as _lab
+        except Exception:
+            return
+        gerek = int(_lab.CARRIER_EMIT[int(ci)]) - int(getattr(lg, 'kapsul_yuk', 0) or 0)
+        if gerek <= 0:
+            lg._dolum = 0.0
+            return
+        ur = None
+        for o in getattr(parent, 'organs', ()):
+            l2 = getattr(o, 'logic', None)
+            if l2 is None or not getattr(l2, 'URETICI', False):
+                continue
+            pi = int(getattr(l2, 'payload', 0))
+            if l2.stok < 1.0 or not (0 < pi < len(_lab.PAYLOADS)) or _lab.PAYLOADS[pi][1] is None:
+                continue
+            if getattr(lg, 'kapsul_yuk', 0) and pi != int(getattr(lg, 'kapsul_pi', 0)):
+                continue                  # kapsulde baska bir yuk var; karismaz
+            ur = l2
+            break
+        if ur is None:
+            return
+        lg._dolum = min(float(gerek), float(getattr(lg, '_dolum', 0.0))
+                        + dt * float(game_settings.YUK_DOLUM_HIZI))
+        n = min(gerek, int(lg._dolum), int(ur.stok))
+        if n <= 0:
+            return
+        lg._dolum -= n
+        ur.stok -= n
+        lg.kapsul_yuk = int(getattr(lg, 'kapsul_yuk', 0) or 0) + n
+        lg.kapsul_pi = int(ur.payload)
+        lg.kapsul_allel = getattr(ur, 'allel', None)
 
     def atis_isaretle(self, hedef_pos):
         """Atildi: cizgi ATIS_GORUNME saniye boyunca cizilsin; geri tepme."""
@@ -212,9 +268,14 @@ class BaseWeapon(BaseOrgan):
                     carrier=int(ci), marker=int(getattr(self.logic, 'marker', 0)),
                     recoil=float(getattr(self, 'geri_tepme', 0.0)),
                     merkez=parent.pos,
-                    # Cizilen molekuller organin FIILEN tasidigi stok.
-                    stok=float(getattr(self.logic, 'stok', 0.0)),
-                    payload=int(getattr(self.logic, 'payload', 0)))
+                    # Cizilen molekuller organin FIILEN tasidigi yuk: uretici
+                    # icin kesedeki stok, igneli silah icin kapsulun ici.
+                    stok=float(getattr(self.logic, 'stok', 0.0)
+                               if getattr(self.logic, 'URETICI', False)
+                               else getattr(self.logic, 'kapsul_yuk', 0) or 0),
+                    payload=int(getattr(self.logic, 'payload', 0)
+                                if getattr(self.logic, 'URETICI', False)
+                                else getattr(self.logic, 'kapsul_pi', 0) or 0))
 
 
 class Stylet(BaseWeapon):

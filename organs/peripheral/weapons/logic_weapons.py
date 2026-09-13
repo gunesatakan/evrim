@@ -56,6 +56,13 @@ class WeaponLogic:
         # STOK: ureticinin govdesinde fiilen tasinan molekul sayisi.
         self.stok = 0.0
         self._sentez = 0.0
+        # KAPSUL/TUP YUKU: igneli silahin ICINE dolmus molekuller. Uretici
+        # stoku hucrenindir ve puskurtulebilir; kapsule giren yuk artik bu
+        # organindir ve yalnizca bu organla hedefe gider.
+        self.kapsul_yuk = 0
+        self.kapsul_pi = 0
+        self.kapsul_allel = None
+        self._dolum = 0.0
 
     # ------------------------------------------------------------ YUK
     def sentezle(self, dt, hucre):
@@ -215,6 +222,12 @@ class WeaponLogic:
             bel = _lab.MARKERS[mi][0][:12] if 0 <= mi < len(_lab.MARKERS) else '?'
             out = [("Guc", min(1.0, n / 10.0), "%s  %s" % (tas, m)),
                    ("Belirtec", 0.0 if mi == 0 else 1.0, bel)]
+            if not self.URETICI and ci < len(_lab.CARRIER_EMIT) and _lab.CARRIER_EMIT[ci] > 0:
+                ky = int(getattr(self, 'kapsul_yuk', 0) or 0)
+                kp = int(getattr(self, 'kapsul_pi', 0) or 0)
+                ad = _lab.PAYLOADS[kp][0][:12] if (ky and 0 < kp < len(_lab.PAYLOADS)) else 'bos'
+                out.append(("Kapsul yuku", min(1.0, ky / float(_lab.CARRIER_EMIT[ci])),
+                            "%s  %d/%d" % (ad, ky, _lab.CARRIER_EMIT[ci])))
             if self.URETICI:
                 pi = int(getattr(self, 'payload', 0))
                 yuk = _lab.PAYLOADS[pi][0][:12] if 0 < pi < len(_lab.PAYLOADS) else 'yok'
