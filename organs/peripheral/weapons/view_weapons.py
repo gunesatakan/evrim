@@ -38,7 +38,7 @@ def _yuk_bilgisi(payload):
 
 
 def draw_weapon_socket(screen, pos, outward, length, olcek=1.0,
-                       carrier=None, recoil=0.0):
+                       carrier=None, recoil=0.0, activity=0.0, owner_color=None):
     """Atis sirasinda hucrede kalan gercek silah soketini ciz.
 
     Atis basligi organin disina ciktiginda organin tam silahini tekrar
@@ -71,9 +71,18 @@ def draw_weapon_socket(screen, pos, outward, length, olcek=1.0,
     # Soketler yuzeye gomulu kalir. Disari uzanan hareketli basligin
     # baslangic noktasi her tasiyicide ayni fiziksel P(0, 0)'dir.
     if ci == 3:                         # T6SS kilif tabani
+        # The contracted sheath stays on the attacking cell, behind its socket.
+        pygame.draw.line(screen, (70, 90, 110), P(-23, 0), P(0, 0), W(12))
+        for k in range(5):
+            pygame.draw.line(screen, (145, 185, 205),
+                             P(-22 + k * 5, -6), P(-22 + k * 5, 6), W(2))
         pygame.draw.circle(screen, (70, 82, 96), P(0, 0), W(11))
         pygame.draw.circle(screen, (190, 202, 215), P(0, 0), W(8), W(2))
         pygame.draw.line(screen, (65, 78, 92), P(0, -8), P(0, 8), W(2))
+        if owner_color is not None:
+            pygame.draw.circle(screen, owner_color, P(-15, 0), W(4))
+        if activity > 0:
+            pygame.draw.circle(screen, (185, 240, 255), P(0, 0), W(14), W(2))
     elif ci == 4:                       # stilet geri cekilme manşonu
         pygame.draw.line(screen, (88, 82, 72), P(-6, 0), P(7, 0), W(9))
         pygame.draw.line(screen, (220, 210, 185), P(-5, 0), P(5, 0), W(5))
@@ -168,6 +177,8 @@ def draw_weapon(screen, name, pos, outward, length, ready, firing_at=None,
 
     tip = taban + u * length
     tipx = length / max(1e-6, s)          # lab cercevesinde ucun dx'i
+    if ci == 3:
+        tipx = 14.0
 
     if name == "Phagocytosis":
         # SITOSTOM (hucre agzi) - lab tasiyicisi degil, kendi cizimi.
@@ -215,14 +226,17 @@ def draw_weapon(screen, name, pos, outward, length, ready, firing_at=None,
         pygame.draw.lines(screen, (110, 100, 130), False, pts, W(2))
         _kese(screen, P, W, -4, 0, 15, _stok, _stok_max, _yuk_renk)
     elif ci == 3:
-        # T6SS: kasilmali kilif + ic tup + mizrak ucu
-        kilif = [P(-2, -13), P(42, -13), P(42, 13), P(-2, 13)]
+        # Most of the contractile apparatus is inside the producer. Only
+        # a short nozzle protrudes at rest; it is not a dangling spear.
+        kilif = [P(-48, -7), P(-6, -7), P(-6, 7), P(-48, 7)]
         pygame.draw.polygon(screen, (150, 170, 190), kilif)
         pygame.draw.polygon(screen, (80, 95, 110), kilif, W(2))
-        for k in range(5):
-            pygame.draw.line(screen, (95, 115, 130), P(4 + k * 8, -13), P(4 + k * 8, 13), W(2))
-        pygame.draw.polygon(screen, (205, 200, 180), [P(42, -5), P(56, -5), P(56, 5), P(42, 5)])
-        pygame.draw.polygon(screen, (225, 220, 200), [P(56, -9), P(tipx, 0), P(56, 9)])
+        for k in range(6):
+            pygame.draw.line(screen, (95, 115, 130),
+                             P(-44 + k * 7, -7), P(-44 + k * 7, 7), W(2))
+        pygame.draw.line(screen, (205, 215, 225), P(-43, 0), P(7, 0), W(3))
+        pygame.draw.polygon(screen, (225, 235, 240), [P(7, -4), P(14, 0), P(7, 4)])
+        pygame.draw.circle(screen, col, P(0, 0), W(8), W(2))
     elif ci == 4:
         # STILET: sivri delici - uzatilir, firlatilmaz
         half = 6

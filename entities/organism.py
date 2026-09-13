@@ -1057,22 +1057,15 @@ class Organism(Entity):
             _g = getattr(game_settings, 'GORUNUM_OLCEGI', 1.0)
             _lab.hucreyi_ciz(screen, self, self.pos, _g)
             self.molekulleri_ciz(screen, olcek=_g)
-            self.atislari_ciz(screen, olcek=_g)
+            # Mermiler ve ipler burada DEGIL, butun hucrelerden sonra
+            # cizilir (simulation.py): ip bir hucreden digerine uzanir ve
+            # sonra cizilen hucrenin altinda kalmamalidir.
         else:
             for organ in self.organs:
                 organ.draw(screen, self)
 
-        # NEMATOSIST IPI. Vurulan hucre 2.5 sn tutulur; once bunun hicbir
-        # gorsel izi yoktu - hucre "birine yapisip oylece duruyor" gibi
-        # gorunuyordu. Ip, tutandan tutulana gerilir ve suresi dolarken
-        # solar.
-        # Ip ayrica cizilmez: tutan iplik bir Shot'tur ve Shot.draw onu
-        # organdan uca kendisi cizer (tek cisim, tek cizim). Burada
-        # yalnizca TUTULAN hucrenin cevresine ince bir halka konur.
-        _tut = getattr(self, 'tether_from', None)
-        if self.tether_timer > 0.0 and _tut is not None and not _tut.dead:
-            pygame.draw.circle(screen, (235, 220, 150), (int(self.pos.x), int(self.pos.y)),
-                               max(2, int(self.radius * 0.35)), 1)
+        # Tutulan hucrenin cevresindeki halka kaldirildi: bir arayuz
+        # isaretiydi. Tutan sey ipin kendisidir ve o cizilir.
 
         if self.current_trail_escape_vector:
             end = self.pos + self.current_trail_escape_vector
@@ -1741,6 +1734,9 @@ class Organism(Entity):
             for t in candidates:
                 if t is self or t.dead or not organ.can_hit(self, t):
                     continue
+                if (int(getattr(lg, 'carrier', -1)) in self.ANLIK_TASIYICI
+                        and not self._eksen_degiyor(organ, lg, t)):
+                    continue
                 self.energy -= lg.energy_cost
                 # Bekleme atis aninda DEGIL baslik donunce baslar.
                 self.atis_sayisi += 1
@@ -1948,6 +1944,44 @@ class Organism(Entity):
             return yakin
         return varsayilan
 
+    def _namlu_yon_azami(self, organ, lg, ci=None):
+        """Organin namlusu, bakis yonu, olcegi ve ipinin/tupunun boyu."""
+        import lab as _lab
+        from organs.peripheral.weapons.geometry import carrier_scale
+        if ci is None:
+            ci = int(getattr(lg, 'carrier', 5))
+        namlu = organ.get_absolute_position(self.pos, self.direction, self.radius)
+        _a = organ.aim_angle(self)
+        yon = pygame.math.Vector2(math.cos(_a), math.sin(_a))
+        birim = carrier_scale(self.radius, getattr(lg, 'power', 1.0), ci)
+        if ci in (3, 4):
+            from organs.peripheral.weapons.view_weapons import LAB_BOY
+            azami = LAB_BOY.get(ci, 66.0) * birim * 1.15
+        else:
+            azami = _lab.CARRIER_REACH[ci] * birim
+        return namlu, yon, birim, azami
+
+    def _eksen_degiyor(self, organ, lg, t):
+        """Organin ekseni, ipin/tupun boyu icinde bu hucrenin zarfini kesiyor mu?
+
+        IP NISAN ALMAZ: organin ekseninde acilir. Once hedef yalnizca 30
+        derecelik yayin icindeyse kapsul bosaliyordu; eksen hedefi
+        kesmediginde ip bos suya aciliyordu. Tetik (knidosil) avin
+        temasiyla calisir - eksen hedefe degmiyorsa kapsul bosalmaz.
+        """
+        namlu, yon, _b, azami = self._namlu_yon_azami(organ, lg)
+        R = float(t.radius)
+        f = namlu - t.pos
+        b = f.dot(yon)
+        c2 = f.length_squared() - R * R
+        if c2 <= 0.0:
+            return True
+        disk = b * b - c2
+        if disk < 0.0:
+            return False
+        t0 = -b - math.sqrt(disk)
+        return 0.0 <= t0 <= azami
+
     def _igne_atisi(self, hedef, organ, lg, komsu=None):
         """Igneli silah atesledi: GERCEK bir lab.Shot yola cikar.
 
@@ -1981,15 +2015,7 @@ class Organism(Entity):
         # icinden hicbir sey olmamis gibi gecip gidiyordu (olculdu:
         # C'nin merkezine 6 px yaklasip B'ye vardi). Bir cisim yolunda
         # kim varsa ona carpar; hedef secimi davranisin, carpma fizigin.
-        namlu = organ.get_absolute_position(self.pos, self.direction, self.radius)
-        _a = organ.aim_angle(self)
-        yon = pygame.math.Vector2(math.cos(_a), math.sin(_a))
-        _birim = float(self.radius) / 110.0 * float(getattr(lg, 'power', 1.0))
-        if ci in (3, 4):
-            from organs.peripheral.weapons.view_weapons import LAB_BOY
-            _azami = LAB_BOY.get(ci, 66.0) * _birim * 1.15
-        else:
-            _azami = _lab.CARRIER_REACH[ci] * _birim
+        namlu, yon, _birim, _azami = self._namlu_yon_azami(organ, lg, ci)
         hedef = self._yoldaki_ilk(namlu, yon, _azami, komsu, hedef)
         # YUK: ureticiden, stoktan. Tasiyici en fazla CARRIER_EMIT molekul
         # tasir; stokta daha azi varsa O KADARI gider. Once ya hepsi ya
@@ -2077,16 +2103,31 @@ class Organism(Entity):
         shot.tutma_suresi = float(game_settings.NEMATOCYST_TETHER_TIME)
         # Yukun alleli mermiyle gider; biraktigi molekuller onu tasir.
         shot.allel = getattr(ur, 'allel', None) if pi > 0 else None
-        # ORGANIN TEK BASLIGI YOLA CIKTI: geri donene kadar ikincisi yok.
-        organ.baslik_gonder(shot)
-        # KOK ORGANDA DURUR. T6SS tupu ve stilet govdeye BAGLI yapilardir,
-        # nematosist ipi de kapsulden cikar; ucu ilerlerken kokleri
-        # saldirganla birlikte hareket eder. `origin` bir kez yazilip
-        # birakilinca kok atesin edildigi noktada asili kaliyordu -
-        # hucre yuzup gidiyor, tup bosluga bagli duruyordu.
+        # MERMI ORGANINDIR, HEDEFIN DEGIL. Once hedefin listesine yaziliyordu:
+        # hedef olunce iplik ayni karede yok oluyor, organ da 12 saniye
+        # "baslik disarida" kilitli kaliyordu. Iplik kapsulden cikar ve
+        # kapsulun sahibine aittir; hedef yalnizca ucun tutundugu yerdir.
         shot.organ = organ
+        shot.hedef = hedef
         shot.olum_t = 0.0
-        hedef.atislar.append(shot)
+        organ.baslik_gonder(shot)
+        if ci in self.ANLIK_TASIYICI:
+            kok = organ.get_absolute_position(self.pos, self.direction, self.radius)
+            if shot.anlik_bosalt(kok, _azami):
+                self._capa_kaydet(shot, hedef)
+                shot.ip = True
+                shot.ip_boy = max(1.0, self._ip_geometrisi(shot)[0])
+            else:
+                shot.dead = True
+            if shot.released:
+                for m in shot.released:
+                    m.allel = shot.allel
+                    hedef.molekul_ekle(m)
+                shot.released = []
+            if shot.dead:
+                self._mermi_bitti(shot, hedef)
+                if organ.mermi is shot:
+                    organ.baslik_geri()
         return shot
 
     def atislari_guncelle(self, dt):
@@ -2130,6 +2171,14 @@ class Organism(Entity):
                     return False
                 if _kirp and _v.length() > 1e-6:
                     sh.pos = sh.origin + _v.normalize() * _azami
+                if sh.ci == 3 and hasattr(sh, '_start_retraction'):
+                    if _v.length_squared() > 1e-12:
+                        sh.pos = sh.origin + _v.normalize() * _azami
+                    sh._pending = False
+                    sh.miss_reason = sh.miss_reason or 'rijit tup erisimi asildi'
+                    if sh.t6_phase != 'complete':
+                        sh._start_retraction()
+                    return True
                 sh.dead = True
                 sh.koptu = True
                 sh.feeding = False
@@ -2205,6 +2254,193 @@ class Organism(Entity):
                     continue            # cizim payi bitti
             kalan.append(sh)
         self.atislar = kalan
+
+    # ---------------- MERMILER VE IPLER ORGANINDIR ----------------
+
+    #: Tek karede bosalan tasiyicilar (nematosist tipleri).
+    ANLIK_TASIYICI = (5, 6, 7, 8)
+
+    def mermilerim(self):
+        """Organlarimin su an disarida olan mermileri ve ipleri."""
+        out = []
+        for organ in getattr(self, 'organs', ()):
+            sh = getattr(organ, 'mermi', None)
+            if sh is not None and not getattr(sh, 'dead', False):
+                out.append(sh)
+        return out
+
+    def mermileri_guncelle(self, dt):
+        """Kendi organlarimin mermilerini ilerlet: sahibi benim."""
+        for organ in getattr(self, 'organs', ()):
+            sh = getattr(organ, 'mermi', None)
+            if sh is None:
+                continue
+            hedef = getattr(sh, 'hedef', None)
+            if getattr(sh, 'anlik', False):
+                self._anlik_mermi_guncelle(sh, hedef, dt)
+            else:
+                self._ucan_mermi_guncelle(sh, hedef, dt)
+            if sh.released:
+                if hedef is not None and not hedef.dead:
+                    for m in sh.released:
+                        m.allel = getattr(sh, 'allel', None)
+                        hedef.molekul_ekle(m)
+                sh.released = []
+            if sh.dead:
+                sh.bitti = True
+                self._mermi_bitti(sh, hedef)
+                if organ.mermi is sh:
+                    organ.baslik_geri()
+
+    def _anlik_mermi_guncelle(self, sh, hedef, dt):
+        """Tek karede bosalmis ipin iki ucunu yerine koy."""
+        sh.refresh_origin()
+        if not sh.capali:
+            sh.dead = True
+            return
+        if hedef is None or hedef.dead:
+            # CAPA KALINTIDA KALIR. Av olunce ip ayni karede yok oluyordu.
+            # Ucu kalintinin yerinde durur; saldirgan uzaklasinca ip gerilip
+            # kopar (bkz. ipleri_coz).
+            if sh.sabit_capa is None:
+                sh.sabit_capa = pygame.math.Vector2(sh.pos)
+            sh.pos = pygame.math.Vector2(sh.sabit_capa)
+            return
+        sh.pos = self._capa_dunya(sh, hedef)
+        if sh.holding and sh.ci == 6:
+            # Volvente sarilmis av: tutunmaya direnci azalir (try_bind).
+            # Hareketini KISITLAYAN sey bu sayac degil, ipin boyudur.
+            hedef.tether_timer = max(hedef.tether_timer, 2.0 * dt + 1e-3)
+            hedef.tether_from = self
+
+    def _ucan_mermi_guncelle(self, sh, hedef, dt):
+        """Kareler boyunca uzanan mermi (stilet, T6SS): laboratuvar ucusu."""
+        if hedef is None or hedef.dead:
+            sh.dead = True
+            return
+        sh.refresh_origin()
+        _azami = getattr(sh, 'azami_uzunluk', None)
+
+        def _boyu_asti(kirp):
+            # BOY SINIRI guncellemeden once ve sonra: uc organdan azami
+            # boydan uzaga gidemez; tup geri ceker, iplik kopar.
+            if _azami is None or sh.dead:
+                return False
+            v = sh.pos - sh.origin
+            if v.length() <= _azami:
+                return False
+            if kirp and v.length() > 1e-6:
+                sh.pos = sh.origin + v.normalize() * _azami
+            if sh.ci == 3 and hasattr(sh, '_start_retraction'):
+                if v.length_squared() > 1e-12:
+                    sh.pos = sh.origin + v.normalize() * _azami
+                sh._pending = False
+                sh.miss_reason = sh.miss_reason or 'rijit tup erisimi asildi'
+                if sh.t6_phase != 'complete':
+                    sh._start_retraction()
+                return True
+            sh.dead = True
+            sh.koptu = True
+            sh.feeding = False
+            return True
+
+        _boyu_asti(False)
+        sh.update(dt)
+        _boyu_asti(True)
+        if sh.feeding and self.bound_target is not hedef:
+            sh.feeding = False
+            sh.dead = True
+
+    def _mermi_bitti(self, sh, hedef):
+        """Biten merminin hedef zarfinda biraktigi referanslari temizle."""
+        if hedef is None:
+            return
+        z = getattr(hedef, '_zarf_arayuz', None)
+        if z is None:
+            return
+        if getattr(z, 'feeder', None) is sh:
+            z.feeder = None
+        if getattr(z, 'pulling', None) is sh:
+            z.pulling = None
+
+    def _ipi_kopar(self, organ, sh, neden):
+        """Ip koptu/birakildi: kapsul yeniden kurulmaya baslar."""
+        sh.dead = True
+        sh.koptu = True
+        sh.bitti = True
+        sh.miss_reason = sh.miss_reason or neden
+        self._mermi_bitti(sh, getattr(sh, 'hedef', None))
+        if getattr(organ, 'mermi', None) is sh:
+            organ.baslik_geri()
+
+    def _tum_mermileri_kopar(self, neden):
+        for organ in getattr(self, 'organs', ()):
+            sh = getattr(organ, 'mermi', None)
+            if sh is not None:
+                self._ipi_kopar(organ, sh, neden)
+
+    def _capa_kaydet(self, sh, hedef):
+        """Ucun hedefe tutundugu yeri HEDEFIN KENDI CERCEVESINDE sakla.
+
+        Once saplanan uc yalnizca hedefin OTELENMESIYLE tasiniyordu; hedef
+        donunce capa dunyada kayiyordu. Aci hedefin yonune gore, yaricap
+        yaricapina oranla saklanir: av donunce de kuculunce de capa ayni
+        dokuda kalir.
+        """
+        d = sh.pos - hedef.pos
+        a = math.atan2(d.y, d.x) - math.atan2(hedef.direction.y, hedef.direction.x)
+        sh.capa_yerel = (a, d.length() / max(1e-6, float(hedef.radius)))
+
+    def _capa_dunya(self, sh, hedef):
+        if sh.capa_yerel is None:
+            return pygame.math.Vector2(sh.pos)
+        a, rn = sh.capa_yerel
+        ang = math.atan2(hedef.direction.y, hedef.direction.x) + a
+        return hedef.pos + pygame.math.Vector2(math.cos(ang), math.sin(ang)) * (rn * float(hedef.radius))
+
+    def _ip_geometrisi(self, sh):
+        """Ipin organdan capaya yolu: (boy, kuvvet noktasi, birim yon, noktalar).
+
+        IP GOVDENIN ICINDEN GECEMEZ. Capa organin arkasinda kalinca duz
+        cizgi hucrenin kendi sitoplazmasindan geciyordu (olculdu: tutma
+        karelerinin %40'i). Gercek bir iplik yuzeye sarilir: organdan zar
+        boyunca dolasir ve teget noktada govdeden ayrilir. Boyu yay artı
+        teget boyudur; cekme kuvveti teget noktasindan uygulanir ve kolu tam
+        yaricap oldugu icin hucreyi capaya dogru cevirir.
+        """
+        kok = sh.attachment_origin()
+        capa = pygame.math.Vector2(sh.pos)
+        C = pygame.math.Vector2(self.pos)
+        r = max(1.0, float(self.radius))
+        v = capa - kok
+        L = v.length()
+        D = capa.distance_to(C)
+        gecer = False
+        if L > 1e-6 and D > r * 1.001:
+            t = (C - kok).dot(v) / (L * L)
+            if 0.0 < t < 1.0 and (kok + v * t).distance_to(C) < r * 0.97:
+                gecer = True
+        if not gecer:
+            u = v / L if L > 1e-6 else pygame.math.Vector2(1, 0)
+            return L, kok, u, [kok, capa]
+        th_a = math.atan2(capa.y - C.y, capa.x - C.x)
+        beta = math.acos(max(-1.0, min(1.0, r / D)))
+        th_k = math.atan2(kok.y - C.y, kok.x - C.x)
+        secim = None
+        for th_t in (th_a + beta, th_a - beta):
+            dth = (th_t - th_k + math.pi) % (2.0 * math.pi) - math.pi
+            if secim is None or abs(dth) < abs(secim[1]):
+                secim = (th_t, dth)
+        th_t, dth = secim
+        T = C + pygame.math.Vector2(math.cos(th_t), math.sin(th_t)) * r
+        duz = capa.distance_to(T)
+        u = (capa - T) / duz if duz > 1e-6 else pygame.math.Vector2(math.cos(th_t), math.sin(th_t))
+        n = max(2, int(abs(dth) / 0.2) + 1)
+        pts = [C + pygame.math.Vector2(math.cos(th_k + dth * i / n),
+                                       math.sin(th_k + dth * i / n)) * r
+               for i in range(n + 1)]
+        pts.append(capa)
+        return abs(dth) * r + duz, T, u, pts
 
     def _emme(self, hedef, dt, killed):
         """Stilet baglıyken sitoplazma EMER (mizositoz).
@@ -2409,7 +2645,8 @@ class Organism(Entity):
         olcekleme, atisin iki ucunu farkli referanslara baglayip baglanti
         kokunu kaydirabiliyordu.
         """
-        atislar = getattr(self, 'atislar', None)
+        # Organlarimin mermileri + (eski kayitlardan) listede kalanlar.
+        atislar = list(getattr(self, 'atislar', None) or ()) + self.mermilerim()
         if not atislar:
             return
         if donustur is not None:
@@ -2968,8 +3205,20 @@ class Organism(Entity):
         # karşı hücrenin tamamını kopyalardı.
         self.release_binding()
         self.tether_timer = 0.0
+        # IPLER BOLUNMEDE KOPAR ve karsi hucreye giden hicbir referans
+        # kopyaya gecmez: deepcopy bir referansi takip edip saldirganin ya
+        # da avin tamamini kopyalardi.
+        self._tum_mermileri_kopar('bolunme')
+        self.tether_from = None
+        _z = getattr(self, '_zarf_arayuz', None)
+        _z_ref = None
+        if _z is not None:
+            _z_ref = (_z.sahip, _z.feeder, _z.pulling)
+            _z.sahip = _z.feeder = _z.pulling = None
 
         other = copy.deepcopy(self)
+        if _z is not None:
+            _z.sahip, _z.feeder, _z.pulling = _z_ref
         other.pending_children = []
         other.bound_target = None
         other.bound_by = None
@@ -3263,7 +3512,7 @@ class Organism(Entity):
                 _lg.sentezle(dt, self)
         if self.yapiskan > 0.0:
             self.yapiskan = max(0.0, self.yapiskan - dt)
-        self.atislari_guncelle(dt)
+        self.mermileri_guncelle(dt)
         self.molekulleri_guncelle(dt)
         self.onceki_pos = pygame.math.Vector2(self.pos)
         if hasattr(self, 'body'):
@@ -3638,9 +3887,10 @@ class Organism(Entity):
         actual_move_angle = current_heading + self.thrust_direction
         move_dir = pygame.math.Vector2(math.cos(actual_move_angle), math.sin(actual_move_angle))
 
-        # Hareketsizlik: yutma sersemliği, tutulmak (bound_by / ip) ya da
-        # birini TUTMAK. Saldırmak artık taahhüt: tutan da kıpırdayamaz.
-        immobile = (self.stun_timer > 0 or self.is_restrained
+        # Hareketsizlik: yutma sersemliği, tutulmak (bound_by) ya da
+        # birini TUTMAK. IP ARTIK HAREKETSIZ BIRAKMAZ: volvente sarilan av
+        # yuzmeye devam eder, onu tutan ipin boyudur (bkz. ipleri_coz).
+        immobile = (self.stun_timer > 0 or self.bound_by is not None
                     or self.bound_target is not None
                     or self.felc_t > 0.0)          # felc / ic durma
         move_dist = 0.0 if immobile else self.speed * dt
@@ -3712,3 +3962,128 @@ def resolve_overlaps(cells):
                     a.pos.y -= ny * push * fa
                     b.pos.x += nx * push * fb
                     b.pos.y += ny * push * fb
+
+
+def _sarkik(a, b, kiris, boy, sahip):
+    """Gevsek ip: kiris c, ip boyu S -> parabolik sarkma, h ~ sqrt(3c(S-c)/8)."""
+    d = b - a
+    if d.length() < 1e-6:
+        return [a, b]
+    h = min(0.5 * boy, math.sqrt(max(0.0, 3.0 * kiris * (boy - kiris) / 8.0)))
+    n = pygame.math.Vector2(-d.y, d.x).normalize()
+    hy = getattr(sahip, 'hareket_yonu', None)
+    if hy is not None and hy.length_squared() > 1e-9 and n.dot(hy) > 0.0:
+        n = -n                      # akintida iplik geride kalir
+    return [a + d * (i / 8.0) + n * (4.0 * h * (i / 8.0) * (1.0 - i / 8.0))
+            for i in range(9)]
+
+
+def _ipi_kesen_var_mi(pts, sahip, merkez, yaricap):
+    """Ipin govde disindaki parcalarindan biri bu daireyi kesiyor mu?"""
+    C0, r0 = sahip.pos, float(sahip.radius) * 1.01
+    for i in range(len(pts) - 1):
+        a, b = pts[i], pts[i + 1]
+        if a.distance_to(C0) <= r0 and b.distance_to(C0) <= r0:
+            continue                # govdeye sarili kisim
+        ab = b - a
+        L2 = ab.length_squared()
+        if L2 < 1e-9:
+            continue
+        t = max(0.0, min(1.0, (merkez - a).dot(ab) / L2))
+        if (a + ab * t).distance_to(merkez) < yaricap:
+            return True
+    return False
+
+
+def ipleri_coz(cells, dt, izgara=None):
+    """IP BIR SAYAC DEGIL, BIR IPTIR: boyu sabittir, gerilince iki ucu ceker.
+
+    Once volvent ipi avi YERINE CIVILIYORDU (tutulan hucrenin motoru
+    kapaniyordu) ve 2,5 saniyelik bir sayacla birakiyordu. Saldirgan ise
+    serbestti: avin etrafinda yuzuyor, ip lastik gibi 1 ile 101 px arasinda
+    uzayip kisaliyordu (olculdu). Gercek bir iplik ne avi dunyaya civiler
+    ne de uzar.
+
+    Dusuk Reynolds rejiminde atalet yoktur: kuvvet dogrudan hiza donusur,
+    hiz da surtunmeyle (Stokes, yaricapla orantili) bolunur. Ip gerilince
+    asim iki hucreye SURTUNMELERINE GORE paylastirilir: kucuk hucre daha
+    cok cekilir, olu bir hucrenin kalintisi hic kimildamaz. Kuvvet organin
+    uzerinden - ip govdeye sarildiysa teget noktasindan - uygulanir ve
+    hucreyi capaya dogru cevirir (tork = kol x kuvvet, donme surtunmesi
+    ~ yaricap^3). Gereken kuvvet ipin dayanimini asarsa ip kopar: sure
+    degil kuvvet koparir. Ipin gevsek kisminin icinden gecen bir hucre de
+    onu keser.
+    """
+    import lab as _lab
+    g = game_settings
+    dayanim = {5: g.IP_DAYANIM_PENETRANT, _lab.VOLVENT: g.IP_DAYANIM_VOLVENT,
+               _lab.GLUTINANT: g.IP_DAYANIM_GLUTINANT,
+               _lab.ISORHIZA: g.IP_DAYANIM_IZORIZA}
+    adt = max(float(dt), 1e-6)
+    for o in cells:
+        if o.dead:
+            continue
+        for organ in o.organs:
+            sh = getattr(organ, 'mermi', None)
+            if sh is None or sh.dead or not getattr(sh, 'ip', False):
+                continue
+            hedef = sh.hedef
+            canli = hedef is not None and not hedef.dead
+            sh.refresh_origin()
+            if canli:
+                sh.pos = o._capa_dunya(sh, hedef)
+            else:
+                if sh.sabit_capa is None:
+                    sh.sabit_capa = pygame.math.Vector2(sh.pos)
+                sh.pos = pygame.math.Vector2(sh.sabit_capa)
+            S = float(dayanim.get(sh.ci, g.IP_DAYANIM_PENETRANT))
+            ma = 1.0 / max(1.0, float(o.radius))
+            mp = (1.0 / max(1.0, float(hedef.radius))) if canli else 0.0
+            toplam = ma + mp
+            # IZORIZA: kanca tutununca ip sarilir, saldirgan kendini ceker.
+            # Sarma hizi ipin dayanabilecegi kuvvetle sinirli; temas olunca
+            # kanca birakir (avin icine gomulmez).
+            if sh.ci == _lab.ISORHIZA and sh.holding:
+                if (canli and o.pos.distance_to(hedef.pos)
+                        - float(o.radius) - float(hedef.radius) <= 0.5):
+                    o._ipi_kopar(organ, sh, 'temas: kanca birakti')
+                    continue
+                sar = min(float(g.IZORIZA_HIZ), 0.8 * S * toplam)
+                sh.ip_boy = max(1.0, sh.ip_boy - sar * dt)
+            uz, nokta, u, pts = o._ip_geometrisi(sh)
+            e = uz - sh.ip_boy
+            if e > 0.0:
+                kuvvet = (e / adt) / toplam
+                if kuvvet > S:
+                    o._ipi_kopar(organ, sh, 'ip koptu')
+                    continue
+                da = e * ma / toplam
+                kol = nokta - o.pos
+                o.pos += u * da
+                capraz = kol.x * u.y - kol.y * u.x
+                o.direction = o.direction.rotate(math.degrees(
+                    0.75 * capraz * da / (float(o.radius) ** 2)))
+                if o.direction.length_squared() > 1e-12:
+                    o.direction = o.direction.normalize()
+                if canli:
+                    dp = e * mp / toplam
+                    kol_p = sh.pos - hedef.pos
+                    hedef.pos -= u * dp
+                    capraz_p = kol_p.x * (-u.y) - kol_p.y * (-u.x)
+                    hedef.direction = hedef.direction.rotate(math.degrees(
+                        0.75 * capraz_p * dp / (float(hedef.radius) ** 2)))
+                    if hedef.direction.length_squared() > 1e-12:
+                        hedef.direction = hedef.direction.normalize()
+                    sh.pos = o._capa_dunya(sh, hedef)
+                sh.refresh_origin()
+                uz, nokta, u, pts = o._ip_geometrisi(sh)
+            elif e < -0.5 and len(pts) == 2:
+                pts = _sarkik(pts[0], pts[1], uz, sh.ip_boy, o)
+            sh.ip_noktalari = pts
+            if izgara is not None:
+                for c in izgara.yakin(o, float(o.radius) + uz + 40.0):
+                    if c is o or c is hedef or c.dead:
+                        continue
+                    if _ipi_kesen_var_mi(pts, o, c.pos, float(c.radius) * 0.8):
+                        o._ipi_kopar(organ, sh, 'baska hucre ipi kesti')
+                        break

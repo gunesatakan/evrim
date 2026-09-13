@@ -12,7 +12,8 @@ import pygame
 
 import lab
 from entities.organism import Organism
-from organs.peripheral.weapons.weapons import Stylet
+from organs.peripheral.weapons.weapons import Stylet, Harpoon
+from organs.peripheral.weapons.geometry import carrier_scale
 
 
 class _Cell:
@@ -116,6 +117,47 @@ class WeaponRenderingTests(unittest.TestCase):
 
         full.assert_not_called()
         socket.assert_called_once()
+
+    def test_harpoon_growth_does_not_outgrow_cell(self):
+        for radius in (5.0, 30.0, 300.0):
+            sizes = [66 * carrier_scale(radius, power, 3) for power in (0.1, 1, 10, 1000)]
+            self.assertEqual(sizes, sorted(sizes))
+            self.assertLessEqual(max(sizes), radius * 0.6)
+            self.assertAlmostEqual(carrier_scale(radius * 4, 1000, 3),
+                                   4 * carrier_scale(radius, 1000, 3))
+
+    def test_harpoon_detaches_instead_of_bending_sideways(self):
+        owner = _WeaponOwner()
+        owner.dead = False
+        owner.color = (255, 100, 30)
+        organ = Harpoon()
+        shot = lab.Shot(_Cell(), pygame.Vector2(55, 20), pygame.Vector2(1, 0),
+                        lab.CARRIERS[3], lab.PAYLOADS[0], lab.MARKERS[0], 3,
+                        source_scale=0.2)
+        shot.sahip, shot.organ = owner, organ
+        owner.direction = pygame.Vector2(0, 1)
+        shot.update(0.01)
+        self.assertEqual(shot.t6_phase, 'retracting')
+        shot.update(0.2)
+        self.assertTrue(shot.dead)
+        self.assertEqual(shot.pos, shot.attachment_origin())
+
+    def test_injection_is_timed_and_never_duplicates_payload(self):
+        cell = _Cell()
+        cell.motion = pygame.Vector2()
+        shot = lab.Shot(cell, pygame.Vector2(90, 100), pygame.Vector2(1, 0),
+                        lab.CARRIERS[3], lab.PAYLOADS[1], lab.MARKERS[0], 3,
+                        source_scale=0.2)
+        shot.t6_phase = 'injecting'
+        shot.injection_total = 12
+        with patch.object(shot, '_release_payload') as release:
+            for _ in range(28):
+                shot.update(0.01)
+            self.assertEqual(sum(c.args[0] for c in release.call_args_list), 12)
+            self.assertEqual(shot.t6_phase, 'retracting')
+            shot.update(0.2)
+            shot.update(0.2)
+            self.assertEqual(sum(c.args[0] for c in release.call_args_list), 12)
 
 
 if __name__ == "__main__":

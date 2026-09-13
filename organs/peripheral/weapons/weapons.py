@@ -11,6 +11,7 @@ from organs.base_organ import BaseOrgan
 from .logic_weapons import (StyletLogic, HarpoonLogic, NematocystLogic,
                             ToxinLogic, LysinLogic, PhagocytosisLogic)
 from .view_weapons import draw_weapon, draw_weapon_socket, LAB_BOY
+from .geometry import carrier_scale
 
 
 class BaseWeapon(BaseOrgan):
@@ -187,7 +188,7 @@ class BaseWeapon(BaseOrgan):
         # (weapon_len tablosu). Organ, hucre yaricapiyla ORANLI cizilir -
         # mermi fizigi de ayni oranla calisir (hiz_olcegi = r/110).
         # Yakinlastirmada hucreyi_ciz yaricapi zaten buyutmus olur.
-        birim = float(parent.radius) / 110.0 * self.logic.power
+        birim = carrier_scale(parent.radius, self.logic.power, ci)
         if not self.is_deployed(parent):
             birim *= self.RETRACTED_RATIO
         length = LAB_BOY.get(int(ci), 46.0) * birim
@@ -198,7 +199,9 @@ class BaseWeapon(BaseOrgan):
             # gibi gosteriyordu.
             draw_weapon_socket(
                 screen, pos, outward, length, olcek=k,
-                carrier=int(ci), recoil=0.0)
+                carrier=int(ci), recoil=0.0,
+                activity=max(0.0, self._atis_sure / self.ATIS_GORUNME),
+                owner_color=getattr(parent, 'color', None))
             return
         draw_weapon(screen, ad, pos, outward, length,
                     self.logic.ready, self.last_target_pos, olcek=k,

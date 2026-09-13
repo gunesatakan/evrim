@@ -7,12 +7,13 @@ konumu 10^9 piksele kacana kadar kimse fark etmedi. Bu dosya uzun bir
 ekosistem kosusunda HER KAREDE asagidakileri denetler:
 
   1. Konum sonlu: hicbir hucre, molekul, mermi sonsuz ya da NaN degil.
-  2. Bir organ = bir baslik: bir organin ayni anda birden fazla canli
-     mermisi olamaz; canli mermi sahibi organi gosterir.
-  3. Boy: mermi ucu organdan azami uzunluktan uzakta olamaz
-     (tup geri ceker, iplik kopar).
+  2. Mermi organindir: canli mermiyi sahibi organ tasir, hedefin
+     listesinde mermi yasamaz.
+  3. Boy: ucan merminin ucu organdan azami uzunluktan uzakta olamaz;
+     bir ipin yolu (govdeye sarilma dahil) kendi boyunu asamaz.
   4. Tutma bir ipliktir: av "tutulu" ise onu tutan CANLI bir iplik
      vardir (sayac tek basina tutamaz).
+  7. Ipin capasi hedef olmayan bir hucrenin icinde olamaz.
   5. Stok bir hacimdir: 0 ile STOCK_MAX arasinda.
   6. Molekul durumu gecerli kumede; capalanmis molekul kendi bandinda.
 
@@ -63,40 +64,55 @@ def denetle(d, kare, ihlaller):
                 ihlaller.append((kare, 'molekul konumu sonlu degil', o.uid))
             if m.state not in GECERLI_DURUM:
                 ihlaller.append((kare, 'molekul durumu gecersiz', m.state))
-        # 1-3. mermiler
-        for sh in getattr(o, 'atislar', ()):
+        # 2. hedefin listesinde mermi yasamaz
+        if getattr(o, 'atislar', None):
+            ihlaller.append((kare, 'hedef listesinde mermi var', o.uid))
+        # 1-3, 7. organlarimin mermileri ve ipleri
+        for x in o.organs:
+            sh = getattr(x, 'mermi', None)
+            if sh is None:
+                continue
             if not sonlu(sh.pos):
                 ihlaller.append((kare, 'mermi konumu sonlu degil', o.uid))
                 continue
             if sh.dead:
                 continue
-            org = getattr(sh, 'organ', None)
-            if org is not None and getattr(org, 'mermi', None) is not sh:
+            if getattr(sh, 'organ', None) is not x:
                 ihlaller.append((kare, 'canli mermi sahibi organi gostermiyor', o.uid))
             az = getattr(sh, 'azami_uzunluk', None)
-            if az is not None and (sh.pos - sh.origin).length() > az * 1.05 + 1.0:
+            if getattr(sh, 'ip', False):
+                uz = o._ip_geometrisi(sh)[0]
+                # Ciftler en son birbirinden ayrilir (resolve_overlaps); o
+                # itme ipi birkac piksel gerebilir, bir sonraki karede ip
+                # yeniden cozulur.
+                if uz > sh.ip_boy + 4.0:
+                    ihlaller.append((kare, 'ip boyunu asti',
+                                     (round(uz, 1), round(sh.ip_boy, 1))))
+                if az is not None and sh.ip_boy > az + 1.0:
+                    ihlaller.append((kare, 'ip boyu organin ipinden uzun',
+                                     (round(sh.ip_boy, 1), round(az, 1))))
+                for c in hucreler:
+                    if c is o or c is sh.hedef or c.dead:
+                        continue
+                    if c.pos.distance_to(sh.pos) < float(c.radius) * 0.7:
+                        ihlaller.append((kare, 'ip capasi baska hucrenin icinde', o.uid))
+                        break
+            elif az is not None and (sh.pos - sh.origin).length() > az * 1.05 + 1.0:
                 ihlaller.append((kare, 'mermi boyunu asti',
                                  (round((sh.pos - sh.origin).length(), 1), round(az, 1))))
-        # 4. tutma = iplik
-        if getattr(o, 'tether_timer', 0.0) > 0.0:
-            tutan = [sh for sh in o.atislar
-                     if getattr(sh, 'holding', False) and not sh.dead
-                     and sh.ci == lab.VOLVENT]
-            # Iplik koptuktan sonra sayac en fazla birkac kare yasar.
-            if not tutan and o.tether_timer > 4 * DT:
-                ihlaller.append((kare, 'av tutulu ama tutan iplik yok',
-                                 (o.uid, round(o.tether_timer, 3))))
-    # 2. bir organ = bir baslik (canli mermi sayisi organ basina <= 1)
-    canli_sayac = {}
+    # 4. tutma = iplik
+    tutanlar = {}
     for o in hucreler:
-        for sh in getattr(o, 'atislar', ()):
-            if not sh.dead and getattr(sh, 'organ', None) is not None:
-                k = id(sh.organ)
-                canli_sayac[k] = canli_sayac.get(k, 0) + 1
-    for k, n in canli_sayac.items():
-        if n > 1:
-            ihlaller.append((kare, 'bir organin birden fazla canli mermisi', n))
-
+        for x in o.organs:
+            sh = getattr(x, 'mermi', None)
+            if (sh is not None and not sh.dead and getattr(sh, 'holding', False)
+                    and sh.ci == lab.VOLVENT and sh.hedef is not None):
+                tutanlar[id(sh.hedef)] = True
+    for o in hucreler:
+        # Iplik koptuktan sonra sayac en fazla birkac kare yasar.
+        if getattr(o, 'tether_timer', 0.0) > 4 * DT and id(o) not in tutanlar:
+            ihlaller.append((kare, 'av tutulu ama tutan iplik yok',
+                             (o.uid, round(o.tether_timer, 3))))
 
 def kos(tohum=11, sure=90.0, isinma=45.0):
     random.seed(tohum)

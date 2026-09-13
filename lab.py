@@ -799,6 +799,14 @@ class Shot:
         self.contact_point = None
         self.contact_normal = None
         self.impact_state = 'flying'
+        self.animation_age = 0.0
+        self.injection_age = 0.0
+        self.injection_duration = 0.28
+        self.injection_total = 0
+        self.injection_sent = 0
+        self.t6_phase = 'extending'
+        self.retract_age = 0.0
+        self.retract_length = 0.0
         self.trail = [pygame.math.Vector2(pos)]
         self.delivered = None
         self.miss_reason = None
@@ -835,6 +843,16 @@ class Shot:
         self._pi = PAYLOADS.index(payload)
         self.released = []       # bu merminin ortama biraktigi molekuller
         self._pending = False    # yuk birakilmayi bekliyor
+        # ---- OYUN: MERMI ORGANINDIR (bkz. Organism.mermileri_guncelle) ----
+        self.anlik = False       # tek karede bosaldi
+        self.capali = False      # ucu bir zarfa tutundu, gomuldu ya da girdi
+        self.bosa = False        # ip/tup sonuna kadar acildi, hicbir zarfa degmedi
+        self.hedef = None        # ucun tutundugu hucre
+        self.ip = False          # organa bagli iplik: gerilince iki ucu ceker
+        self.ip_boy = None       # ipin boyu (tutundugu andaki acik boy)
+        self.capa_yerel = None   # (aci, yaricap orani) hedefin kendi cercevesinde
+        self.sabit_capa = None   # hedef olunce capa kalintinin yerinde kalir
+        self.ip_noktalari = None # organdan uca ipin gercek yolu (sarilma, sarkma)
 
         # MENZIL: hedefin dis yuzeyine olan mesafe tasiyicinin erisimini
         # asiyorsa atis bosa gider. Difuzyon seyrelir, temas silahi ulasamaz.
@@ -879,6 +897,77 @@ class Shot:
         c = max(-1.0, min(1.0, (-self.dir).dot(n)))
         return math.degrees(math.acos(c))
 
+    def anlik_bosalt(self, kok, azami):
+        """BOSALMA TEK KAREDE BITER (oyun).
+
+        Nematosist kapsulu milisaniyenin cok altinda bosalir; ipligin ucu
+        milyonlarca g ile firlar. Oyunun bir karesi 33 ms. Ucu kareler
+        boyunca uctururken av kenara kayip kurtuluyor, ucusa sonradan giren
+        bir hucrenin icinden uc gecip gidiyordu - ikisi de gercekte olamaz
+        (olculdu: 29 atisin 4'unde uc baska bir hucrenin icinden gecti).
+
+        Burada laboratuvarin ucus fizigi - katman gecisi, sekme, kenetlenme,
+        gomulme - AYNI kodla ama tek karenin icinde, yarim piksellik
+        adimlarla sonuna kadar calistirilir. Ucus hizi yalnizca gorsel bir
+        hizdi; delme enerjisi, carpma acisi ve katmanlar degismez.
+
+        `kok` organin konumu, `azami` ipin/tupun boyu: uc bundan oteye
+        gidemez. Donus: uc bir zarfa tutundu, gomuldu ya da girdi mi.
+        """
+        self.anlik = True
+        if self.dead:                        # menzil disi dogdu
+            self.bosa = True
+            return False
+        adim = max(0.2, 0.5 * self.vs)
+        for _ in range(int(azami / adim) + 2000):
+            if (self.dead or self.embed_r is not None
+                    or self.cyto_travel is not None or self.feeding):
+                break
+            onceki = pygame.math.Vector2(self.pos)
+            self.pos += self.dir * adim
+            if self.pos.distance_to(kok) > azami:
+                # Ip ya da tup sonuna kadar acildi, hicbir zarfa degmedi.
+                self.pos = onceki
+                self.dead = True
+                self.bosa = True
+                self.miss_reason = self.miss_reason or (
+                    'sekti' if self.glanced else 'bosa acildi')
+                return False
+            d = self.pos.distance_to(self.cell.center)
+            bounds = self.cell.boundaries()
+            nxt = self.layer_idx + 1
+            if nxt < len(bounds) and d <= bounds[nxt]:
+                self._enter(nxt)
+        if self.dead:
+            return False
+        c = self.cell.center
+        if self.cyto_travel is not None:
+            # Butun katmanlar gecildi: uc sitoplazmada enerjisinin yettigi
+            # yolu alip durur (viskoz ortam), cekirdek sinirindan cikamaz.
+            kalan = float(self.cyto_travel)
+            while kalan > 1e-6:
+                adim_i = min(adim, kalan)
+                self.pos += self.dir * adim_i
+                kalan -= adim_i
+                if self.pos.distance_to(c) > self.cell.core_r * 0.9:
+                    n = self.pos - c
+                    if n.length() > 1e-6:
+                        self.pos = c + n.normalize() * self.cell.core_r * 0.9
+                    break
+            self.cyto_travel = None
+        elif self.embed_r is not None:
+            n = self.pos - c
+            if n.length() > 1e-6:
+                self.pos = c + n.normalize() * self.embed_r
+            if self.ci in (VOLVENT, GLUTINANT, ISORHIZA):
+                self.holding = True
+                self.hold_t = 0.0
+        else:
+            return False
+        self.capali = True
+        self._emit()
+        return True
+
     def attachment_origin(self):
         """Merminin su anki fiziksel baglanti noktasi.
 
@@ -918,7 +1007,77 @@ class Shot:
         self.origin = self.attachment_origin()
         return self.origin
 
+    def _start_retraction(self):
+        if self.t6_phase == 'retracting':
+            return
+        self.t6_phase = 'retracting'
+        self.retract_age = 0.0
+        self.retract_length = self.pos.distance_to(self.attachment_origin())
+        self.dead = False
+
+    def _rigid_axis(self):
+        owner = getattr(self, 'sahip', None)
+        organ = getattr(self, 'organ', None)
+        if owner is not None and organ is not None and not owner.dead:
+            a = organ.aim_angle(owner)
+            return pygame.math.Vector2(math.cos(a), math.sin(a))
+        return self.dir
+
     def update(self, dt):
+        # Tek karede bosalmis bir mermi laboratuvar ucusu yasamaz: oyunda
+        # onu sahibi olan organ tasir (ip, capa; bkz. Organism).
+        if getattr(self, 'anlik', False):
+            return
+        self.animation_age += dt
+        if self.ci != 3:
+            return self._update_physics(dt)
+        axis = self._rigid_axis()
+        root = self.attachment_origin()
+        if (getattr(getattr(self, 'sahip', None), 'dead', False)
+                and self.t6_phase not in ('retracting', 'complete')):
+            self._pending = False
+            self._start_retraction()
+        if self.t6_phase == 'retracting':
+            self.retract_age += dt
+            fraction = max(0.0, 1.0 - self.retract_age / 0.18)
+            self.pos = root + axis * self.retract_length * fraction
+            if fraction == 0:
+                self.dead = True
+                self.t6_phase = 'complete'
+            return
+        if self.t6_phase == 'complete':
+            return
+        offset = self.pos - root
+        # A rigid tube cannot follow a rotating cell like a rope. Stop delivery
+        # when the live socket and contact cease to align.
+        lateral = abs(offset.cross(axis))
+        if (getattr(self, 'organ', None) is not None and
+                (offset.dot(axis) < -2 * self.vs or lateral > max(0.5, 5 * self.vs))):
+            self.miss_reason = 'rijit baglanti ayrildi'
+            self._pending = False
+            self._start_retraction()
+            return
+        if self.t6_phase == 'injecting':
+            self.pos += self.cell.motion
+            if abs((self.pos - root).cross(axis)) > max(0.5, 5 * self.vs):
+                self._start_retraction()
+                return
+            self.injection_age = min(self.injection_duration, self.injection_age + dt)
+            due = int(self.injection_total * self.injection_age / self.injection_duration + 1e-9)
+            self._release_payload(due - self.injection_sent)
+            self.injection_sent = due
+            if self.injection_age >= self.injection_duration:
+                self._start_retraction()
+            return
+        self._update_physics(dt)
+        if self.dead:
+            if self.injection_total > self.injection_sent and not self.glanced:
+                self.t6_phase = 'injecting'
+                self.dead = False
+            else:
+                self._start_retraction()
+
+    def _update_physics(self, dt):
         # Koku fizik hesabindan once guncellenir; ates eden hucre hareket
         # ettiyse ip/tup ayni karede onunla birlikte tasinir.
         if not getattr(getattr(self, 'sahip', None), 'dead', False):
@@ -1187,7 +1346,14 @@ class Shot:
         if not self._pending:
             return
         self._pending = False
-        for _ in range(int(getattr(self, 'yuk_sayisi', CARRIER_EMIT[self.ci]))):
+        count = int(getattr(self, 'yuk_sayisi', CARRIER_EMIT[self.ci]))
+        if self.ci == 3:
+            self.injection_total = count
+            return
+        self._release_payload(count)
+
+    def _release_payload(self, count):
+        for _ in range(max(0, count)):
             a = random.uniform(0, 2 * math.pi)
             sp = random.uniform(0.25, 0.9) * MOLECULE_SPEED * self.vs
             v = pygame.math.Vector2(math.cos(a), math.sin(a)) * sp
@@ -1221,6 +1387,49 @@ class Shot:
                              T(q - vec * (5.0 * self.vs) - side * (4.0 * self.vs)),
                              L(2))
 
+    def _anlik_ciz(self, s, T, L, sv, root):
+        """Tek karede bosalmis ipligin cizimi: IP ve UC. Isaret yok.
+
+        Ip organdan capaya GERCEK yolundan cizilir: govdeye sarilma ve
+        gevsekken sarkma dahil (bkz. Organism._ip_geometrisi). Uc tipine
+        gore: penetrant avin icindeki dikenli uc, volvent ava sarilmis
+        halkalar, glutinant yapiskan damla, izoriza kanca.
+        """
+        yol = self.ip_noktalari or [root, self.pos]
+        pts = [T(q) for q in yol]
+        if len(pts) >= 2:
+            pygame.draw.lines(s, (160, 170, 200), False, pts, L(2))
+        onceki = yol[-2] if len(yol) >= 2 else root
+        u = self.pos - onceki
+        if u.length_squared() > 1e-9:
+            ang = math.atan2(u.y, u.x)
+        else:
+            ang = math.atan2(self.dir.y, self.dir.x)
+        cs, sn = math.cos(ang), math.sin(ang)
+
+        def rot(dx, dy):
+            return T(pygame.math.Vector2(self.pos.x + (dx * cs - dy * sn) * sv,
+                                         self.pos.y + (dx * sn + dy * cs) * sv))
+        p = T(self.pos)
+        ci = self.ci
+        if ci == VOLVENT:
+            for k in range(3):
+                pygame.draw.circle(s, (235, 225, 170), rot(-3 * k, 0), L(5 - k), L(1))
+        elif ci == GLUTINANT:
+            pygame.draw.circle(s, (200, 235, 140), p, L(6))
+            pygame.draw.circle(s, (90, 130, 60), p, L(6), L(1))
+        elif ci == ISORHIZA:
+            pygame.draw.polygon(s, (200, 220, 245), [rot(7, 0), rot(0, -5), rot(0, 5)])
+            pygame.draw.line(s, (200, 220, 245), rot(0, -5), rot(-6, -8), L(2))
+            pygame.draw.line(s, (200, 220, 245), rot(0, 5), rot(-6, 8), L(2))
+        else:
+            pygame.draw.line(s, (205, 195, 140), rot(8, 0), rot(-16, 0), L(4))
+            for k in range(3):
+                bx = -3 - k * 5
+                pygame.draw.line(s, (225, 215, 165), rot(bx, 0), rot(bx - 4, -5), L(2))
+                pygame.draw.line(s, (225, 215, 165), rot(bx, 0), rot(bx - 4, 5), L(2))
+            pygame.draw.polygon(s, (240, 230, 180), [rot(11, 0), rot(3, -4), rot(3, 4)])
+
     def draw(self, s, donustur=None, olcek=1.0):
         """Her tasiyici KENDI mermisiyle cizilir - hepsi ayni nokta degil.
 
@@ -1244,6 +1453,51 @@ class Shot:
         col = ((255, 150, 210) if self.docked else
                (ACCENT if not dead else (WARN if self.glanced else BAD)))
         ci = self.ci
+
+        if getattr(self, 'anlik', False):
+            if not dead:
+                self._anlik_ciz(s, T, L, sv, root)
+            return
+
+        if ci == 3:
+            # One rigid apparatus: attacking-cell socket -> contact -> real payload.
+            # All endpoints use the same world-to-screen transform.
+            o = T(root)
+            pygame.draw.line(s, (140, 175, 195), o, p, L(4))
+            pygame.draw.line(s, (65, 85, 100), o, p, L(1))
+            axis = self.pos - root
+            if axis.length_squared() > 1e-12:
+                axis = axis.normalize()
+            else:
+                axis = self._rigid_axis()
+            side = pygame.math.Vector2(-axis.y, axis.x)
+            pygame.draw.polygon(s, (220, 238, 245),
+                [p, T(self.pos - axis * 8 * sv + side * 3 * sv),
+                 T(self.pos - axis * 8 * sv - side * 3 * sv)])
+            owner = getattr(self, 'sahip', None)
+            owner_color = getattr(owner, 'color', (150, 220, 255))
+            pygame.draw.circle(s, owner_color, o, L(9), L(2))
+            if owner is not None and hasattr(owner, 'pos') and hasattr(owner, 'radius'):
+                # Highlight the firing patch of membrane in the owner's colour.
+                # Points are generated in world space, so camera zoom cannot move it.
+                aim = math.atan2(self._rigid_axis().y, self._rigid_axis().x)
+                arc = [T(owner.pos + pygame.math.Vector2(
+                    math.cos(aim - 0.35 + j * 0.7 / 12),
+                    math.sin(aim - 0.35 + j * 0.7 / 12)) * owner.radius)
+                    for j in range(13)]
+                pygame.draw.lines(s, owner_color, False, arc, L(4))
+            # Rear mounting collar identifies the producer even in a crowded pair.
+            rear = root - self._rigid_axis() * (18 * sv)
+            pygame.draw.line(s, owner_color, T(rear), o, L(6))
+            if self.t6_phase == 'injecting' and self.injection_total > 0:
+                progress = self.injection_age / self.injection_duration
+                for j in range(3):
+                    t = (progress * 2 + j / 3) % 1.0
+                    pygame.draw.circle(s, pcol, T(root.lerp(self.pos, t)), L(2))
+                pygame.draw.circle(s, pcol, p, L(5), L(1))
+            elif self.glanced:
+                self._draw_impact_marker(s, T, p, L)
+            return
 
         # Serbest olmayan bir baslik artik organin tam boy kopyasi gibi
         # havada durmaz. Fiziksel mermi son konumunda bir temas isaretiyle

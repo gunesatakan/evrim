@@ -245,6 +245,12 @@ class WeaponLogic:
         """Yalnızca MESAFE kontrolü. Yön kontrolü organ seviyesindedir
         (attachment_angle logic'te değil, organda tutulur)."""
         d = attacker.pos.distance_to(target.pos)
+        if getattr(self, 'carrier', None) == 3:
+            from .geometry import carrier_scale
+            # Same bounded stroke as the actual T6SS projectile, not an unrelated
+            # configured range that can promise hits the tube cannot reach.
+            reach = 66.0 * 1.15 * carrier_scale(attacker.radius, self.power, 3)
+            return d <= attacker.radius + target.radius + reach
         return d <= attacker.radius + target.radius + self.reach
 
 

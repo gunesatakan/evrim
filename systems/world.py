@@ -19,7 +19,7 @@ from entities.food import Food
 from entities.kaotropi import Kaotropi
 from entities.notropi import Notropi
 from entities.optropi import Optropi
-from entities.organism import Organism, resolve_overlaps
+from entities.organism import Organism, resolve_overlaps, ipleri_coz
 from entities.trail import TrailManager
 from organs.peripheral.weapons.weapons import BaseWeapon
 from systems.environment import ScentEnvironment
@@ -413,6 +413,9 @@ class Dunya:
 
             if o in eaten_prey and not o.dead:
                 o.die('avlandi')
+
+        # IPLER: herkes hareket ettikten sonra gerilen ipler iki ucu da ceker.
+        ipleri_coz(hepsi, dt, izgara)
 
         for o in hepsi:
             if o.dead:

@@ -247,6 +247,15 @@ DEFAULT_SETTINGS = {
     "BIND_BREAK_RATE": 1.2,          # kurtulma denemesi hizi
     "PHAGO_BIND_TIME": 1.2,          # yutmadan once tutma suresi (sn)
     "NEMATOCYST_TETHER_TIME": 2.5,   # zipkin ipinin avi tuttugu sure (sn)
+    # IP DAYANIMLARI. Ip bir sayac degil bir cisimdir: gerildiginde gereken
+    # kuvvet (hiz x surtunme; surtunme ~ yaricap) bu degeri asarsa kopar.
+    # Olcek: 22 px'lik iki hucre birbirinden tam hizla (40 px/sn) kacarken
+    # ipte ~880 birim kuvvet olusur. Penetrantin dikenleri kucuktur; volvent
+    # avin cevresine sarilir; glutinant yapisir; izoriza kancadir.
+    "IP_DAYANIM_PENETRANT": 450.0,
+    "IP_DAYANIM_VOLVENT": 2600.0,
+    "IP_DAYANIM_GLUTINANT": 900.0,
+    "IP_DAYANIM_IZORIZA": 1800.0,
     # Surekli bakim gideri (karar: savunma gelistirmeleri surekli enerji yakar)
     "COST_WALL": 0.25, "COST_OUTER": 0.15, "COST_CAPSULE": 0.20,
     "COST_EFFLUX": 0.10, "COST_REPAIR": 0.15, "COST_SLIP": 0.15,

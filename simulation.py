@@ -1428,6 +1428,11 @@ def main(food_count=None, kaotropi_count=None):
 
             for o in optropis:
                 o.draw(screen)
+            # Mermiler ve ipler BUTUN hucrelerden sonra: ip bir hucreden
+            # digerine uzanir, sonra cizilen hucrenin altinda kalmamali.
+            _gor = getattr(game_settings, 'GORUNUM_OLCEGI', 1.0)
+            for o in list(kaotropis) + list(optropis):
+                o.atislari_ciz(screen, olcek=_gor)
             olum_efekt.ciz(screen)
         else:
             # KAMERA GORUNUMU: ayni geometri, buyuk olcekte cizilir.
@@ -1462,7 +1467,16 @@ def main(food_count=None, kaotropi_count=None):
                 # ve zoom degistikce temas noktasi gorunurde kayar.
                 o.molekulleri_ciz(screen, olcek=_ok,
                                   donustur=tuval_konumu)
-                o.atislari_ciz(screen, olcek=_ok,
+            # MERMILER VE IPLER EN USTTE, butun hucrelerden sonra. Ip organin
+            # sahibinden cikar; sahibi ekran disinda olsa da ip gorunebilir.
+            for o in list(kaotropis) + list(optropis):
+                if not o.mermilerim():
+                    continue
+                _r = getattr(o, 'radius', 10) * 3.0 + 160.0
+                if (abs(o.pos.x - kamera["cx"]) > _yari[0] + _r or
+                        abs(o.pos.y - kamera["cy"]) > _yari[1] + _r):
+                    continue
+                o.atislari_ciz(screen, olcek=_z * _gorunum,
                                donustur=tuval_konumu)
             olum_efekt.ciz(screen, tuval_konumu, _z * _gorunum)
             _f = pygame.font.SysFont("consolas", 16)
