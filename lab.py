@@ -1397,6 +1397,24 @@ class Shot:
         """
         yol = self.ip_noktalari or [root, self.pos]
         pts = [T(q) for q in yol]
+        if self.ci == STYLET_INDEX:
+            # STILET TUPU avin icinde; emilen sitoplazma borunun icinden
+            # organa dogru akar.
+            if len(pts) >= 2:
+                pygame.draw.lines(s, (215, 208, 185), False, pts, L(4))
+                pygame.draw.lines(s, (120, 114, 98), False, pts, L(1))
+            u = self.pos - (yol[-2] if len(yol) >= 2 else root)
+            if u.length_squared() > 1e-9:
+                u = u.normalize()
+                n = pygame.math.Vector2(-u.y, u.x)
+                pygame.draw.polygon(s, (245, 240, 220), [
+                    T(self.pos + u * (4.0 * sv)),
+                    T(self.pos - u * (5.0 * sv) + n * (2.0 * sv)),
+                    T(self.pos - u * (5.0 * sv) - n * (2.0 * sv))])
+                for t, off in getattr(self, 'akis', ()):
+                    q = self.pos.lerp(root, max(0.0, min(1.0, t))) + n * (off * sv)
+                    pygame.draw.circle(s, (150, 220, 190), T(q), L(1.5))
+            return
         if len(pts) >= 2:
             pygame.draw.lines(s, (160, 170, 200), False, pts, L(2))
         onceki = yol[-2] if len(yol) >= 2 else root

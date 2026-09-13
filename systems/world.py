@@ -19,7 +19,8 @@ from entities.food import Food
 from entities.kaotropi import Kaotropi
 from entities.notropi import Notropi
 from entities.optropi import Optropi
-from entities.organism import Organism, resolve_overlaps, ipleri_coz
+from entities.organism import (Organism, resolve_overlaps, ipleri_coz, ip_kisitlari,
+                               ip_gerilmesi_denetle, ip_capalarini_tazele)
 from entities.trail import TrailManager
 from organs.peripheral.weapons.weapons import BaseWeapon
 from systems.environment import ScentEnvironment
@@ -501,7 +502,16 @@ class Dunya:
             self.optropis = [o for o in self.optropis if not o.dead]
             self.kaotropis = [o for o in self.kaotropis if not o.dead]
 
-        resolve_overlaps(self.optropis + self.kaotropis)
+        # TEMASLAR VE IPLER BIRLIKTE. Hucreler ic ice giremez, ipler de
+        # boylarindan uzun olamaz; iki kural ayni karede birkac turda
+        # uzlastirilir. Uzlasamayan ip ya kopar ya kayar.
+        _hucreler = self.optropis + self.kaotropis
+        resolve_overlaps(_hucreler)
+        for _tur in range(2):
+            ip_kisitlari(_hucreler)
+            resolve_overlaps(_hucreler)
+        ip_gerilmesi_denetle(_hucreler, dt)
+        ip_capalarini_tazele(_hucreler)
 
     def besin_yamasi_konumda(self, cx, cy, adet, sigma, izgara=None):
         """Belirtilen noktaya besin obegi birak.

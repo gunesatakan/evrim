@@ -245,11 +245,14 @@ class WeaponLogic:
         """Yalnızca MESAFE kontrolü. Yön kontrolü organ seviyesindedir
         (attachment_angle logic'te değil, organda tutulur)."""
         d = attacker.pos.distance_to(target.pos)
-        if getattr(self, 'carrier', None) == 3:
+        ci = getattr(self, 'carrier', None)
+        if ci in (3, 4):
             from .geometry import carrier_scale
-            # Same bounded stroke as the actual T6SS projectile, not an unrelated
-            # configured range that can promise hits the tube cannot reach.
-            reach = 66.0 * 1.15 * carrier_scale(attacker.radius, self.power, 3)
+            from .view_weapons import LAB_BOY
+            # TUPUN GERCEK BOYU. T6SS tupu ve stilet govdeye bagli yapilardir;
+            # erisimleri ayarlanmis bir sayi degil, organin boyudur. Stiletin
+            # "menzil 0" ayari hucrelerin ic ice girmesini sart kosuyordu.
+            reach = LAB_BOY.get(ci, 66.0) * 1.15 * carrier_scale(attacker.radius, self.power, ci)
             return d <= attacker.radius + target.radius + reach
         return d <= attacker.radius + target.radius + self.reach
 

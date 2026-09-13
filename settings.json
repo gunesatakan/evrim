@@ -157,7 +157,7 @@
         "MOTOR_TABAN_EFOR": 0.55,
         "MOTOR_EFOR_USSU": 2.0,
         "SOSYAL_ESIK": 8.0,
-        "OVERLAP_TOLERANCE": 0.1,
+        "OVERLAP_TOLERANCE": 0.02,
         "SEPARATION_STRENGTH": 0.5,
         "CYTOSKELETON_AREA": 10.0,
         "FOOD_AREA": 100.0,

@@ -1517,10 +1517,13 @@ class Organism(Entity):
             self.bound_target = None
         if self.bound_by is not None:
             self.bound_by.bound_target = None
+            self.bound_by.bag_turu = None
             self.bound_by = None
         self.bind_timer = 0.0
-        # Emilme ilerlemesi baga aittir: kurtulan av yeniden dolar.
-        self.emilen = 0.0
+        self.bag_turu = None
+        # EMILEN SITOPLAZMA GERI GELMEZ. Bag cozulunce emilen sifirlaniyordu:
+        # yarisi emilmis av bir karede eski boyuna donuyordu. Hucre onu ancak
+        # yavasca yeniden yapar (bkz. update, EMILEN_TOPARLANMA).
 
     def update_binding(self, dt):
         """Bağı ilerlet: mesafe koptu mu, av kurtuldu mu, ip bitti mi."""
@@ -1532,6 +1535,12 @@ class Organism(Entity):
             return
         if t.dead or self.dead:
             self.release_binding()
+            return
+        if getattr(self, 'bag_turu', None) == 'stilet':
+            # Stilet bagi iceri girmis tuptur: onu bir menzil kurali ya da
+            # rastgele siyrilma degil, tupun boyu ve dayanimi tutar
+            # (bkz. ipleri_coz).
+            self.bind_timer += dt
             return
         # Menzil koparsa bağ çözülür
         if self.pos.distance_to(t.pos) > self.radius + t.radius + 6.0:
@@ -1681,14 +1690,40 @@ class Organism(Entity):
                 self.atis_sayisi += 1
                 continue
 
-            # --- STILET EMMESI: bagli oldugu her kare, bekleme suresinden
-            # bagimsiz. Delmek oldurmez; emmek tuketir.
-            if lg.REQUIRES_BIND and self.bound_target is not None:
-                _t = self.bound_target
-                if _t in candidates and isinstance(organ, Stylet):
-                    self._emme(_t, dt, killed)
-                    if _t.dead:
+            # --- STILET: TUP AVIN ICINDEYSE EMER, degilse ancak ekseni
+            # ava degiyorsa uzatilir. BAG, ICERI GIRMIS TUPUN KENDISIDIR.
+            #
+            # Once stilet bir "bagli" durumuna bakiyordu: rastgele bir
+            # tutunma denemesi tutunca av her kare emiliyordu - stilet avin
+            # tersine baksa, tup hic girmemis olsa bile. Olculdu: emme
+            # karelerinin %75'inde tup avin icinde degildi, %42'sinde iki
+            # hucre birbirine degmiyordu. Pfiesteria'nin sapi avin icine
+            # girer ve sitoplazma o borunun icinden akar; boru yoksa akis da
+            # yoktur. Kaygan ya da kapsullu av da artik bir zar atisiyla
+            # degil, tupun katmanlari delip delemedigiyle (sekme, gomulme)
+            # korunur.
+            if isinstance(organ, Stylet):
+                sh = organ.mermi
+                if (sh is not None and not sh.dead and sh.feeding
+                        and getattr(sh, 'ip', False)
+                        and self.bound_target is not None
+                        and getattr(sh, 'hedef', None) is self.bound_target):
+                    self._emme(self.bound_target, dt, killed, sh)
+                    continue
+                if (not organ.atisa_hazir(self) or self.energy < lg.energy_cost
+                        or self.bound_target is not None):
+                    continue
+                for t in candidates:
+                    if t is self or t.dead or t.bound_by is not None:
                         continue
+                    if not organ.can_hit(self, t) or not self._eksen_degiyor(organ, lg, t):
+                        continue
+                    self.energy -= lg.energy_cost
+                    self.atis_sayisi += 1
+                    organ.atis_isaretle(pygame.math.Vector2(t.pos))
+                    self._igne_atisi(t, organ, lg, komsu_ham)
+                    break
+                continue
 
             # --- TEK ATIŞLIK SİLAHLAR ---
             #
@@ -1701,35 +1736,7 @@ class Organism(Entity):
             if not organ.atisa_hazir(self) or self.energy < lg.energy_cost:
                 continue
 
-            # Tutunma gerektiren silahlar (stilet): önce bağ kurulmalı.
-            # Bağlıysa hedef sabittir ve her bekleme dolduğunda vurulur.
-            if lg.REQUIRES_BIND:
-                if self.bound_target is None:
-                    for t in candidates:
-                        if t is self or t.dead or not organ.can_hit(self, t):
-                            continue
-                        # Tutunma DENEMESI baslik gondermez; basarisiz
-                        # deneme yalnizca zaman ve enerji goturur.
-                        self.energy -= lg.energy_cost
-                        lg.trigger()
-                        self.atis_sayisi += 1
-                        self.try_bind(t, lg.power)
-                        break
-                    continue
-                t = self.bound_target
-                if t not in candidates:
-                    continue
-                self.energy -= lg.energy_cost
-                # Bekleme atis aninda DEGIL baslik donunce baslar.
-                self.atis_sayisi += 1
-                organ.atis_isaretle(pygame.math.Vector2(t.pos))
-                # Her batista secili yuk iceri gider (varsa). Stiletin asil
-                # isi ise asagida: EMMEK.
-                self._igne_atisi(t, organ, lg, komsu_ham)
-                if t.dead:
-                    self.release_binding()
-                    killed.append(t)
-                continue
+            # (Tutunma gerektiren tek tek-atislik silah stiletti; yukarida.)
 
             for t in candidates:
                 if t is self or t.dead or not organ.can_hit(self, t):
@@ -2295,6 +2302,12 @@ class Organism(Entity):
     def _anlik_mermi_guncelle(self, sh, hedef, dt):
         """Tek karede bosalmis ipin iki ucunu yerine koy."""
         sh.refresh_origin()
+        if getattr(sh, 'cubuk', False) and (hedef is None or hedef.dead
+                                            or self.bound_target is not hedef):
+            # Stilet tupu: av olunce ya da bag gidince tup cekilir.
+            sh.feeding = False
+            sh.dead = True
+            return
         if not sh.capali:
             sh.dead = True
             return
@@ -2347,9 +2360,23 @@ class Organism(Entity):
         _boyu_asti(False)
         sh.update(dt)
         _boyu_asti(True)
-        if sh.feeding and self.bound_target is not hedef:
-            sh.feeding = False
-            sh.dead = True
+        if sh.feeding and not sh.dead and not getattr(sh, 'ip', False):
+            # TUP AVIN ICINDE. Artik ucan bir mermi degil, iki hucre
+            # arasinda bir boru: boyu ciftin arasini sinirlar ve bag budur.
+            if self.bound_target is None and hedef.bound_by is None:
+                self._capa_kaydet(sh, hedef)
+                sh.anlik = True
+                sh.capali = True
+                sh.ip = True
+                sh.cubuk = True
+                sh.ip_boy = float(_azami) if _azami else max(1.0, sh.pos.distance_to(sh.origin))
+                self.bound_target = hedef
+                hedef.bound_by = self
+                self.bind_timer = 0.0
+                self.bag_turu = 'stilet'
+            else:
+                sh.feeding = False
+                sh.dead = True
 
     def _mermi_bitti(self, sh, hedef):
         """Biten merminin hedef zarfinda biraktigi referanslari temizle."""
@@ -2365,6 +2392,10 @@ class Organism(Entity):
 
     def _ipi_kopar(self, organ, sh, neden):
         """Ip koptu/birakildi: kapsul yeniden kurulmaya baslar."""
+        if (getattr(sh, 'cubuk', False) and self.bound_target is not None
+                and self.bound_target is getattr(sh, 'hedef', None)):
+            self.release_binding()
+        sh.feeding = False
         sh.dead = True
         sh.koptu = True
         sh.bitti = True
@@ -2442,19 +2473,38 @@ class Organism(Entity):
         pts.append(capa)
         return abs(dth) * r + duz, T, u, pts
 
-    def _emme(self, hedef, dt, killed):
-        """Stilet baglıyken sitoplazma EMER (mizositoz).
+    def _emme(self, hedef, dt, killed, sh=None):
+        """Iceri girmis stilet tupunden sitoplazma EMER (mizositoz).
 
-        Olum zehirden degil tukenmeden gelir. Ilerleme (emilen, 0..1) baga
-        aittir; avin kalan enerjisi dogrusal olarak cekilir ve emilen
-        1.0'a varinca hucre biter. Emen, cektiginin EMME_VERIM kadarini
-        kazanir ve emis makinesi icin saniyelik gider oder.
+        Olum zehirden degil tukenmeden gelir. Avin kalan enerjisi emilen
+        oranla cekilir ve emilen 1.0'a varinca hucre biter. Emen, cektiginin
+        EMME_VERIM kadarini kazanir ve emis makinesi icin saniyelik gider
+        oder.
+
+        AKIS BORUNUN BOYUNA BAGLIDIR (Hagen-Poiseuille: Q ~ r^4 / L). Ayni
+        cap icin kisa bir tup uzun bir tuptan hizli emer; STYLET_EMME,
+        tupun dortte biri kadar bir boru icindir (temas halinde tipik
+        acik boy; olculdu, 3-5 px). Emilen sitoplazma tup boyunca
+        zerrecik olarak akar (cizim).
         """
         g = game_settings
         if hedef.dead:
             return
+        oran = 1.0
+        if sh is not None:
+            L = max(1.0, float(self._ip_geometrisi(sh)[0]))
+            ref = 0.25 * float(getattr(sh, 'azami_uzunluk', 4.0 * L) or 4.0 * L)
+            oran = max(0.25, min(2.0, ref / L))
+            akis = getattr(sh, 'akis', None)
+            if akis is None:
+                akis = sh.akis = []
+            if random.random() < min(1.0, 0.6 * oran):
+                akis.append([0.0, random.uniform(-1.0, 1.0)])
+            for z in akis:
+                z[0] += dt * 0.9 * oran
+            sh.akis = [z for z in akis if z[0] < 1.0]
         onceki = float(getattr(hedef, 'emilen', 0.0))
-        pay = min(1.0 - onceki, g.STYLET_EMME * dt)
+        pay = min(1.0 - onceki, g.STYLET_EMME * oran * dt)
         if pay <= 0.0:
             return
         kalan = max(1e-6, 1.0 - onceki)
@@ -3781,6 +3831,12 @@ class Organism(Entity):
                 self.recalculate_physics()     # sisme indi, yaricap eski
         # Kairomon temizlenmesi: sızıntı kalıcı değil, metabolizma onu yavaşça
         # atar. Bu yüzden "yakında avlanmış" ile "aç" ayırt edilebilir kalır.
+        # EMILEN SITOPLAZMA YAVASCA YENIDEN YAPILIR (tup icerideyken degil).
+        _em = float(getattr(self, 'emilen', 0.0))
+        if _em > 0.0 and self.bound_by is None:
+            self.emilen = max(0.0, _em - game_settings.EMILEN_TOPARLANMA * dt)
+            if int(_em * 50.0) != int(self.emilen * 50.0):
+                self.recalculate_physics()
         if self.kairomone > 0.0:
             self.kairomone -= game_settings.KAIROMONE_DECAY * dt
             if self.kairomone < 0.0:
@@ -3887,11 +3943,15 @@ class Organism(Entity):
         actual_move_angle = current_heading + self.thrust_direction
         move_dir = pygame.math.Vector2(math.cos(actual_move_angle), math.sin(actual_move_angle))
 
-        # Hareketsizlik: yutma sersemliği, tutulmak (bound_by) ya da
-        # birini TUTMAK. IP ARTIK HAREKETSIZ BIRAKMAZ: volvente sarilan av
-        # yuzmeye devam eder, onu tutan ipin boyudur (bkz. ipleri_coz).
-        immobile = (self.stun_timer > 0 or self.bound_by is not None
-                    or self.bound_target is not None
+        # Hareketsizlik: yutma sersemliği ya da fagositoz bagi (amip avi
+        # sarar). IP VE STILET HAREKETSIZ BIRAKMAZ: volvente sarilan ya da
+        # stiletle emilen av yuzmeye devam eder; onu tutan ipin/tupun
+        # boyudur (bkz. ipleri_coz).
+        _fago_bagi = ((self.bound_target is not None
+                       and getattr(self, 'bag_turu', None) != 'stilet')
+                      or (self.bound_by is not None
+                          and getattr(self.bound_by, 'bag_turu', None) != 'stilet'))
+        immobile = (self.stun_timer > 0 or _fago_bagi
                     or self.felc_t > 0.0)          # felc / ic durma
         move_dist = 0.0 if immobile else self.speed * dt
         if self.yavaslama_t > 0.0:
@@ -3940,8 +4000,9 @@ def resolve_overlaps(cells):
             for i, a in enumerate(kova):
                 ar = a.radius
                 for b in (kova[i + 1:] if ayni else karsi):
-                    if a.bound_target is b or b.bound_target is a:
-                        continue            # kenetliler yapışık kalır
+                    if ((a.bound_target is b and getattr(a, 'bag_turu', None) != 'stilet')
+                            or (b.bound_target is a and getattr(b, 'bag_turu', None) != 'stilet')):
+                        continue            # fagositozla sarilan av yapisik kalir
                     limit = (ar + b.radius) * tol
                     dx2 = b.pos.x - a.pos.x
                     dy2 = b.pos.y - a.pos.y
@@ -3995,6 +4056,93 @@ def _ipi_kesen_var_mi(pts, sahip, merkez, yaricap):
     return False
 
 
+def ip_capalarini_tazele(cells):
+    """Kare sonunda capalari ve ip yollarini yeniden hesapla.
+
+    Ipler cozuldukten SONRA ust uste binen hucreler birbirinden itilir
+    (resolve_overlaps). Capa o itmeden once yazildigi icin itilen avin
+    yaninda eski yerinde kaliyordu: cizilen uc avdan birkac piksel kopuk,
+    bazen komsu hucrenin icinde gorunuyordu (degismezler yakaladi).
+    """
+    for o in cells:
+        if o.dead:
+            continue
+        for organ in o.organs:
+            sh = getattr(organ, 'mermi', None)
+            if sh is None or sh.dead or not getattr(sh, 'ip', False):
+                continue
+            h = sh.hedef
+            if h is not None and not h.dead:
+                sh.pos = o._capa_dunya(sh, h)
+            sh.refresh_origin()
+            uz, _n, _u, pts = o._ip_geometrisi(sh)
+            if (uz < sh.ip_boy - 0.5 and len(pts) == 2
+                    and not getattr(sh, 'cubuk', False)):
+                pts = _sarkik(pts[0], pts[1], uz, sh.ip_boy, o)
+            sh.ip_noktalari = pts
+
+def _ip_dayanimi(sh):
+    import lab as _lab
+    g = game_settings
+    if getattr(sh, 'cubuk', False):
+        return float(g.IP_DAYANIM_STILET)
+    return float({5: g.IP_DAYANIM_PENETRANT, _lab.VOLVENT: g.IP_DAYANIM_VOLVENT,
+                  _lab.GLUTINANT: g.IP_DAYANIM_GLUTINANT,
+                  _lab.ISORHIZA: g.IP_DAYANIM_IZORIZA}.get(sh.ci, g.IP_DAYANIM_PENETRANT))
+
+
+def _ip_uclari(o, sh):
+    """Ipin iki ucunu tazele. Donus: (hedef canli mi, sahip ve hedef hareketliligi)."""
+    hedef = sh.hedef
+    canli = hedef is not None and not hedef.dead
+    sh.refresh_origin()
+    if canli:
+        sh.pos = o._capa_dunya(sh, hedef)
+    else:
+        if sh.sabit_capa is None:
+            sh.sabit_capa = pygame.math.Vector2(sh.pos)
+        sh.pos = pygame.math.Vector2(sh.sabit_capa)
+    # Dusuk Reynolds: hiz = kuvvet / surtunme, surtunme ~ yaricap (Stokes).
+    ma = 1.0 / max(1.0, float(o.radius))
+    mp = (1.0 / max(1.0, float(hedef.radius))) if canli else 0.0
+    return canli, ma, mp
+
+
+def _ip_cek(o, sh, canli, ma, mp, e, nokta, u):
+    """Asimi (e) iki uca hareketlilige gore paylastir; kuvvet kolu hucreyi cevirir."""
+    hedef = sh.hedef
+    toplam = ma + mp
+    da = e * ma / toplam
+    kol = nokta - o.pos
+    o.pos += u * da
+    capraz = kol.x * u.y - kol.y * u.x
+    o.direction = o.direction.rotate(math.degrees(
+        0.75 * capraz * da / (float(o.radius) ** 2)))
+    if o.direction.length_squared() > 1e-12:
+        o.direction = o.direction.normalize()
+    if canli:
+        dp = e * mp / toplam
+        kol_p = sh.pos - hedef.pos
+        hedef.pos -= u * dp
+        capraz_p = kol_p.x * (-u.y) - kol_p.y * (-u.x)
+        hedef.direction = hedef.direction.rotate(math.degrees(
+            0.75 * capraz_p * dp / (float(hedef.radius) ** 2)))
+        if hedef.direction.length_squared() > 1e-12:
+            hedef.direction = hedef.direction.normalize()
+        sh.pos = o._capa_dunya(sh, hedef)
+    sh.refresh_origin()
+
+
+def _ipler(cells):
+    for o in cells:
+        if o.dead:
+            continue
+        for organ in o.organs:
+            sh = getattr(organ, 'mermi', None)
+            if sh is not None and not sh.dead and getattr(sh, 'ip', False):
+                yield o, organ, sh
+
+
 def ipleri_coz(cells, dt, izgara=None):
     """IP BIR SAYAC DEGIL, BIR IPTIR: boyu sabittir, gerilince iki ucu ceker.
 
@@ -4013,77 +4161,83 @@ def ipleri_coz(cells, dt, izgara=None):
     ~ yaricap^3). Gereken kuvvet ipin dayanimini asarsa ip kopar: sure
     degil kuvvet koparir. Ipin gevsek kisminin icinden gecen bir hucre de
     onu keser.
+
+    Bu, karenin ILK ip gecisidir (izoriza sarmasi, kopma, kesilme). Kare
+    sonunda ipler temaslarla birlikte birkac tur daha cozulur
+    (ip_kisitlari, ip_gerilmesi_denetle).
     """
     import lab as _lab
     g = game_settings
-    dayanim = {5: g.IP_DAYANIM_PENETRANT, _lab.VOLVENT: g.IP_DAYANIM_VOLVENT,
-               _lab.GLUTINANT: g.IP_DAYANIM_GLUTINANT,
-               _lab.ISORHIZA: g.IP_DAYANIM_IZORIZA}
     adt = max(float(dt), 1e-6)
-    for o in cells:
-        if o.dead:
-            continue
-        for organ in o.organs:
-            sh = getattr(organ, 'mermi', None)
-            if sh is None or sh.dead or not getattr(sh, 'ip', False):
+    for o, organ, sh in list(_ipler(cells)):
+        canli, ma, mp = _ip_uclari(o, sh)
+        hedef = sh.hedef
+        toplam = ma + mp
+        S = _ip_dayanimi(sh)
+        cubuk = getattr(sh, 'cubuk', False)
+        # IZORIZA: kanca tutununca ip sarilir, saldirgan kendini ceker.
+        # Sarma hizi ipin dayanabilecegi kuvvetle sinirli; temas olunca
+        # kanca birakir (avin icine gomulmez).
+        if sh.ci == _lab.ISORHIZA and sh.holding:
+            if (canli and o.pos.distance_to(hedef.pos)
+                    - float(o.radius) - float(hedef.radius) <= 0.5):
+                o._ipi_kopar(organ, sh, 'temas: kanca birakti')
                 continue
-            hedef = sh.hedef
-            canli = hedef is not None and not hedef.dead
-            sh.refresh_origin()
-            if canli:
-                sh.pos = o._capa_dunya(sh, hedef)
-            else:
-                if sh.sabit_capa is None:
-                    sh.sabit_capa = pygame.math.Vector2(sh.pos)
-                sh.pos = pygame.math.Vector2(sh.sabit_capa)
-            S = float(dayanim.get(sh.ci, g.IP_DAYANIM_PENETRANT))
-            ma = 1.0 / max(1.0, float(o.radius))
-            mp = (1.0 / max(1.0, float(hedef.radius))) if canli else 0.0
-            toplam = ma + mp
-            # IZORIZA: kanca tutununca ip sarilir, saldirgan kendini ceker.
-            # Sarma hizi ipin dayanabilecegi kuvvetle sinirli; temas olunca
-            # kanca birakir (avin icine gomulmez).
-            if sh.ci == _lab.ISORHIZA and sh.holding:
-                if (canli and o.pos.distance_to(hedef.pos)
-                        - float(o.radius) - float(hedef.radius) <= 0.5):
-                    o._ipi_kopar(organ, sh, 'temas: kanca birakti')
-                    continue
-                sar = min(float(g.IZORIZA_HIZ), 0.8 * S * toplam)
-                sh.ip_boy = max(1.0, sh.ip_boy - sar * dt)
+            sar = min(float(g.IZORIZA_HIZ), 0.8 * S * toplam)
+            sh.ip_boy = max(1.0, sh.ip_boy - sar * dt)
+        uz, nokta, u, pts = o._ip_geometrisi(sh)
+        if cubuk and len(pts) > 2:
+            # Stilet sert bir borudur, govdeye sarilamaz: organ avdan
+            # donunce tup avdan cikar.
+            o._ipi_kopar(organ, sh, 'stilet egildi, avdan cikti')
+            continue
+        e = uz - sh.ip_boy
+        if e > 0.0:
+            if (e / adt) / toplam > S:
+                o._ipi_kopar(organ, sh, 'ip koptu')
+                continue
+            _ip_cek(o, sh, canli, ma, mp, e, nokta, u)
             uz, nokta, u, pts = o._ip_geometrisi(sh)
-            e = uz - sh.ip_boy
-            if e > 0.0:
-                kuvvet = (e / adt) / toplam
-                if kuvvet > S:
-                    o._ipi_kopar(organ, sh, 'ip koptu')
+        elif e < -0.5 and len(pts) == 2 and not cubuk:
+            pts = _sarkik(pts[0], pts[1], uz, sh.ip_boy, o)
+        sh.ip_noktalari = pts
+        if izgara is not None:
+            for c in izgara.yakin(o, float(o.radius) + uz + 40.0):
+                if c is o or c is hedef or c.dead:
                     continue
-                da = e * ma / toplam
-                kol = nokta - o.pos
-                o.pos += u * da
-                capraz = kol.x * u.y - kol.y * u.x
-                o.direction = o.direction.rotate(math.degrees(
-                    0.75 * capraz * da / (float(o.radius) ** 2)))
-                if o.direction.length_squared() > 1e-12:
-                    o.direction = o.direction.normalize()
-                if canli:
-                    dp = e * mp / toplam
-                    kol_p = sh.pos - hedef.pos
-                    hedef.pos -= u * dp
-                    capraz_p = kol_p.x * (-u.y) - kol_p.y * (-u.x)
-                    hedef.direction = hedef.direction.rotate(math.degrees(
-                        0.75 * capraz_p * dp / (float(hedef.radius) ** 2)))
-                    if hedef.direction.length_squared() > 1e-12:
-                        hedef.direction = hedef.direction.normalize()
-                    sh.pos = o._capa_dunya(sh, hedef)
-                sh.refresh_origin()
-                uz, nokta, u, pts = o._ip_geometrisi(sh)
-            elif e < -0.5 and len(pts) == 2:
-                pts = _sarkik(pts[0], pts[1], uz, sh.ip_boy, o)
-            sh.ip_noktalari = pts
-            if izgara is not None:
-                for c in izgara.yakin(o, float(o.radius) + uz + 40.0):
-                    if c is o or c is hedef or c.dead:
-                        continue
-                    if _ipi_kesen_var_mi(pts, o, c.pos, float(c.radius) * 0.8):
-                        o._ipi_kopar(organ, sh, 'baska hucre ipi kesti')
-                        break
+                if _ipi_kesen_var_mi(pts, o, c.pos, float(c.radius) * 0.8):
+                    o._ipi_kopar(organ, sh, 'baska hucre ipi kesti')
+                    break
+
+
+def ip_kisitlari(cells):
+    """Ipleri yalnizca boylarina geri cek (kopma yok): temaslarla ic ice tur."""
+    for o, organ, sh in list(_ipler(cells)):
+        canli, ma, mp = _ip_uclari(o, sh)
+        uz, nokta, u, pts = o._ip_geometrisi(sh)
+        e = uz - sh.ip_boy
+        if e > 0.0 and not (getattr(sh, 'cubuk', False) and len(pts) > 2):
+            _ip_cek(o, sh, canli, ma, mp, e, nokta, u)
+
+
+def ip_gerilmesi_denetle(cells, dt):
+    """Temaslarla birlikte cozuldukten SONRA hala gergin kalan ip.
+
+    Kalabalikta ip avi komsu bir hucreye dogru cekiyordu ve temas onu geri
+    itiyordu; ikisi ayni karede uzlasamayinca hucreler 13 px ic ice
+    kaliyordu (degismezler yakaladi). Iki kisit birlikte saglanamiyorsa
+    ipteki gerilme buyur: dayanimi asarsa ip kopar, asmazsa ip kayar (sarili
+    iplik/yapiskan damla bir miktar siyrilir; boyu uzar). Stilet tupu
+    kayamaz: gergin kalirsa avdan cikar.
+    """
+    adt = max(float(dt), 1e-6)
+    for o, organ, sh in list(_ipler(cells)):
+        canli, ma, mp = _ip_uclari(o, sh)
+        uz = o._ip_geometrisi(sh)[0]
+        e = uz - sh.ip_boy
+        if e <= 0.5:
+            continue
+        if (e / adt) / (ma + mp) > _ip_dayanimi(sh) or getattr(sh, 'cubuk', False):
+            o._ipi_kopar(organ, sh, 'ip sikisti, koptu')
+        else:
+            sh.ip_boy = uz

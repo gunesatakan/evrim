@@ -14,6 +14,9 @@ ekosistem kosusunda HER KAREDE asagidakileri denetler:
   4. Tutma bir ipliktir: av "tutulu" ise onu tutan CANLI bir iplik
      vardir (sayac tek basina tutamaz).
   7. Ipin capasi hedef olmayan bir hucrenin icinde olamaz.
+  8. Ip ya da stilet tupuyle bagli iki hucre derin ic ice olamaz (temas
+     payi + birkac piksel). (Bolunmede yavrunun komsusunun ustune dogmasi
+     silahlardan bagimsiz, ayri bir konudur; burada sinanmaz.)
   5. Stok bir hacimdir: 0 ile STOCK_MAX arasinda.
   6. Molekul durumu gecerli kumede; capalanmis molekul kendi bandinda.
 
@@ -100,6 +103,22 @@ def denetle(d, kare, ihlaller):
             elif az is not None and (sh.pos - sh.origin).length() > az * 1.05 + 1.0:
                 ihlaller.append((kare, 'mermi boyunu asti',
                                  (round((sh.pos - sh.origin).length(), 1), round(az, 1))))
+    # 8. temas: iple/tupla bagli cift derin ic ice degil
+    for o in hucreler:
+        if o.dead:
+            continue
+        for x in o.organs:
+            sh = getattr(x, 'mermi', None)
+            b = getattr(sh, 'hedef', None) if sh is not None else None
+            if b is None or sh.dead or b.dead or not getattr(sh, 'ip', False):
+                continue
+            ic = float(o.radius) + float(b.radius) - o.pos.distance_to(b.pos)
+            # Kalabalikta ayrisma birkac turda tamamlanir; olculen en derin
+            # kalinti ~4,3 px. Ic ice gomulme (izoriza/harpun eskiden 5-13 px)
+            # bunun belirgin ustundedir.
+            pay = (float(o.radius) + float(b.radius)) * g.OVERLAP_TOLERANCE + 5.0
+            if ic > pay:
+                ihlaller.append((kare, 'bagli cift derin ic ice', (round(ic, 1), round(pay, 1))))
     # 4. tutma = iplik
     tutanlar = {}
     for o in hucreler:

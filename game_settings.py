@@ -256,6 +256,11 @@ DEFAULT_SETTINGS = {
     "IP_DAYANIM_VOLVENT": 2600.0,
     "IP_DAYANIM_GLUTINANT": 900.0,
     "IP_DAYANIM_IZORIZA": 1800.0,
+    # STILET TUPU avin icindeyken cift bu kuvvetle ayrilmaya zorlanirsa tup
+    # avdan cikar (sert bir boru, ipten dayanikli ama sonsuz degil).
+    "IP_DAYANIM_STILET": 1500.0,
+    # Emilen sitoplazmanin saniyede yeniden yapilan orani (0..1).
+    "EMILEN_TOPARLANMA": 0.02,
     # Surekli bakim gideri (karar: savunma gelistirmeleri surekli enerji yakar)
     "COST_WALL": 0.25, "COST_OUTER": 0.15, "COST_CAPSULE": 0.20,
     "COST_EFFLUX": 0.10, "COST_REPAIR": 0.15, "COST_SLIP": 0.15,
@@ -556,7 +561,10 @@ DEFAULT_SETTINGS = {
     # en derin gecisme %97). Artik ust uste binenler ayriliyor.
     # Gercek hucreler kismen deforme olup birbirine yaslanabilir, o yuzden
     # kucuk bir tolerans birakilir - amac tam gecismeyi engellemek.
-    "OVERLAP_TOLERANCE": 0.10,     # yaricap toplaminin bu kadari serbest
+    # Hucreler katı daireler olarak cizilir; %10'luk pay temas halindeki
+    # hucreleri ekranda gozle gorulur bicimde ic ice gosteriyordu (22 px'lik
+    # iki hucrede 4,5 px). Pay artik sifira yakin.
+    "OVERLAP_TOLERANCE": 0.02,     # yaricap toplaminin bu kadari serbest
     "SEPARATION_STRENGTH": 0.5,    # girismenin bir karede duzeltilen orani
     "CYTOSKELETON_AREA": 10.0,
     "FOOD_AREA": 50.0,
