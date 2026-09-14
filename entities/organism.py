@@ -3356,16 +3356,23 @@ class Organism(Entity):
         ang = random.uniform(0, 2 * math.pi)
         axis = pygame.math.Vector2(math.cos(ang), math.sin(ang))
         half_energy = self.energy * 0.5
+        # Sızıntı fizyolojik bir durumdur, gen değil: sitoplazma ikiye
+        # bölününce metabolik yük de bölünür.
+        #
+        # Paylar döngüden ÖNCE okunur. İlk yavru bu nesnenin kendisi:
+        # döngünün içinde `self` okunsaydı ikinci yavru ilkinin çoktan
+        # değiştirdiği değeri görürdü. Kairomon böyle okunuyordu ve ikinci
+        # yavru yarının yarısını alıyor, izin dörtte biri yok oluyordu.
+        half_kairomone = self.kairomone * 0.5
+        offset = self.radius + 2
 
         # İki yavruya da birebir aynı işlem uygulanır
         for daughter, side in ((self, 1.0), (other, -1.0)):
             Organism._next_index += 1
             daughter.index = Organism._next_index
             daughter.energy = half_energy
-            # Sızıntı fizyolojik bir durumdur, gen değil: sitoplazma ikiye
-            # bölününce metabolik yük de bölünür.
-            daughter.kairomone = self.kairomone * 0.5
-            daughter.pos = origin + axis * side * (self.radius + 2)
+            daughter.kairomone = half_kairomone
+            daughter.pos = origin + axis * side * offset
             daughter.direction = pygame.math.Vector2(axis * side)
             changes = 0
             if daughter.genome is not None:
