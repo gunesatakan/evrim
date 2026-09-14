@@ -3581,8 +3581,16 @@ class Organism(Entity):
                     perception = organ.sample_environment(self, scent_env, dt)
                     if perception > best_perception:
                         best_perception = perception
-                    okumalar.append((organ._taban_ve_boy(self)[1], perception))
-            if len(okumalar) >= 2 and best_perception > 0.0:
+                    # UZAMSAL YON ORTALAMADAN: her alici olcumunu kendi
+                    # pencere geni boyunca biriktirir ve alicilar bu
+                    # ortalamalarla karsilastirilir. Tek karelik olcum
+                    # zayif kokuda gurultuye bogulup hucreyi ters yone
+                    # donduruyordu. Koku SIDDETI (zamansal kemotaksi,
+                    # davranis) tek karelik kalir; onun penceresi zaten
+                    # DangerTransmission'da.
+                    okumalar.append((organ._taban_ve_boy(self)[1],
+                                     organ.logic.ortalama_algi()))
+            if len(okumalar) >= 2 and max(p for _y, p in okumalar) > 0.0:
                 ort = sum(p for _y, p in okumalar) / len(okumalar)
                 v = pygame.math.Vector2(0.0, 0.0)
                 for yon, p in okumalar:

@@ -47,7 +47,9 @@ class Kaotropi(Organism):
         self.recalculate_physics()
         self.genome = Genome.from_organism(self)
         self.morphology = Morphology.from_organism(self)
-        self.energy = self.max_energy
+        # Kurucu deposunun bir kismiyla dogar (BASLANGIC_ENERJI_ORANI).
+        self.energy = self.max_energy * max(0.0, min(1.0, float(
+            game_settings.BASLANGIC_ENERJI_ORANI)))
         self._update_optimal_front()
 
     # Trail renklendirmesi ve tehdit filtreleri "kaotropi" ön ekine bakar

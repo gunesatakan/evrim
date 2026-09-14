@@ -163,10 +163,21 @@ class ScentEnvironment:
               (1, -1, _DIAG_W), (1, 1, _DIAG_W))
 
     def update(self, dt):
-        """Evaporation + Moore (8-neighbour) diffusion in single pass."""
-        if _np is not None:
-            return self._update_np(dt)
-        return self._update_py(dt)
+        """Evaporation + Moore (8-neighbour) diffusion in single pass.
+
+        KARARLILIK. Acik yontemde her hucre komsu ortalamasina
+        `diff_rate x dt` oraninda yaklasir; bu oran 1'i asarsa hucre
+        ortalamayi GECER, koku salinir ve eksiye dusup kirpilinca kutle
+        kaybolur. Oyun sabit 1/30 sn adim kullanir (16 x 1/30 = 0.53),
+        ama daha buyuk bir adim gelirse alt adimlara bolunur.
+        """
+        adim = max(1, int(math.ceil(self.diff_rate * dt)))
+        alt_dt = dt / adim
+        for _ in range(adim):
+            if _np is not None:
+                self._update_np(alt_dt)
+            else:
+                self._update_py(alt_dt)
 
     def _update_np(self, dt):
         """Ayni difuzyon, izgaranin tamami tek seferde.

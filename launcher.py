@@ -250,6 +250,7 @@ SETTINGS_SCHEMA = {
         "ENERJİ EKONOMİSİ": [
         ("FOOD_ENERGY",          "Sindirilen bir besinin verdiği enerji (ETC verimiyle çarpılır)"),
         ("DIVISION_ENERGY_COST", "Bölünerek yeni hücre üretmenin bedeli"),
+        ("BASLANGIC_ENERJI_ORANI", "Kurucu hücreler deposunun bu oranıyla doğar (1 = tam)"),
         ("VACUOLE_ENERGY_MULTI", "Depo = vakuol alanı x bu çarpan"),
         ("ENERGY_REGEN_BASE",    "ETC başlangıç verimi (şu an zar bunu okumuyor)"),
     ],

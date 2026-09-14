@@ -146,6 +146,11 @@ DEFAULT_SETTINGS = {
     # kopyalamaktir. Sabit bedel buyuk hucreleri odullendiriyordu - kaotropi
     # 9 kat govdesiyle optropiyle ayni 50'yi oduyordu.
     "DIVISION_ENERGY_COST": 50.0,
+    # KURUCU HUCRELER DEPOLARININ YARISIYLA DOGAR. Tam depoyla dogan hucre
+    # 120 saniye besin bulamasa bile olmuyordu (olculdu: 2880 hucrede 0
+    # olum); besin bulamamanin hicbir bedeli yoktu. Bolunmeyle dogan
+    # yavrular bundan etkilenmez, ebeveynin enerjisini paylasirlar.
+    "BASLANGIC_ENERJI_ORANI": 0.5,
     # Referans alan: bu buyuklukteki hucre tam DIVISION_ENERGY_COST oder.
     # Varsayilan optropi (govde 314 + organlar ~95) ~400 eder.
     "DIVISION_COST_REF_AREA": 400.0,
@@ -693,8 +698,17 @@ DEFAULT_SETTINGS = {
     # Bulut genisligi L = sqrt(D/k). 0.08'de L = 35 px; koku yalnizca
     # yamanin dibinde ise yariyordu. 0.012 ile L = 91 px - bulut cok daha
     # uzaga uzanir ve yamalar yine de birbirine karismaz.
+    #
+    # KOKU DAHA UZAGA TASINIR: yayilma 4 -> 16, bulut genisligi L iki
+    # katina cikar. Uzak ve zayif kokuyu izlemek ancak bulut genisse bir
+    # beceri olur; uzamsal ortalamanin (kemoreseptor pencere geni) bir
+    # anlami olmasi icin gerekti. Buharlasmayi dusurmek de L'yi buyutur
+    # ama kokunun omrunu uzatir: yenen yamanin kokusu dakikalarca
+    # kalir ve hucreleri bos yere ceker. Yayilmayi artirmak toplam koku
+    # miktarini ve omrunu degistirmez, yalnizca daha genis bir alana
+    # dagitir. (Kararlilik: yayilma x dt <= 1; bkz. ScentEnvironment.update.)
     "SCENT_EVAP_RATE": 0.012,
-    "SCENT_DIFF_RATE": 4.0,
+    "SCENT_DIFF_RATE": 16.0,
     # Tavan BAGLAYICI OLMAMALI. 100 iken alan genis bir bolgede tavana
     # yapisip egimi tamamen duzlestiriyordu: buharlasmayi dusurup kokuyu
     # uzaga yaymak, tirmanilabilir alani %19'dan %13'e, daha da dusurunce

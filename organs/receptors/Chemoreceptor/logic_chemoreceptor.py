@@ -25,6 +25,9 @@ class ChemoreceptorLogic:
         # 1/sqrt(derisim x sure)) ama tepkiyi geciktirir. "Hizli ve
         # gurultulu" ile "yavas ve emin" arasindaki secim.
         self.pencere = game_settings.CHEMO_SAMPLE_INTERVAL
+        # UZAMSAL ORTALAMA: bu alicinin pencere boyunca biriktirdigi
+        # derisim olcumu (yuruyen ortalama, zaman sabiti = pencere).
+        self.ort_ham = None
 
     @property
     def smell_threshold(self):
@@ -70,7 +73,12 @@ class ChemoreceptorLogic:
                           self.kazanc + game_settings.GROW_CHEMO_GAIN)
 
     def grow_pencere(self):
-        """Uzun ortala: gurultu duser ama tepki gecikir."""
+        """Uzun ortala: gurultu duser ama tepki gecikir.
+
+        Pencere hem zamansal karsilastirmanin (Levy kosusu) hem de uzamsal
+        yon icin alici ortalamasinin suresidir: ikisi de alicinin molekul
+        saydigi ayni butunleme suresi.
+        """
         self.pencere = min(game_settings.CHEMO_PENCERE_MAX,
                            self.pencere + game_settings.GROW_CHEMO_PENCERE)
 
@@ -108,7 +116,56 @@ class ChemoreceptorLogic:
         return intensity >= self.smell_threshold
 
     def perceive(self, raw_intensity, dt=None):
-        """Weber-Fechner: perception = log(1 + intensity / threshold)
+        """Tek karelik algi: gurultulu olcum + Weber-Fechner (bkz. olc)."""
+        return self.olc_ve_algila(raw_intensity, dt)[1]
+
+    def olc_ve_algila(self, raw_intensity, dt=None):
+        """(bu karede olculen derisim, tek karelik algi).
+
+        Esigin onda birinin altindaki derisim algilanmaz ve sayim da
+        yapilmaz: olculen deger gurultusuz ham derisim olarak doner ki
+        pencere ortalamasi kokunun sonmesini de gorsun.
+        """
+        threshold = self.scent_sensitivity
+        if raw_intensity < threshold * 0.1:
+            return raw_intensity, 0.0
+        olculen = self.olc(raw_intensity, dt)
+        return olculen, math.log(1.0 + olculen / threshold)
+
+    def algi(self, olculen):
+        """Weber-Fechner: perception = log(1 + intensity / threshold).
+
+        Esigin onda birinin altindaki derisim hic algilanmaz.
+        """
+        threshold = self.scent_sensitivity
+        if olculen < threshold * 0.1:
+            return 0.0
+        return math.log(1.0 + olculen / threshold)
+
+    def ortalamaya_ekle(self, olculen, dt):
+        """Olcumu pencere boyunca biriktir: yuruyen ortalama, zaman sabiti pencere.
+
+        Alici baglanan molekulleri bir SURE boyunca sayar; bu sure ne kadar
+        uzunsa sayim hatasi o kadar kucuk (Berg-Purcell), ama degisime tepki
+        o kadar gec. Zamansal kemotaksi zaten bu pencereyle ortaliyordu;
+        uzamsal karsilastirma ise her karenin tek, gurultulu olcumunu
+        kullaniyordu. Olculdu: zayif kokuda tek karelik uzamsal yon
+        karelerin %24'unde ters cikiyordu, pencere ortalamasiyla %4.
+        """
+        if self.ort_ham is None:
+            self.ort_ham = olculen
+            return
+        k = 1.0 - math.exp(-max(0.0, dt) / max(1e-6, self.pencere))
+        self.ort_ham += (olculen - self.ort_ham) * k
+
+    def ortalama_algi(self):
+        """Pencere boyunca biriktirilmis olcumun algisi (uzamsal yon icin)."""
+        if self.ort_ham is None:
+            return 0.0
+        return self.algi(self.ort_ham)
+
+    def olc(self, raw_intensity, dt=None):
+        """Alicinin bir karede OLCTUGU derisim (sayim gurultusuyla).
 
         BERG-PURCELL GURULTUSU. Alicilara molekul baglanmasi stokastiktir:
         hucre derisimi sayarak olcer ve sayim hatasi, sayilan molekul
@@ -126,9 +183,6 @@ class ChemoreceptorLogic:
         kendiliginden ortalar - yani uzun pencere gercekten gurultu
         bastirir. Zaman ortalamasinin fiziksel karsiligi tam olarak budur.
         """
-        threshold = self.scent_sensitivity
-        if raw_intensity < threshold * 0.1:
-            return 0.0
         if dt and game_settings.CHEMO_GURULTU > 0.0:
             # SAYIM MODELI. Hucre derisimi, belli bir surede kac molekulun
             # aliciya carptigini SAYARAK olcer. Sayi Poisson dagilir; bagil
@@ -146,7 +200,7 @@ class ChemoreceptorLogic:
             if n < 400.0:            # buyuk N'de gurultu zaten ihmal
                 n = max(0.05, n)
                 raw_intensity *= random.gammavariate(n, 1.0 / n)
-        return math.log(1.0 + raw_intensity / threshold)
+        return raw_intensity
 
     def can_smell_food(self, scent_intensity):
         """Besin kokusunu algılayabilir mi?"""
