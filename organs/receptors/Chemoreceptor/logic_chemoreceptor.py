@@ -25,8 +25,10 @@ class ChemoreceptorLogic:
         # 1/sqrt(derisim x sure)) ama tepkiyi geciktirir. "Hizli ve
         # gurultulu" ile "yavas ve emin" arasindaki secim.
         self.pencere = game_settings.CHEMO_SAMPLE_INTERVAL
-        # UZAMSAL ORTALAMA: bu alicinin pencere boyunca biriktirdigi
-        # derisim olcumu (yuruyen ortalama, zaman sabiti = pencere).
+        # UZAMSAL YON ORTALAMASI (gen, sn): alici olcumunu bu sure boyunca
+        # biriktirir; hucre kokunun yonunu alicilarin ortalamalarindan
+        # bulur. 0 = her karenin kendi olcumu.
+        self.uzamsal_ortalama = game_settings.CHEMO_ORTALAMA_TABAN
         self.ort_ham = None
 
     @property
@@ -73,14 +75,14 @@ class ChemoreceptorLogic:
                           self.kazanc + game_settings.GROW_CHEMO_GAIN)
 
     def grow_pencere(self):
-        """Uzun ortala: gurultu duser ama tepki gecikir.
-
-        Pencere hem zamansal karsilastirmanin (Levy kosusu) hem de uzamsal
-        yon icin alici ortalamasinin suresidir: ikisi de alicinin molekul
-        saydigi ayni butunleme suresi.
-        """
+        """Uzun ortala: gurultu duser ama tepki gecikir."""
         self.pencere = min(game_settings.CHEMO_PENCERE_MAX,
                            self.pencere + game_settings.GROW_CHEMO_PENCERE)
+
+    def grow_ortalama(self):
+        """Uzamsal yonu daha uzun ortala: yon gurultusu duser, donus gecikir."""
+        self.uzamsal_ortalama = min(game_settings.CHEMO_ORTALAMA_MAX,
+                                    self.uzamsal_ortalama + game_settings.GROW_CHEMO_ORTALAMA)
 
     def gelisim(self):
     # GELISIM RAPORU
@@ -106,6 +108,10 @@ class ChemoreceptorLogic:
         ptab, pmax = g.CHEMO_SAMPLE_INTERVAL, g.CHEMO_PENCERE_MAX
         out.append(("Pencere", (self.pencere - ptab) / max(1e-6, pmax - ptab),
                     "%.2f s" % self.pencere))
+        otab, omax = g.CHEMO_ORTALAMA_TABAN, g.CHEMO_ORTALAMA_MAX
+        out.append(("Yon ortalamasi",
+                    (self.uzamsal_ortalama - otab) / max(1e-6, omax - otab),
+                    "%.1f s" % self.uzamsal_ortalama))
         return out
 
     def grow(self):
@@ -143,23 +149,29 @@ class ChemoreceptorLogic:
         return math.log(1.0 + olculen / threshold)
 
     def ortalamaya_ekle(self, olculen, dt):
-        """Olcumu pencere boyunca biriktir: yuruyen ortalama, zaman sabiti pencere.
+        """Olcumu yon ortalamasi geni boyunca biriktir (yuruyen ortalama).
 
         Alici baglanan molekulleri bir SURE boyunca sayar; bu sure ne kadar
         uzunsa sayim hatasi o kadar kucuk (Berg-Purcell), ama degisime tepki
-        o kadar gec. Zamansal kemotaksi zaten bu pencereyle ortaliyordu;
-        uzamsal karsilastirma ise her karenin tek, gurultulu olcumunu
-        kullaniyordu. Olculdu: zayif kokuda tek karelik uzamsal yon
-        karelerin %24'unde ters cikiyordu, pencere ortalamasiyla %4.
+        o kadar gec. Olculdu: zayif kokuda tek karelik uzamsal yon karelerin
+        %24'unde ters cikiyor, yarim saniyelik ortalamayla %4 - ama ayni
+        ortalama yamali haritada besin toplamayi dusuruyor. Hangisinin agir
+        bastigina secilim karar versin.
         """
-        if self.ort_ham is None:
+        if self.ort_ham is None or self.uzamsal_ortalama <= 0.0:
             self.ort_ham = olculen
             return
-        k = 1.0 - math.exp(-max(0.0, dt) / max(1e-6, self.pencere))
+        k = 1.0 - math.exp(-max(0.0, dt) / self.uzamsal_ortalama)
         self.ort_ham += (olculen - self.ort_ham) * k
 
+    def yon_algisi(self, anlik):
+        """Uzamsal yon icin kullanilan algi: gen 0 ise bu karenin kendi algisi."""
+        if self.uzamsal_ortalama <= 0.0 or self.ort_ham is None:
+            return anlik
+        return self.algi(self.ort_ham)
+
     def ortalama_algi(self):
-        """Pencere boyunca biriktirilmis olcumun algisi (uzamsal yon icin)."""
+        """Biriktirilmis olcumun algisi."""
         if self.ort_ham is None:
             return 0.0
         return self.algi(self.ort_ham)

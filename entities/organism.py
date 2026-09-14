@@ -63,6 +63,7 @@ class Genome:
         # Point mutation: %10 per gene (upgrade_type changes)
         all_types = [
             'flagella', 'cilia', 'chemoreceptor', 'chemo_gain', 'chemo_window',
+            'chemo_ortalama',
             'vision_angle', 'vision_range',
             'sound_radius', 'body_size', 'digestion_speed', 'ribosome_speed',
             'max_energy', 'move_regen', 'memory_length',
@@ -136,12 +137,15 @@ class Genome:
                 key = 'chemoreceptor'
                 idx = organ_counts.get(key, 0)
                 organ_counts[key] = idx + 1
-                # Burnun UC ayri gelisim ekseni var ve ucu de ayri cekilir:
-                # uzunluk (esik), kazanc (farki ne kadar buyuturum),
-                # pencere (ne kadar uzun ortalarim).
+                # Burnun DORT ayri gelisim ekseni var ve her biri ayri
+                # cekilir: uzunluk (esik), kazanc (farki ne kadar
+                # buyuturum), pencere (zamansal karsilastirma suresi), yon
+                # ortalamasi (alicilari ne kadar uzun ortalayip yonu
+                # bulurum).
                 genes.append(('chemoreceptor', idx))
                 genes.append(('chemo_gain', idx))
                 genes.append(('chemo_window', idx))
+                genes.append(('chemo_ortalama', idx))
             elif isinstance(organ, BaseWeapon):
                 key = organ.__class__.__name__.lower()
                 idx = organ_counts.get(key, 0)
@@ -3413,7 +3417,7 @@ class Organism(Entity):
 
         # Organ upgrade types need a valid organ reference
         organ_upgrade_types = {'flagella', 'cilia', 'chemoreceptor',
-                               'chemo_gain', 'chemo_window',
+                               'chemo_gain', 'chemo_window', 'chemo_ortalama',
                                'vision_angle', 'vision_range',
                                'sound_radius', 'sound_focus'}
         organ_upgrade_types |= set(('stylet', 'harpoon', 'nematocyst', 'toxin', 'lysin', 'phagocytosis'))
@@ -3432,6 +3436,7 @@ class Organism(Entity):
         elif upgrade_type == 'chemoreceptor' and organ: organ.grow()
         elif upgrade_type == 'chemo_gain' and organ: organ.logic.grow_kazanc()
         elif upgrade_type == 'chemo_window' and organ: organ.logic.grow_pencere()
+        elif upgrade_type == 'chemo_ortalama' and organ: organ.logic.grow_ortalama()
         elif upgrade_type == 'vision_angle' and organ: organ.grow('angle')
         elif upgrade_type == 'vision_range' and organ: organ.grow('range')
         elif upgrade_type == 'sound_radius' and organ: organ.grow()
@@ -3464,6 +3469,7 @@ class Organism(Entity):
             'chemoreceptor': Chemoreceptor,
             'chemo_gain': Chemoreceptor,
             'chemo_window': Chemoreceptor,
+            'chemo_ortalama': Chemoreceptor,
             'vision_angle': Photoreceptor,
             'vision_range': Photoreceptor,
             'sound_radius': Mechanoreceptor,
@@ -3581,15 +3587,13 @@ class Organism(Entity):
                     perception = organ.sample_environment(self, scent_env, dt)
                     if perception > best_perception:
                         best_perception = perception
-                    # UZAMSAL YON ORTALAMADAN: her alici olcumunu kendi
-                    # pencere geni boyunca biriktirir ve alicilar bu
-                    # ortalamalarla karsilastirilir. Tek karelik olcum
-                    # zayif kokuda gurultuye bogulup hucreyi ters yone
-                    # donduruyordu. Koku SIDDETI (zamansal kemotaksi,
-                    # davranis) tek karelik kalir; onun penceresi zaten
-                    # DangerTransmission'da.
+                    # UZAMSAL YON: alicinin yon ortalamasi geni varsa
+                    # olcumunu o sure boyunca biriktirir ve alicilar bu
+                    # ortalamalarla karsilastirilir (gen 0 = bu kare).
+                    # Koku SIDDETI (zamansal kemotaksi, davranis) her
+                    # durumda tek karelik kalir.
                     okumalar.append((organ._taban_ve_boy(self)[1],
-                                     organ.logic.ortalama_algi()))
+                                     organ.logic.yon_algisi(perception)))
             if len(okumalar) >= 2 and max(p for _y, p in okumalar) > 0.0:
                 ort = sum(p for _y, p in okumalar) / len(okumalar)
                 v = pygame.math.Vector2(0.0, 0.0)

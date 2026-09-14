@@ -74,9 +74,9 @@ class Chemoreceptor(BaseOrgan):
             if ham > en_yuksek:
                 en_yuksek = ham
         olculen, algi = self.logic.olc_ve_algila(en_yuksek, dt)
-        # Olcum pencere boyunca da biriktirilir: hucre bu alicinin
-        # ORTALAMASINI obur alicilarinkiyle karsilastirip kokunun yonunu
-        # bulur (bkz. Organism.update, uzamsal gradyan).
+        # Olcum yon ortalamasi geni boyunca da biriktirilir: gen buyukse
+        # hucre bu alicinin ORTALAMASINI obur alicilarinkiyle
+        # karsilastirip kokunun yonunu bulur (bkz. Organism.update).
         if dt:
             self.logic.ortalamaya_ekle(olculen, dt)
         return algi

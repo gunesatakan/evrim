@@ -701,7 +701,7 @@ DEFAULT_SETTINGS = {
     #
     # KOKU DAHA UZAGA TASINIR: yayilma 4 -> 16, bulut genisligi L iki
     # katina cikar. Uzak ve zayif kokuyu izlemek ancak bulut genisse bir
-    # beceri olur; uzamsal ortalamanin (kemoreseptor pencere geni) bir
+    # beceri olur; uzamsal yon ortalamasinin (kemoreseptor geni) bir
     # anlami olmasi icin gerekti. Buharlasmayi dusurmek de L'yi buyutur
     # ama kokunun omrunu uzatir: yenen yamanin kokusu dakikalarca
     # kalir ve hucreleri bos yere ceker. Yayilmayi artirmak toplam koku
@@ -813,6 +813,16 @@ DEFAULT_SETTINGS = {
     # tepkiyi geciktirir.
     "CHEMO_PENCERE_MAX": 3.0,
     "GROW_CHEMO_PENCERE": 0.25,
+    # UZAMSAL YON ORTALAMASI da ayri bir gen ve SIFIRDAN baslar: alici
+    # olcumunu bu sure boyunca biriktirir, hucre kokunun yonunu bu
+    # ortalamalarla bulur. Once pencere genine bagliydi, yani en az 0.5 sn
+    # ortalama butun cok burunlu hucrelere zorla uygulaniyordu. Olculdu
+    # (48 dunya, 180 sn): ortalamali hucre tek karelik hucreden eski koku
+    # alaninda %6, genis koku alaninda %38 AZ besin topluyordu. Faydali
+    # oldugu yerde (uzak, zayif koku) evrim onu kendisi uzatsin.
+    "CHEMO_ORTALAMA_TABAN": 0.0,
+    "CHEMO_ORTALAMA_MAX": 2.0,
+    "GROW_CHEMO_ORTALAMA": 0.1,
     # BERG-PURCELL: bagil olcum hatasi ~ sqrt(bu / (derisim x sure)).
     # Kazanc genini bedelli kilan sey budur - gurultusuz bir kazanc geni
     # "hep buyut" demek olurdu.
