@@ -46,6 +46,8 @@ class Kaotropi(Organism):
         self.temel_yapiyi_tamamla()
         self.recalculate_physics()
         self.genome = Genome.from_organism(self)
+        # Dogustan gelen gen kopyalari (kemoreseptorun yon ortalamasi)
+        self.gen_dozlarini_uygula()
         self.morphology = Morphology.from_organism(self)
         # Kurucu deposunun bir kismiyla dogar (BASLANGIC_ENERJI_ORANI).
         self.energy = self.max_energy * max(0.0, min(1.0, float(

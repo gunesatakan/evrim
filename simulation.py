@@ -754,6 +754,11 @@ class RuntimeInspector:
             cur_idx = genome.current_index
             cycle   = genome.cycle_count
 
+            # Gen dozu: organlarin tasarim degerinin ustundeki kopyalar.
+            kopya = getattr(genome, 'kopya', None)
+            if kopya is not None:
+                y = self._kv(screen, "Gene copies", str(sum(kopya.values())), y, px)
+
             if division:
                 y = self._kv(screen, "Genes", str(seq_len), y, px)
                 y = self._kv(screen, "Draw", "random from pool", y, px,

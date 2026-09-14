@@ -1,5 +1,6 @@
-"""Kemoreseptor: tek karelik algi ayni kalir; uzamsal yon ortalamasi sifirdan
-baslayan ayri bir gendir, gen buyudukce alici olcumu daha uzun ortalanir."""
+"""Kemoreseptor: tek karelik algi ayni kalir; uzamsal yon ortalamasi tabani
+sifir olan ayri bir gendir (hucre onu gen kopyalariyla dogar, bkz.
+test_gen_dozu), gen buyudukce alici olcumu daha uzun ortalanir."""
 
 import math
 import os

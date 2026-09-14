@@ -41,6 +41,8 @@ class Optropi(Organism):
         self.temel_yapiyi_tamamla()
         self.recalculate_physics()
         self.genome = Genome.from_organism(self)
+        # Dogustan gelen gen kopyalari (kemoreseptorun yon ortalamasi)
+        self.gen_dozlarini_uygula()
         # İskelet geni: her canlı doğuştan taşır (sonradan kazanılan
         # organlar buraya işlenir ve bölünmede yavrulara geçer)
         self.morphology = Morphology.from_organism(self)

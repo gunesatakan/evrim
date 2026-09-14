@@ -30,10 +30,62 @@ from systems.signaling.scent_profile import scent_value
 class Genome:
     """Sequential genetics - deterministic upgrade order with mutations."""
 
-    def __init__(self, sequence=None):
+    def __init__(self, sequence=None, kopya=None):
         self.sequence = sequence or []
+        # GEN DOZU: (gen, organ sirasi) -> ek kopya sayisi.
+        #
+        # Gelisim eskiden organin degerini dogrudan buyutuyordu ve hicbir
+        # sey onu geri kucultemiyordu: genler yalnizca buyuyebiliyordu.
+        # Artik bir ozelligin degeri = organin tasarim degeri + kopya
+        # sayisi kadar gelisim adimi. Gelisim bir kopya ekler (gen
+        # duplikasyonu), bolunmede her kopya kaybolabilir (delesyon) ve
+        # deger kendiliginden geri iner.
+        #
+        # Torba (`sequence`) ayri bir sey: hangi genin kopyalanacagini
+        # agirliklandirir, degeri tasimaz.
+        self.kopya = dict(kopya or {})
         self.current_index = 0
         self.cycle_count = 0
+
+    def kopya_sayisi(self, gen, idx):
+        return self.kopya.get((gen, idx), 0)
+
+    def kopya_ekle(self, gen, idx, n=1):
+        k = self.kopya.get((gen, idx), 0) + int(n)
+        if k > 0:
+            self.kopya[(gen, idx)] = k
+        else:
+            self.kopya.pop((gen, idx), None)
+
+    def kopya_kaybi(self, oran, rng=random):
+        """Bolunmede her ek kopya `oran` olasilikla kaybolur.
+
+        Kopya basina olasilik bir denge kurar: kazanc bolunme basina bir
+        kopya, kayip kopya sayisiyla orantili. Ise yarayan kopyayi yalnizca
+        secilim tutabilir. Kaybolan kopya sayisini dondurur.
+        """
+        if oran <= 0.0 or not self.kopya:
+            return 0
+        kayip = 0
+        for anahtar in list(self.kopya):
+            n = self.kopya[anahtar]
+            giden = sum(1 for _ in range(n) if rng.random() < oran)
+            if giden:
+                kayip += giden
+                self.kopya_ekle(anahtar[0], anahtar[1], -giden)
+        return kayip
+
+    def organ_silindi(self, genler, idx):
+        """`idx` sirasindaki organ gitti: kopyalari da gider, sonrakiler kayar."""
+        yeni = {}
+        for (gen, j), n in self.kopya.items():
+            if gen in genler:
+                if j == idx:
+                    continue
+                if j > idx:
+                    j -= 1
+            yeni[(gen, j)] = n
+        self.kopya = yeni
 
     def next_instruction(self):
         if not self.sequence:
@@ -170,7 +222,19 @@ class Genome:
         genes.append(('memory_length', 0))
 
         random.shuffle(genes)
-        return Genome(genes)
+        g = Genome(genes)
+        for idx in range(organ_counts.get('chemoreceptor', 0)):
+            g.kopya_ekle('chemo_ortalama', idx, Genome.ortalama_kopyasi())
+        return g
+
+    @staticmethod
+    def ortalama_kopyasi():
+        """Her kemoreseptor yon ortalamasi geninin bu kadar kopyasiyla dogar.
+
+        Taban sifir, dogustan gelen ortalama kopyalardan: zararliysa evrim
+        kopyalari yitirip ortalamayi kapatabilir.
+        """
+        return max(0, int(getattr(game_settings, 'CHEMO_ORTALAMA_KOPYA', 0)))
 
 
 class Morphology:
@@ -2906,6 +2970,15 @@ class Organism(Entity):
             gene = self._GEN_ADI[otype]
             idx = sum(1 for o in self.organs if o.__class__.__name__ == otype) - 1
             self.genome.sequence.append((gene, idx))
+            # Yeni organ tasarim degeriyle dogar: o siradan artakalmis
+            # kopya olmamali. Kemoreseptor her kurucu gibi yon ortalamasi
+            # kopyalariyla gelir.
+            for g in self._organ_genleri(organ):
+                self.genome.kopya.pop((g, idx), None)
+            if otype == "Chemoreceptor":
+                self.genome.kopya_ekle('chemo_ortalama', idx,
+                                       Genome.ortalama_kopyasi())
+            self.gen_dozlarini_uygula()
         return organ
 
     def renk_mutasyonu(self, rng=random):
@@ -3042,6 +3115,13 @@ class Organism(Entity):
             return None
         organ = random.choice(aday)
         ad = organ.__class__.__name__
+        # Organin gen kopyalari da onunla gider; ayni turden sonraki
+        # organlarin sirasi bir kayar, kopyalari da onlarla kayar.
+        genler = self._organ_genleri(organ)
+        if genler and self.genome is not None:
+            sinif = self._gen_sinif_haritasi()[genler[0]]
+            sira = [o for o in self.organs if isinstance(o, sinif)].index(organ)
+            self.genome.organ_silindi(genler, sira)
         self.organs.remove(organ)
         # Iskelet geninden de silinmeli, yoksa bolunmede geri gelir.
         if self.morphology is not None:
@@ -3154,7 +3234,7 @@ class Organism(Entity):
                           self.energy + game_settings.FOOD_ENERGY * self.etc_efficiency)
 
         if self.genome is None:
-            self.genome = Genome.from_organism(self)
+            self.genomu_kur()
 
         # BÖLÜNME MODU: besin sindirildiğinde ikiye bölün, gelişimi iki
         # yavru için ayrı ayrı çek. Yeni hücre inşa etmenin enerji bedeli
@@ -3290,6 +3370,11 @@ class Organism(Entity):
             changes = 0
             if daughter.genome is not None:
                 changes += daughter.genome.mutate() or 0
+                # GEN KAYBI: her ek kopya bu bolunmede kaybolabilir; deger
+                # asagida organa islenir. Iraksamaya yazilmaz - soy
+                # kokusunun kayma hizi kopya kazancina (cekilis) gore
+                # ayarli, kaybi da saymak o dengeyi bozardi.
+                daughter.genome.kopya_kaybi(game_settings.GEN_KOPYA_KAYBI)
             # Davranış tablosu da kalıtsaldır ve mutasyona uğrar - ama
             # IRAKSAMA SAYACINA GIRMEZ.
             #
@@ -3356,25 +3441,11 @@ class Organism(Entity):
                 changes += game_settings.DIVERGENCE_UPGRADE
             # Bolunme deepcopy ile calisir: ebeveynde kalmis bir kopya zar
             # ya da sitoplazma butun soya gecerdi. Her yavru tekillenir.
-            # HAFIZA CEVRIMI (protein donusumu).
-            #
-            # `memory_length` geni kapasiteyi yalnizca ARTIRABILIYORDU ve
-            # torbadan herkes ayni sikilikta cekiyordu; yani her soy, ise
-            # yarasin yaramasin, kapasitesini durmadan sisiriyordu. Olculdu:
-            # 100 bin dogum sonunda kapasite 24'ten 173'e cikti ve tek
-            # basina saniyede 8.65 enerji goturuyordu - gelirin buyuk bir
-            # kismi. Bu, hucreleri bedelini karsilamak icin irilesmeye
-            # itiyordu.
-            #
-            # Gercek hucre kullanmadigi proteini yikar. Kapasite her
-            # bolunmede biraz erir; yuksek kalmasi icin genin YENIDEN
-            # cekilmesi gerekir. Organ kazanci/kaybi dengesiyle ayni mantik.
-            dm = daughter.direction_memory
-            taban = game_settings.MEMORY_TABAN
-            if dm.capacity > taban:
-                dm.capacity = max(taban, dm.capacity
-                                  * (1.0 - game_settings.MEMORY_CEVRIM))
             daughter.temel_yapiyi_tamamla()
+            # Kaybolan kopyalar organlardan duser. Eskiden yalnizca hafiza
+            # kapasitesi her bolunmede eritiliyordu (tek basina buyuyup
+            # 24'ten 173'e cikmisti); artik her gen ayni kurala tabi.
+            daughter.gen_dozlarini_uygula()
             if getattr(daughter, 'lineage', None) is not None:
                 daughter.lineage.accumulate(changes)
 
@@ -3406,78 +3477,247 @@ class Organism(Entity):
                 return game_settings.DIVERGENCE_NEW_ORGAN
 
         if self.genome is None:
-            self.genome = Genome.from_organism(self)
+            self.genomu_kur()
         if not self.genome.sequence:
             return 0.0
         self._apply_upgrade(random.choice(self.genome.sequence))
         return game_settings.DIVERGENCE_UPGRADE
 
+    _EVRIM_LOGU = {'digestion_speed': "Sindirim hizi artti",
+                   'ribosome_speed': "Ribozom üretim hızı arttı",
+                   'max_energy': "Vakuol büyüdü",
+                   'move_regen': "ETC verimliliği arttı",
+                   'memory_length': "Hafıza kapasitesi arttı",
+                   'membrane_integrity': "Zar bütünlüğü arttı"}
+
     def _apply_upgrade(self, instruction):
+        """Gelisim: genin bir kopyasi daha eklenir ve organa islenir."""
         upgrade_type, organ_index = instruction
 
-        # Organ upgrade types need a valid organ reference
-        organ_upgrade_types = {'flagella', 'cilia', 'chemoreceptor',
-                               'chemo_gain', 'chemo_window', 'chemo_ortalama',
-                               'vision_angle', 'vision_range',
-                               'sound_radius', 'sound_focus'}
-        organ_upgrade_types |= set(('stylet', 'harpoon', 'nematocyst', 'toxin', 'lysin', 'phagocytosis'))
-
         organ = None
-        if upgrade_type in organ_upgrade_types:
+        if upgrade_type in self._gen_sinif_haritasi():
             organ = self._get_organ_by_type_index(upgrade_type, organ_index)
             if organ is None:
                 # Mutation produced invalid ref - skip
                 self.recalculate_physics()
                 return
+        else:
+            # Hucrenin tek bir govdesi, zari, kofulu var: sistem geninin
+            # sirasi yoktur. Torbada nokta mutasyonu eski sirayi tasiyabilir.
+            organ_index = 0
+        if self.genome is None:
+            self.genomu_kur()
 
-        # Apply upgrade
-        if upgrade_type == 'flagella' and organ: organ.grow()
-        elif upgrade_type == 'cilia' and organ: organ.grow()
-        elif upgrade_type == 'chemoreceptor' and organ: organ.grow()
-        elif upgrade_type == 'chemo_gain' and organ: organ.logic.grow_kazanc()
-        elif upgrade_type == 'chemo_window' and organ: organ.logic.grow_pencere()
-        elif upgrade_type == 'chemo_ortalama' and organ: organ.logic.grow_ortalama()
-        elif upgrade_type == 'vision_angle' and organ: organ.grow('angle')
-        elif upgrade_type == 'vision_range' and organ: organ.grow('range')
-        elif upgrade_type == 'sound_radius' and organ: organ.grow()
-        elif upgrade_type == 'sound_focus' and organ: organ.logic.grow_kapsama()
-        elif upgrade_type in ('stylet', 'harpoon', 'nematocyst', 'toxin', 'lysin', 'phagocytosis') and organ: organ.grow()
-        elif upgrade_type == 'body_size' and hasattr(self, 'body'): self.body.grow()
-        elif upgrade_type == 'digestion_speed' and hasattr(self, 'body'): self.body.logic.grow_enzyme(); self._log("[EVRIM] Sindirim hizi artti")
-        elif upgrade_type == 'ribosome_speed' and hasattr(self, 'ribosome'): self.ribosome.grow(); self._log("[EVRIM] Ribozom üretim hızı arttı")
-        elif upgrade_type == 'max_energy' and hasattr(self, 'vacuole'): self.vacuole.grow(); self._log("[EVRIM] Vakuol büyüdü")
-        elif upgrade_type == 'move_regen' and hasattr(self, 'membrane'): self.membrane.grow(); self._log("[EVRIM] ETC verimliliği arttı")
-        elif upgrade_type == 'memory_length': self.direction_memory.capacity += game_settings.GROW_MEMORY; self._log("[EVRIM] Hafıza kapasitesi arttı")
-        elif upgrade_type == 'membrane_integrity' and hasattr(self, 'membrane'): self.membrane.logic.grow_integrity(); self._log("[EVRIM] Zar bütünlüğü arttı")
-        elif upgrade_type in ('wall', 'outer', 'capsule', 'efflux', 'repair', 'slip', 'mucus', 'slayer') and hasattr(self, 'membrane'):
-            # Olmayan katmanin geni IFADE EDILMEZ: grow_defense False
-            # doner ve hicbir sey degismez. Aksi halde duvarsiz hucre
-            # duvar yatirimini buyutup bedelini oder, karsiliginda
-            # hicbir katman ortaya cikmazdi.
-            if self.membrane.logic.grow_defense(upgrade_type):
-                self._log(f"[EVRIM] Savunma gelişti: {upgrade_type}")
-            else:
+        if self._gen_hedefi(upgrade_type, organ) is None:
+            # Olmayan katmanin geni IFADE EDILMEZ: kopya eklenmez, hicbir
+            # sey degismez. Aksi halde duvarsiz hucre duvar yatirimini
+            # buyutup bedelini oder, karsiliginda hicbir katman ortaya
+            # cikmazdi.
+            if upgrade_type in self._SAVUNMA_GENLERI:
                 self._log(f"[EVRIM] {upgrade_type} geni ifade edilmedi: katman yok")
+            self.recalculate_physics()
+            return
+        self.genome.kopya_ekle(upgrade_type, organ_index)
+        self._gen_dozunu_uygula(upgrade_type, organ_index, organ)
+        if upgrade_type in self._SAVUNMA_GENLERI:
+            self._log(f"[EVRIM] Savunma gelişti: {upgrade_type}")
+        elif upgrade_type in self._EVRIM_LOGU:
+            self._log("[EVRIM] " + self._EVRIM_LOGU[upgrade_type])
 
         self.recalculate_physics()
 
+    # ---------------- GEN DOZU ----------------
+
+    _SAVUNMA_GENLERI = ('wall', 'outer', 'capsule', 'efflux', 'repair',
+                        'slip', 'mucus', 'slayer')
+    #: Organa degil hucrenin kendisine ait genler (sirasi hep 0).
+    _SISTEM_GENLERI = ('body_size', 'digestion_speed', 'ribosome_speed',
+                       'max_energy', 'move_regen', 'memory_length',
+                       'membrane_integrity') + _SAVUNMA_GENLERI
+    _GEN_SINIFI = None
+    _ORGAN_GEN_GRUPLARI = None
+
+    @staticmethod
+    def _gen_sinif_haritasi():
+        """Organ geni -> organ sinifi. Genin sirasi o sinifin n'inci organidir."""
+        if Organism._GEN_SINIFI is None:
+            harita = {
+                'flagella': Flagella,
+                'cilia': Cilia,
+                'chemoreceptor': Chemoreceptor,
+                'chemo_gain': Chemoreceptor,
+                'chemo_window': Chemoreceptor,
+                'chemo_ortalama': Chemoreceptor,
+                'vision_angle': Photoreceptor,
+                'vision_range': Photoreceptor,
+                'sound_radius': Mechanoreceptor,
+                'sound_focus': Mechanoreceptor,
+            }
+            for _wname, _wcls in WEAPON_CLASSES.items():
+                harita[_wname.lower()] = _wcls
+            gruplar = {}
+            for gen, sinif in harita.items():
+                gruplar.setdefault(sinif, []).append(gen)
+            Organism._ORGAN_GEN_GRUPLARI = [(s, tuple(g)) for s, g in gruplar.items()]
+            Organism._GEN_SINIFI = harita
+        return Organism._GEN_SINIFI
+
+    def _organ_genleri(self, organ):
+        """Bu organin kopya tasiyabilen genleri."""
+        self._gen_sinif_haritasi()
+        for sinif, genler in Organism._ORGAN_GEN_GRUPLARI:
+            if isinstance(organ, sinif):
+                return genler
+        return ()
+
+    def _gen_hedefi(self, gen, organ=None):
+        """Genin degistirdigi fiziksel nicelik: (nesne, alan, adim, sonra).
+
+        adim(nesne) organin KENDI gelisim adimidir; tavanlar ve alt sinirlar
+        orada tanimli, burada tekrar yazilmaz. sonra(nesne, fark) alan
+        degisince tazelenecek turetilmis degerleri kurar. Gen bu hucrede
+        ifade edilmiyorsa (organ ya da katman yok) None.
+        """
+        g = game_settings
+        if organ is not None:
+            lg = organ.logic
+            if gen in ('flagella', 'cilia'):
+                return (lg, 'length', lambda n: n.grow(),
+                        lambda n, _f: n.recalculate_boosts())
+            if gen == 'chemoreceptor':
+                return lg, 'length', lambda n: n.grow(), None
+            if gen == 'chemo_gain':
+                return lg, 'kazanc', lambda n: n.grow_kazanc(), None
+            if gen == 'chemo_window':
+                return lg, 'pencere', lambda n: n.grow_pencere(), None
+            if gen == 'chemo_ortalama':
+                return lg, 'uzamsal_ortalama', lambda n: n.grow_ortalama(), None
+            if gen in ('vision_angle', 'vision_range'):
+                tur = 'angle' if gen == 'vision_angle' else 'range'
+                return (lg, tur, lambda n: n.grow(tur),
+                        lambda n, _f: n._update_visual_levels())
+            if gen == 'sound_radius':
+                return lg, 'esik', lambda n: n.grow(), None
+            if gen == 'sound_focus':
+                return lg, 'kapsama', lambda n: n.grow_kapsama(), None
+            if isinstance(organ, BaseWeapon):
+                return lg, 'power', lambda n: n.grow(), None
+            return None
+        if gen == 'body_size' and hasattr(self, 'body'):
+            return self.body.logic, 'size', lambda n: n.grow(), None
+        if gen == 'digestion_speed' and hasattr(self, 'body'):
+            return (self.body.logic.enzyme, 'base_digestion_time',
+                    lambda n: n.grow(), None)
+        if gen == 'ribosome_speed' and hasattr(self, 'ribosome'):
+            return (self.ribosome.logic, 'base_production_time',
+                    lambda n: n.grow(), None)
+        if gen == 'max_energy' and hasattr(self, 'vacuole'):
+            return (self.vacuole.logic, 'size', lambda n: n.grow(),
+                    lambda n, _f: setattr(n, 'area', g.VACUOLE_AREA * n.size))
+        if gen == 'move_regen' and hasattr(self, 'membrane'):
+            return self.membrane.logic.etc, 'efficiency', lambda n: n.grow(), None
+        if gen == 'memory_length':
+            return (self.direction_memory, 'capacity',
+                    lambda n: setattr(n, 'capacity', n.capacity + g.GROW_MEMORY),
+                    None)
+        if gen == 'membrane_integrity' and hasattr(self, 'membrane'):
+            return (self.membrane.logic, 'max_integrity',
+                    lambda n: setattr(n, 'max_integrity',
+                                      n.max_integrity + g.GROW_MEMBRANE_INTEGRITY),
+                    self._butunluk_esle)
+        if gen in self._SAVUNMA_GENLERI and hasattr(self, 'membrane'):
+            zar = self.membrane.logic
+            if not zar.katman_var(gen):
+                return None
+            return zar, gen, lambda n: n.grow_defense(gen), None
+        return None
+
+    @staticmethod
+    def _butunluk_esle(zar, fark):
+        """Yeni kopya dolu gelir (grow_integrity gibi); kaybolan kopya
+        yalnizca tavani indirir, hasar oldugu gibi kalir."""
+        if fark > 0:
+            zar.integrity += fark
+        else:
+            zar.integrity = min(zar.integrity, zar.max_integrity)
+
+    def _gen_dozunu_uygula(self, gen, idx, organ=None):
+        """Genin kopya sayisini organin fiziksel degerine isle.
+
+        Deger = tasarim degeri + kopya sayisi kadar organin kendi gelisim
+        adimi. Tasarim degeri gen bu nesnede ilk kez islendiginde okunur ve
+        nesnenin uzerinde tasinir; bolunmede yavruya onunla gecer.
+
+        Yalnizca GENIN KATKISI degisir, disaridan gelen degisim korunur:
+        toksinle incelmis bir duvar kopya yitirince daha da incelir, kopya
+        kazaninca kalinlasir; kendiliginden eski haline donmez.
+
+        Deger degistiyse True.
+        """
+        hedef = self._gen_hedefi(gen, organ)
+        if hedef is None or self.genome is None:
+            return False
+        nesne, alan, adim, sonra = hedef
+        kayit = getattr(nesne, '_gen_dozu', None)
+        if kayit is None:
+            kayit = nesne._gen_dozu = {}
+        simdiki = getattr(nesne, alan)
+        if alan not in kayit:
+            # (tasarim degeri, islenmis kopya, genlerin verdigi deger)
+            kayit[alan] = (simdiki, 0, simdiki)
+        taban, k_eski, g_eski = kayit[alan]
+        k = self.genome.kopya_sayisi(gen, idx)
+        if k == k_eski:
+            return False
+        setattr(nesne, alan, taban)
+        for _ in range(k):
+            adim(nesne)
+        g_yeni = getattr(nesne, alan)
+        # Disaridan degismediyse deger tam olarak genlerin verdigidir
+        # (ekle-cikar zincirinde yuvarlama birikmesin).
+        deger = g_yeni if simdiki == g_eski else simdiki + (g_yeni - g_eski)
+        if taban >= 0 and deger < 0:
+            deger = 0
+        setattr(nesne, alan, deger)
+        kayit[alan] = (taban, k, g_yeni)
+        if sonra is not None:
+            sonra(nesne, g_yeni - g_eski)
+        return True
+
+    def gen_dozlarini_uygula(self):
+        """Genomdaki butun kopya sayilarini organlara isle.
+
+        Kurucu dogarken ve bolunmede (kopya kaybi, organ kazanci/kaybi
+        sonrasi) cagrilir; degismeyen gene dokunmaz. Degisen nicelik
+        sayisini dondurur.
+        """
+        if self.genome is None:
+            return 0
+        self._gen_sinif_haritasi()
+        degisen = 0
+        for sinif, genler in Organism._ORGAN_GEN_GRUPLARI:
+            sira = 0
+            for organ in self.organs:
+                if isinstance(organ, sinif):
+                    for gen in genler:
+                        degisen += self._gen_dozunu_uygula(gen, sira, organ)
+                    sira += 1
+        for gen in self._SISTEM_GENLERI:
+            degisen += self._gen_dozunu_uygula(gen, 0)
+        if degisen:
+            self.recalculate_physics()
+            self.energy = min(self.energy, self.max_energy)
+        return degisen
+
+    def genomu_kur(self):
+        """Genomu organlardan kur ve dogustan gelen kopyalari organlara isle."""
+        self.genome = Genome.from_organism(self)
+        self.gen_dozlarini_uygula()
+        return self.genome
+
     def _get_organ_by_type_index(self, upgrade_type, index):
         """Tip ve index'e göre n'inci organı bul."""
-        type_map = {
-            'flagella': Flagella,
-            'cilia': Cilia,
-            'chemoreceptor': Chemoreceptor,
-            'chemo_gain': Chemoreceptor,
-            'chemo_window': Chemoreceptor,
-            'chemo_ortalama': Chemoreceptor,
-            'vision_angle': Photoreceptor,
-            'vision_range': Photoreceptor,
-            'sound_radius': Mechanoreceptor,
-            'sound_focus': Mechanoreceptor,
-        }
-        for _wname, _wcls in WEAPON_CLASSES.items():
-            type_map[_wname.lower()] = _wcls
-        target_type = type_map.get(upgrade_type)
+        target_type = self._gen_sinif_haritasi().get(upgrade_type)
         if target_type is None:
             return None
         count = 0

@@ -303,6 +303,7 @@ SETTINGS_SCHEMA = {
         "EVRİM": [
         ("ORGAN_GAIN_RATE",     "Bölünme başına YENİ yapı (organ ya da katman) olasılığı"),
         ("ORGAN_LOSS_RATE",     "Bölünme başına yapı KAYBI olasılığı"),
+        ("GEN_KOPYA_KAYBI",     "Bölünmede her gen kopyasının kaybolma olasılığı (özellik geri iner)"),
         ("ORGAN_ANGLE_RATE",    "Bölünme başına organ AÇISININ kayma olasılığı"),
         ("ORGAN_ANGLE_SIGMA",   "Açı kaymasının genişliği (derece)"),
         ("BEHAVIOR_MUTATION_RATE","Davranış tablosu girdisi başına mutasyon"),

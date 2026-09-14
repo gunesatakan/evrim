@@ -200,13 +200,6 @@ DEFAULT_SETTINGS = {
     "COST_RIBOSOME": 0.3,
     "COST_MEMBRANE": 0.1,
     "COST_MEMORY": 0.05,
-    # Hafiza kapasitesinin dogal alt siniri ve her bolunmede eriyen pay.
-    # `memory_length` geni kapasiteyi yalnizca artirabiliyor ve torbadan
-    # herkes ayni sikilikta cekiyordu; kapasite 100 bin dogumda 24'ten
-    # 173'e ciktı ve tek basina saniyede 8.65 enerji goturur oldu. Gercek
-    # hucre kullanmadigi proteini yikar.
-    "MEMORY_TABAN": 10.0,
-    "MEMORY_CEVRIM": 0.02,
     # --- OLUM VE ELEME ---
     # Enerjisi biten hucre once "shutdown" olur (son sans: midesindeki besini
     # sindirip toparlanabilir). Bu sure boyunca toparlanamazsa olur ve
@@ -780,6 +773,18 @@ DEFAULT_SETTINGS = {
     # yakmaya devam eder; onu yitiren yavru ucuza yasar. Indirgeyici
     # evrim buradan cikar - ve savunma tipinin silahlarini birakmasi da.
     "ORGAN_LOSS_RATE": 0.10,
+    # GEN KOPYASI KAYBI (bolunmede, kopya basina olasilik).
+    #
+    # Ozellik degeri = organin tasarim degeri + gen kopyasi sayisi kadar
+    # gelisim adimi. Gelisim bir kopya ekler; bu olasilikla her kopya
+    # bolunmede kaybolur ve deger geri iner. Eskiden genler yalnizca
+    # buyuyebiliyordu: ornegin hafiza kapasitesi 100 bin dogumda 24'ten
+    # 173'e cikip saniyede 8.65 enerji goturur olmustu.
+    #
+    # Kazanc bolunme basina bir kopya, kayip kopya sayisiyla orantili:
+    # secilim yoksa bir soy ~1/oran kopyada dengelenir (0.01 -> ~100
+    # kopya butun genlere dagilmis). Ise yarayan kopyayi secilim tutar.
+    "GEN_KOPYA_KAYBI": 0.01,
     # VUCUT PLANI DA EVRIMLESIR. Organin takilma acisi bir kez rastgele
     # atanip sonsuza kadar oyle kaliyordu; ise yaramayan bir yerlesim
     # duzeltilemiyordu. Kucuk kaymalar secilime tirmanacak bir egim verir.
@@ -813,16 +818,18 @@ DEFAULT_SETTINGS = {
     # tepkiyi geciktirir.
     "CHEMO_PENCERE_MAX": 3.0,
     "GROW_CHEMO_PENCERE": 0.25,
-    # UZAMSAL YON ORTALAMASI da ayri bir gen ve SIFIRDAN baslar: alici
-    # olcumunu bu sure boyunca biriktirir, hucre kokunun yonunu bu
-    # ortalamalarla bulur. Once pencere genine bagliydi, yani en az 0.5 sn
-    # ortalama butun cok burunlu hucrelere zorla uygulaniyordu. Olculdu
-    # (48 dunya, 180 sn): ortalamali hucre tek karelik hucreden eski koku
-    # alaninda %6, genis koku alaninda %38 AZ besin topluyordu. Faydali
-    # oldugu yerde (uzak, zayif koku) evrim onu kendisi uzatsin.
+    # UZAMSAL YON ORTALAMASI da ayri bir gen: alici olcumunu bu sure
+    # boyunca biriktirir, hucre kokunun yonunu bu ortalamalarla bulur.
+    # TABANI SIFIR ama her kemoreseptor gen kopyalariyla dogar (5 x 0.1 =
+    # 0.5 sn). Olculdu (48 dunya, 180 sn): ortalamali hucre tek karelik
+    # hucreden eski koku alaninda %6, genis koku alaninda %38 AZ besin
+    # topluyordu; yakin ve zayif kokuda ise yonu belirgin duzeltiyor.
+    # Kopyalar kaybolabildigi icin zararli oldugu yerde evrim ortalamayi
+    # kapatabilir, faydali oldugu yerde uzatabilir.
     "CHEMO_ORTALAMA_TABAN": 0.0,
     "CHEMO_ORTALAMA_MAX": 2.0,
     "GROW_CHEMO_ORTALAMA": 0.1,
+    "CHEMO_ORTALAMA_KOPYA": 5,
     # BERG-PURCELL: bagil olcum hatasi ~ sqrt(bu / (derisim x sure)).
     # Kazanc genini bedelli kilan sey budur - gurultusuz bir kazanc geni
     # "hep buyut" demek olurdu.
