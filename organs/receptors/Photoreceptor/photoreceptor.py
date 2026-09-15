@@ -27,3 +27,23 @@ class Photoreceptor(BaseOrgan):
 
     def grow(self, upgrade_type='range'):
         self.logic.grow(upgrade_type)
+
+    def isik_oku(self, parent, dt=None):
+        """Gozun bulundugu noktada, baktigi yone gore isik olcumu.
+
+        Doner: (gozun disa bakan ekseni, olcum). Isigin geldigi yon ortamin
+        fizigidir (siddetin arttigi taraf); hucreye verilmez, yalnizca bu
+        gozun ne kadar isik topladigini belirler.
+        """
+        from systems import isik
+        konum = self.get_absolute_position(parent.pos, parent.direction, parent.radius)
+        eksen = konum - parent.pos
+        if eksen.length_squared() > 1e-12:
+            eksen = eksen.normalize()
+        else:
+            eksen = parent.direction.rotate_rad(self.attachment_angle)
+        siddet, gelis = isik.siddet_ve_yon(konum.x, konum.y)
+        if siddet <= 0.0:
+            return eksen, 0.0
+        cos_teta = eksen.dot(gelis) if gelis.length_squared() > 1e-12 else 0.0
+        return eksen, self.logic.olc(siddet, cos_teta, dt)

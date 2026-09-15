@@ -1,5 +1,6 @@
 import game_settings
 import math
+import random
 
 class PhotoreceptorLogic:
     def __init__(self, range=None, angle=None):
@@ -54,3 +55,54 @@ class PhotoreceptorLogic:
         elif type == 'angle':
             self.angle += game_settings.GROW_VISION_ANGLE
         self._update_visual_levels()
+
+    # ---------------- ISIK OLCUMU ----------------
+    #
+    # GOZ ISIGIN YONUNU BILMEZ, YALNIZCA UZERINE DUSENI SAYAR.
+    #
+    # Suda isik her yonden gelir ama esit degil: aydinlik bolgenin
+    # tarafindan daha cok foton gelir (ISIK_YONLULUK). Goz yalnizca kendi
+    # gorus konisinden gelen fotonlari toplar; arkasini hucrenin govdesi
+    # golgeler. Yani isiga bakan goz daha parlak, arkasi donuk goz daha
+    # donuk okur. Yonu bu farktan hucre kendisi cikarmak zorunda.
+    #
+    # Gorus acisi bir takas: genis koni daha cok foton toplar (az gurultu)
+    # ama gelen isigi daha genis bir yondan ortaladigi icin yon farkini
+    # bulandirir; dar koni yonu keskin gorur ama los isikta gurultuye bogulur.
+
+    def isik_yakalama(self):
+        """Toplanan foton, taban gorus acisina gore kac kat (koni genisligi)."""
+        return max(1e-3, self.angle / max(1e-6, game_settings.VISION_ANGLE_BASE))
+
+    def yon_keskinligi(self):
+        """Koninin icinden gelen isigin yonsel payini ne kadar koruyabildigi.
+
+        Koni boyunca ortalanan cos(aci): sin(a)/a, a = yarim gorus acisi.
+        Dar gozde 1'e yakin, 360 derece goren gozde 0 (yon bilgisi yok).
+        """
+        yarim = min(math.pi, max(1e-6, self.angle * 0.5))
+        return math.sin(yarim) / yarim
+
+    def olc(self, siddet, cos_teta, dt=None):
+        """Bu gozun uzerine dusen isigin olcumu.
+
+        siddet   : gozun bulundugu noktadaki isik siddeti
+        cos_teta : gozun ekseni ile isigin geldigi yon arasindaki acinin cos'u
+        dt       : sayim suresi; verilirse foton sayim gurultusu eklenir
+        """
+        if siddet <= 0.0:
+            return 0.0
+        g = game_settings
+        yonluluk = min(1.0, max(0.0, float(g.ISIK_YONLULUK)))
+        beklenen = siddet * (1.0 + yonluluk * cos_teta * self.yon_keskinligi())
+        if beklenen <= 0.0:
+            return 0.0
+        # FOTON SAYIM GURULTUSU: sayilan foton N ise goreli hata 1/sqrt(N).
+        if dt and g.ISIK_GURULTU > 0.0:
+            n = beklenen * self.isik_yakalama() * dt / g.ISIK_GURULTU
+            if n < 400.0:
+                n = max(0.05, n)
+                beklenen *= random.gammavariate(n, 1.0 / n)
+            else:
+                beklenen *= max(0.0, random.gauss(1.0, 1.0 / math.sqrt(n)))
+        return beklenen

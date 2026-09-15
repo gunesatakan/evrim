@@ -613,6 +613,20 @@ DEFAULT_SETTINGS = {
     "ISIK_ERIM": 0.0,
     # Tam isikta besin kac kat olusur. Isik fotosentezi surer.
     "ISIK_BESIN_CARPANI": 2.0,
+    # GOZ ISIGIN YONUNU OLCEREK BULUR (bkz. PhotoreceptorLogic.olc).
+    # Suda isik her yonden gelir ama aydinlik tarafindan daha cok gelir:
+    # isiga bakan dar bir goz siddet x (1 + bu), arkasi donuk goz
+    # siddet x (1 - bu) okur. 0 = tamamen dagilmis isik, yon okunamaz.
+    "ISIK_YONLULUK": 0.5,
+    # Foton sayim gurultusu: taban gorus acili goz tam isikta (1.0)
+    # saniyede 1/bu kadar foton sayar; goreli hata 1/sqrt(foton). Parlak
+    # isikta ihmal edilir, isigin bittigi kiyida yon bulmayi zorlastirir.
+    "ISIK_GURULTU": 1e-4,
+    # Tek gozlu (zamansal) fototaksinin karsilastirma penceresi (sn).
+    "ISIK_PENCERE": 0.5,
+    # Gozler arasi en parlak ile en donuk farki ortalamanin bu oranindan
+    # kucukse yon okunmaz; hucre zamansal karsilastirmaya doner.
+    "ISIK_UZAMSAL_MIN": 0.1,
     # Isigin ekrandaki parlakligi (0 = cizme) ve rengi.
     "ISIK_ALFA": 85,
     "ISIK_RENK": (255, 232, 150),

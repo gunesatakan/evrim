@@ -999,8 +999,14 @@ class Organism(Entity):
         return v
 
     _koku_onbellek = None
-    #: Bu karede fotoreseptorun okudugu isik siddeti (0 = karanlik).
+    #: Bu karede gozlerin okudugu en parlak isik (0 = karanlik).
     isik_siddeti = 0.0
+    #: Zamansal fototaksi durumu: denenen yon, pencere birikimi ve bir
+    #  onceki pencerenin ortalamasi (bkz. _isik_yonu).
+    _isik_hedef = None
+    _isik_top = 0.0
+    _isik_sure = 0.0
+    _isik_onceki = None
 
     def koku_kaynagi(self):
         """Bu hucrenin kokusunun ETKIN kaynagi (konumu degil).
@@ -1214,7 +1220,7 @@ class Organism(Entity):
 
     # ---------------- DAVRANIŞ ----------------
 
-    def perceive_and_decide(self, others):
+    def perceive_and_decide(self, others, dt=None):
         """Butun uyaranlari VEKTOREL olarak topla.
 
         UC AYRI SPEKTRUM, TEK BIR SURUS.
@@ -1332,24 +1338,33 @@ class Organism(Entity):
         # ---------------- ISIK ----------------
         #
         # Fototaksi GORME ORGANIYLA olur: fotoreseptoru olmayan hucre
-        # aydinligi okuyamaz. Siddet organin BULUNDUGU noktadan alinir -
-        # kemoreseptorde oldugu gibi, organin nerede durdugu onemli.
+        # aydinligi okuyamaz. Her goz kendi bulundugu noktada, kendi baktigi
+        # yonden gelen isigi olcer (bkz. PhotoreceptorLogic.olc).
         #
-        # Eksen siddetin kendisidir (karanlik 0 .. tam isik 100) ve tepki
-        # spektrumdan gelir: aydinlikta besin iki kat, ama aydinlik ayni
-        # zamanda gorunur olmak demek. Hangisinin agir bastigini genom
+        # ISIGIN YONU HUCREYE VERILMEZ. Once yalnizca ilk gozun konumunda
+        # alanin gradyani okunuyor ve hucre isigin tam yonunu hazir
+        # aliyordu: arkaya bakan tek bir goz bile yeterdi, oteki gozler hic
+        # okunmuyordu. Olculdu: 1, 2 ve 3 gozlu hucreler isiga ayni surede,
+        # dumduz ulasiyordu. Yon artik olcumlerden cikarilir (_isik_yonu).
+        #
+        # Eksen en parlak gozun okumasidir (karanlik 0 .. tam isik 100) ve
+        # tepki spektrumdan gelir: aydinlikta besin iki kat, ama aydinlik
+        # ayni zamanda gorunur olmak demek. Hangisinin agir bastigini genom
         # soyler, kod degil.
-        if vrange > 0.0:
-            _goz = next((o for o in self.organs
-                         if isinstance(o, Photoreceptor)), None)
-            if _goz is not None:
-                _gp = _goz.get_absolute_position(self.pos, self.direction,
-                                                 self.radius)
-                _is, _iyon = isik.siddet_ve_yon(_gp.x, _gp.y)
-                if _is > 0.0:
-                    self.isik_siddeti = _is
-                    _r = self.behavior.isik_tepkisi(isik.eksen(_is))
-                    _kat(_iyon, _r, sosyal=False)
+        if vrange > 0.0 and self._gozler:
+            _okumalar = [goz.isik_oku(self, dt) for goz in self._gozler]
+            _parlak = max(p for _e, p in _okumalar)
+            if _parlak > 0.0:
+                self.isik_siddeti = _parlak
+                _r = self.behavior.isik_tepkisi(isik.eksen(_parlak))
+                if abs(_r) >= 0.02:
+                    _yon = self._isik_yonu(_okumalar, _parlak, _r, dt)
+                    # _kat negatif tepkide yonu cevirir; hareket _yon olsun.
+                    _kat(_yon if _r > 0 else -_yon, _r, sosyal=False)
+            else:
+                self._isik_hedef = None
+                self._isik_onceki = None
+                self._isik_top = self._isik_sure = 0.0
 
         for t in (others or ()):
             if t is self or t.dead:
@@ -1544,6 +1559,74 @@ class Organism(Entity):
         self.current_response = (kararlilik if yaklas_top >= kac_top
                                  else -kararlilik)
         return surus, en_guclu
+
+    def _isik_yonu(self, okumalar, parlaklik, tepki, dt):
+        """Isik tepkisinin HAREKET yonu - gozlerin olcumlerinden.
+
+        UZAMSAL (en az iki goz ve aralarinda yeterli fark): her gozun
+        ekseni, okumasinin gozlerin ortalamasindan farki kadar agirlik alir
+        (kemoreseptorlerdeki uzamsal gradyanla ayni). Simetrik uc gozde bu
+        isigin geldigi yonun kendisidir; one bakan iki gozde yalnizca
+        isigin HANGI YANDA oldugu - hucre o yana, gozler esitlenene kadar
+        doner. Isik tam onde ya da tam arkadaysa iki goz ayni okur, yon
+        cikmaz.
+
+        Once her goz hucreyi kendi eksenine, okudugu kadar cekiyordu. Iki
+        gozde bu, yandaki isigi oldugundan cok daha onde gosteriyordu
+        (90 derecedeki isik 37 derece): hucre isiga donmek yerine etrafinda
+        dolasip merkezin ~150 px yanindan geciyordu. Olculdu: 300 px'ten
+        birakilan iki gozlu hucrelerin 11/40'i boyle takildi.
+
+        ZAMANSAL (tek goz ya da gozler arasinda fark yok): hucre bir yone
+        gider ve pencere boyunca okudugu isigi bir oncekiyle karsilastirir.
+        Tepkisine gore kotulestiyse (yaklasirken karardi, kacarken
+        aydinlandi) rastgele bir aciyla doner, degilse yoluna devam eder -
+        kemoreseptorun zamansal yontemi, E. coli'nin tumble'i. Tek gozun
+        isiga gitmesi bu yuzden yavas: isiga egik giden hucre isik arttigi
+        surece yoluna devam eder ve kaynagin yanindan gecip ancak sonra
+        doner.
+
+        Doner: hucrenin gitmek istedigi yon (tepkinin isaretine gore).
+        """
+        g = game_settings
+        # Pencere her durumda birikir: hucre hangi yolla yon bulursa bulsun
+        # isigin artip azaldigi ayni olcumdur.
+        kotulesti = False
+        if dt:
+            self._isik_top += parlaklik * dt
+            self._isik_sure += dt
+            # Kucuk pay: 15 x (1/30) kayan noktada 0.4999.. eder.
+            if self._isik_sure >= g.ISIK_PENCERE - 1e-9:
+                ort = self._isik_top / self._isik_sure
+                onceki = self._isik_onceki
+                self._isik_onceki = ort
+                self._isik_top = self._isik_sure = 0.0
+                if onceki is not None and onceki > 0.0:
+                    # Weber: onemli olan isigin kac KAT degistigi.
+                    kotulesti = math.log(ort / onceki) * tepki < 0.0
+
+        if len(okumalar) >= 2:
+            en_az = min(p for _e, p in okumalar)
+            ort = sum(p for _e, p in okumalar) / len(okumalar)
+            if (parlaklik - en_az) > ort * g.ISIK_UZAMSAL_MIN:
+                fark = pygame.math.Vector2()
+                for eksen, p in okumalar:
+                    fark += eksen * (p - ort)
+                if fark.length_squared() > 1e-12:
+                    # Fark kaybolunca (isik tam onde) hucre o anki yonunden
+                    # devam etsin, eski bir denemeye geri donmesin.
+                    self._isik_hedef = None
+                    yon = fark.normalize()
+                    return yon if tepki > 0 else -yon
+
+        if self._isik_hedef is None:
+            self._isik_hedef = pygame.math.Vector2(self.direction)
+        elif kotulesti:
+            # Donus YUZULEN yondendir, govdenin baktigi yonden degil: kamci
+            # hucreyi govdesini cevirmeden yan yan da yuzdurebilir.
+            aci = max(-180.0, min(180.0, random.gauss(0.0, g.TUMBLE_ANGLE_SIGMA)))
+            self._isik_hedef = self._isik_hedef.rotate(aci)
+        return pygame.math.Vector2(self._isik_hedef)
 
     # ---------------- BAĞLANMA ----------------
 
@@ -3988,7 +4071,7 @@ class Organism(Entity):
             _g = {id(x): x for x in kaotropis}
             _g.update({id(x): x for x in prey})
             seen_pool = list(_g.values())
-        surus, _en_guclu = self.perceive_and_decide(seen_pool)
+        surus, _en_guclu = self.perceive_and_decide(seen_pool, dt)
         if surus is not None and surus.length() > 0.05:
             # BILESKE YON. Uc kanalin katkilari zaten toplanmis durumda:
             # sagdan "yaklas", asagidan "uzaklas" varsa hucre ikisinin

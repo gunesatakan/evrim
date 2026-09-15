@@ -21,6 +21,7 @@ karelerin kacinda hucrenin gercekten isiga dogru (<45 der) ya da ters
 (>90 der) ilerledigi; yol verimi (baslangic uzakligi / katedilen yol).
 
 Kullanim: python arac/isik_yonelim.py [--tohum 20] [--mesafe 300 600] [--tek]
+          [--varyant tek_goz uc_goz] [--ayar ISIK_GURULTU=0 ISIK_PENCERE=1.0]
 """
 import argparse
 import json
@@ -86,7 +87,7 @@ def _isiga_yaklassin(hucre):
 
 
 def deneme(arg):
-    tohum, varyant, mesafe, sure, yaricap, erim = arg
+    tohum, varyant, mesafe, sure, yaricap, erim, ayarlar = arg
     _hazirla()
     os.chdir(KOK)
     import pygame
@@ -97,6 +98,8 @@ def deneme(arg):
     from systems.world import Dunya
     V = pygame.math.Vector2
 
+    for anahtar, deger in ayarlar:
+        setattr(g, anahtar, deger)
     g.DIVISION_MODE = False
     g.DIVISION_MAX_POPULATION = 0
     g.BEHAVIOR_ENABLED = True
@@ -197,17 +200,23 @@ def main():
     ap.add_argument("--erim", type=float, default=800.0,
                     help="isigin bittigi uzaklik (px)")
     ap.add_argument("--varyant", type=str, nargs="+", default=list(VARYANTLAR))
+    ap.add_argument("--ayar", type=str, nargs="*", default=[],
+                    help="deneme icin ayar degistir: ISIK_GURULTU=0 ISIK_PENCERE=1.0")
     ap.add_argument("--tek", action="store_true", help="her varyanttan tek deneme")
     ap.add_argument("--cikti", type=str, default=None)
     a = ap.parse_args()
+    ayarlar = []
+    for metin in a.ayar:
+        anahtar, deger = metin.split("=", 1)
+        ayarlar.append((anahtar, json.loads(deger)))
 
     if a.tek:
         t0 = time.perf_counter()
         for v in a.varyant:
-            print(deneme((1, v, a.mesafe[0], a.sure, a.yaricap, a.erim)))
+            print(deneme((1, v, a.mesafe[0], a.sure, a.yaricap, a.erim, ayarlar)))
         print("sure: %.1f sn" % (time.perf_counter() - t0))
         return
-    isler = [(s, v, m, a.sure, a.yaricap, a.erim)
+    isler = [(s, v, m, a.sure, a.yaricap, a.erim, ayarlar)
              for s in range(1, a.tohum + 1) for m in a.mesafe for v in a.varyant]
     with mp.Pool(2) as havuz:
         sonuc = havuz.map(deneme, isler, chunksize=1)
