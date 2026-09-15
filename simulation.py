@@ -995,7 +995,7 @@ class RuntimeInspector:
                 if len(self._evrim_gecmis) > 300:
                     del self._evrim_gecmis[0]
         v = self._evrim_onbellek
-        g, y0, w, yuk = 12, 62, 252, 152
+        g, y0, w, yuk = 12, 62, self.OLUM_GENISLIK, 152
         if v is None:
             # Nufus sifirsa evrim kutusu cizilmez - ama OLUMLER tam o
             # anda en cok gereken bilgidir: herkes neden oldu?
@@ -1058,56 +1058,103 @@ class RuntimeInspector:
         'harpoon':    ('harpun (enjeksiyon)',     (255, 110, 110)),
         'stylet':     ('stilet (emildi)',         (255, 170, 90)),
         'patlama':    ('patlama (sacilan toksin)', (255, 210, 120)),
+        'toxin':   ('toksin', (255, 210, 120)),
+        'lysin':   ('lizin (duvar eridi)', (255, 170, 90)),
         'yikandi': ('yikandi (seyrelme)', (150, 190, 240)),
     }
 
+    #: Olum kutusunun genisligi: "Toksin ile Antimikrobiyal peptit
+    #  fiskirtmasi (ozmotik lizis)" gibi tanimlar dar kutuya sigmiyor.
+    OLUM_GENISLIK = 360
+
+    def _sar(self, font, metin, genislik):
+        """Metni kelime kelime, genislige sigan satirlara bol."""
+        satirlar, satir = [], ''
+        for kelime in metin.split():
+            aday = kelime if not satir else satir + ' ' + kelime
+            if satir and font.size(aday)[0] > genislik:
+                satirlar.append(satir)
+                satir = kelime
+            else:
+                satir = aday
+        return satirlar + [satir] if satir else (satirlar or [''])
+
+    def _olum_etiketi(self, neden, ayrinti):
+        ad, renk = self.OLUM_ETIKET.get(neden, (neden, (200, 200, 210)))
+        ad = ayrinti or ad
+        return ad[:1].upper() + ad[1:], renk
+
     def _draw_olumler(self, screen, dunya, g, y0, w):
-        """Son olumler ve toplam nedenler.
+        """Son olumler ve toplam nedenler - silahiyla, yukuyle, etkisiyle.
 
         Hucreler oluyordu ama NEDEN oldugu hicbir yerde yazmiyordu:
         dunya nedenleri sayiyor (olum_nedeni), sayac yalnizca kosu
         bittiginde rapora dokuluyordu. Oyunda "kim, ne zaman, neden"
         okunabilmeli - yoksa avlanmanin basladigi ya da toksinin ise
         yaradigi ancak dosyadan anlasilir.
+
+        "zipkin (enjeksiyon)" da yetmiyordu: ayni silah farkli yuklerle,
+        farkli yollarla oldurur. Artik "Zipkin ile Norotoksin
+        enjeksiyonu" ya da "Toksin ile Amoebapor fiskirtmasi (ozmotik
+        lizis)" diye okunur ve toplamlar da bu ayrintiyla sayilir.
         """
-        toplam = getattr(dunya, 'olum_nedeni', {}) or {}
+        w = max(w, self.OLUM_GENISLIK)
+        f = self._fnt_s
+        toplam = getattr(dunya, 'olum_ayrintisi', None)
+        if toplam is None:
+            toplam = {(c, None): n for c, n in
+                      (getattr(dunya, 'olum_nedeni', {}) or {}).items()}
         gunluk = getattr(dunya, 'olum_gunlugu', []) or []
-        nedenler = sorted(toplam.items(), key=lambda kv: -kv[1])[:5]
-        son = list(reversed(gunluk[-6:]))
-        yuk = 26 + 16 * len(nedenler) + (10 + 16 * len(son) if son else 0) + 8
+        n_top = sum(toplam.values())
+
+        # Once satirlar kurulur: kutunun boyu sarilan satirlara bagli.
+        ust = []
+        for (neden, ayrinti), adet in sorted(toplam.items(), key=lambda kv: -kv[1])[:6]:
+            ad, renk = self._olum_etiketi(neden, ayrinti)
+            sayi = "%d  %.0f%%" % (adet, 100.0 * adet / max(1, n_top))
+            ust.append((self._sar(f, ad, w - 30 - f.size(sayi)[0]), renk, sayi))
+        alt = []
+        sol_gen = f.size("0000.0s  Opt#00000")[0] + 8
+        for kayit in reversed(gunluk[-5:]):
+            t_sn, neden, idx, tur = kayit[:4]
+            ayrinti = kayit[4] if len(kayit) > 4 else None
+            ad, renk = self._olum_etiketi(neden, ayrinti)
+            # Indeks TURE gore sayilir: Optropi #0 ile Kaotropi #0
+            # ayni "#0" gorunuyordu. Tur kisaltmasi ayirt eder.
+            alt.append(("%.1fs  %s#%d" % (t_sn, tur[:3], idx),
+                        self._sar(f, ad, w - 20 - sol_gen), renk))
+
+        yuk = 26 + (16 if not ust else 15 * sum(len(s) for s, _r, _n in ust) + 3 * len(ust))
+        if alt:
+            yuk += 10 + 15 * sum(len(s) for _t, s, _r in alt) + 3 * len(alt)
+        yuk += 8
         yuzey = pygame.Surface((w, yuk), pygame.SRCALPHA)
         yuzey.fill((14, 18, 26, 205))
         screen.blit(yuzey, (g, y0))
         pygame.draw.rect(screen, (60, 80, 110), (g, y0, w, yuk), 1)
-        n_top = sum(toplam.values())
         screen.blit(self._fnt_l.render("OLUMLER  (%d)" % n_top, True,
                                        (230, 160, 150)), (g + 10, y0 + 7))
         yy = y0 + 26
-        if not nedenler:
-            screen.blit(self._fnt_s.render("henuz olum yok", True,
-                                           (130, 145, 170)), (g + 10, yy))
+        if not ust:
+            screen.blit(f.render("henuz olum yok", True, (130, 145, 170)), (g + 10, yy))
             return
-        for neden, adet in nedenler:
-            ad, renk = self.OLUM_ETIKET.get(neden, (neden, (200, 200, 210)))
-            screen.blit(self._fnt_s.render(ad, True, renk), (g + 10, yy))
-            t = self._fnt_s.render("%d  (%.0f%%)" % (adet, 100.0 * adet / max(1, n_top)),
-                                   True, (210, 220, 235))
+        for satirlar, renk, sayi in ust:
+            t = f.render(sayi, True, (210, 220, 235))
             screen.blit(t, (g + w - 10 - t.get_width(), yy))
-            yy += 16
-        if son:
-            yy += 6
-            pygame.draw.line(screen, (60, 80, 110), (g + 10, yy), (g + w - 10, yy), 1)
+            for satir in satirlar:
+                screen.blit(f.render(satir, True, renk), (g + 10, yy))
+                yy += 15
+            yy += 3
+        if alt:
             yy += 4
-            for t_sn, neden, idx, tur in son:
-                ad, renk = self.OLUM_ETIKET.get(neden, (neden, (200, 200, 210)))
-                # Indeks TURE gore sayilir: Optropi #0 ile Kaotropi #0
-                # ayni "#0" gorunuyordu. Tur kisaltmasi ayirt eder.
-                sol = self._fnt_s.render("%6.1fs  %s#%d" % (t_sn, tur[:3], idx),
-                                         True, (130, 145, 170))
-                screen.blit(sol, (g + 10, yy))
-                sag = self._fnt_s.render(ad, True, renk)
-                screen.blit(sag, (g + w - 10 - sag.get_width(), yy))
-                yy += 16
+            pygame.draw.line(screen, (60, 80, 110), (g + 10, yy), (g + w - 10, yy), 1)
+            yy += 6
+            for sol, satirlar, renk in alt:
+                screen.blit(f.render(sol, True, (130, 145, 170)), (g + 10, yy))
+                for satir in satirlar:
+                    screen.blit(f.render(satir, True, renk), (g + 10 + sol_gen, yy))
+                    yy += 15
+                yy += 3
 
     def _draw_selection_ring(self, screen, elapsed):
         o = self.selected

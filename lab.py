@@ -747,6 +747,35 @@ def tier_label(pi, tier):
     return EFFECT_CLASS[cls][0][tier - 1]
 
 
+#: Molekuler tasiyicinin teslim bicimi; igneli tasiyicilar enjeksiyondur.
+_TESLIMAT = {0: 'difuzyonu', 1: 'salgisi', 2: 'fiskirtmasi'}
+#: Olum nedeni olarak kaydedilen silah anahtari -> organ sinifi
+_SILAH_SINIFI = {'stylet': 'Stylet', 'harpoon': 'Harpoon',
+                 'nematocyst': 'Nematocyst', 'toxin': 'Toxin', 'toksin': 'Toxin',
+                 'lysin': 'Lysin', 'lizin': 'Lysin', 'phagocytosis': 'Phagocytosis'}
+
+
+def olum_tanimi(neden, pi, tasiyici=None):
+    """Yukle gelen olumun okunur tanimi: hangi silah, hangi yolla, hangi molekul.
+
+    'Zipkin ile Norotoksin enjeksiyonu',
+    'Toksin ile Amoebapor fiskirtmasi (ozmotik lizis)',
+    'patlayan hucreden sacilan Perforin (ozmotik lizis)'.
+    """
+    if pi is None or not (0 < int(pi) < len(PAYLOADS)):
+        return None
+    yuk = PAYLOADS[pi][0]
+    etki = tier_label(pi, TIER_LETHAL)
+    ek = '' if etki in ('olum', 'agir') else ' (%s)' % etki
+    if neden == 'patlama':
+        return 'patlayan hucreden sacilan %s%s' % (yuk, ek)
+    silah = ORGAN_KISA.get(_SILAH_SINIFI.get(neden))
+    if silah is None:
+        return '%s zehirlenmesi%s' % (yuk, ek)
+    yol = _TESLIMAT.get(tasiyici, 'enjeksiyonu')
+    return '%s ile %s %s%s' % (silah, yuk, yol, ek)
+
+
 def count_tier(pi, n):
     """Kac molekul vardi -> hangi kademe. Doz artik bir SAYIM."""
     th = PAYLOAD_THRESHOLD.get(PAYLOADS[pi][0])
@@ -2902,7 +2931,7 @@ class HedefZarf:
     """
 
     __slots__ = ('org', '_zarf', '_key', 'tier_of', 'sahip',
-                 'neden', 'feeder', 'alarm', 'pulling',
+                 'neden', 'tasiyici', 'feeder', 'alarm', 'pulling',
                  'keseler', 'kacan', 'sindirilen', 'yutulan', 'bagli')
 
     def __init__(self, org):
@@ -2916,6 +2945,7 @@ class HedefZarf:
         self.tier_of = {}
         self.sahip = None          # molekulu atan hucre (hasar sahibi)
         self.neden = None          # olum nedeni: hangi silah enjekte etti
+        self.tasiyici = None       # o silahin tasiyicisi (CARRIERS sirasi)
         # lab.Shot'un yazdigi alanlar (mermi fizigi bunlari okur/yazar)
         self.feeder = None
         self.alarm = 0.0
@@ -3169,7 +3199,7 @@ class HedefZarf:
             return
         cls = effect_class(pi)
         mech = EFFECT_CLASS[cls][1] if cls in EFFECT_CLASS else 'halt'
-        org.doz_etkisi(tier, mech, self.neden or 'molekul')
+        org.doz_etkisi(tier, mech, self.neden or 'molekul', pi, self.tasiyici)
 
 
 def _bagli_say(zarf):

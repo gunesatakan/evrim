@@ -263,9 +263,12 @@ class Dunya:
 
         # --- olcum ---
         self.olum_nedeni = {}
-        # OLUM GUNLUGU: son olumler (zaman, neden, hucre no, tur). Toplam
-        # sayac tek basina "ne oluyor"u soylemez; kimin ne zaman neden
-        # oldugu ekranda okunabilmeli.
+        # (neden, ayrinti) -> sayi. "zipkin" tek basina yetmiyor: ayni
+        # silah farkli yuklerle, farkli yollarla oldurur.
+        self.olum_ayrintisi = {}
+        # OLUM GUNLUGU: son olumler (zaman, neden, hucre no, tur, ayrinti).
+        # Toplam sayac tek basina "ne oluyor"u soylemez; kimin ne zaman
+        # neden oldugu ekranda okunabilmeli.
         self.olum_gunlugu = []
         # Bu karede olenler - cizim katmani olum efektini buradan kurar.
         self.son_olenler = []
@@ -280,10 +283,12 @@ class Dunya:
 
     def _olum_kaydet(self, o):
         c = getattr(o, 'death_cause', '?')
+        ayrinti = getattr(o, 'olum_ayrinti', None)
         self.olum_nedeni[c] = self.olum_nedeni.get(c, 0) + 1
+        self.olum_ayrintisi[(c, ayrinti)] = self.olum_ayrintisi.get((c, ayrinti), 0) + 1
         self.olum_gunlugu.append((self.gecen_sure, c,
                                   int(getattr(o, 'index', -1)),
-                                  type(o).__name__))
+                                  type(o).__name__, ayrinti))
         if len(self.olum_gunlugu) > 40:
             del self.olum_gunlugu[0]
 

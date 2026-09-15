@@ -1778,7 +1778,7 @@ class Organism(Entity):
                         self.atis_sayisi += 1
                         self.stun_timer = game_settings.PHAGO_STUN
                         organ.atis_isaretle(pygame.math.Vector2(t.pos))
-                        t.die('yutuldu')
+                        t.die('yutuldu', 'Fagositoz ile yutuldu')
                         self.consume_prey(t)
                         killed.append(t)
                     continue
@@ -1930,8 +1930,12 @@ class Organism(Entity):
     #  Igneli tasiyicilar mermi yollar; onlar bu yoldan gecmez.
     MOLEKULER_TASIYICI = (0, 1, 2)
 
-    def doz_etkisi(self, tier, mech, neden):
+    def doz_etkisi(self, tier, mech, neden, pi=None, tasiyici=None):
         """Bir yuk kademe esigini asti: mekanizmaya gore etki uygula.
+
+        pi / tasiyici: olumu getiren molekul ve onu tasiyan silahin
+        tasiyicisi - olum kaydinda "Zipkin ile Norotoksin enjeksiyonu"
+        diye okunsun.
 
         Lab ile ayni tablo (EFFECT_CLASS):
           1. kademe        -> yavaslama
@@ -1970,7 +1974,7 @@ class Organism(Entity):
             self.olum_sekli = 'patlama' if mech == 'swell' else 'cokme'
             if hasattr(self, 'membrane'):
                 self.membrane.logic.integrity = 0.0
-            self.die(neden)
+            self.die(neden, _lab.olum_tanimi(neden, pi, tasiyici))
 
     def stok_sac(self, komsular):
         """Patladim: ureticilerimin stogu komsulara SACILIR (lab spill).
@@ -2016,6 +2020,7 @@ class Organism(Entity):
                     continue
                 zarf = t.zarf_arayuzu()
                 zarf.neden = 'patlama'
+                zarf.tasiyici = None
                 zarf.sahip = self
                 yon = t.pos - self.pos
                 if yon.length() < 1e-6:
@@ -2034,6 +2039,7 @@ class Organism(Entity):
                     if _kime is not t:
                         _z = _kime.zarf_arayuzu()
                         _z.neden = 'patlama'
+                        _z.tasiyici = None
                         _z.sahip = self
                     m = _lab.Molecule(_z, p, _yon * hiz, pi)
                     m.allel = _allel
@@ -2204,6 +2210,7 @@ class Organism(Entity):
         ad = organ.__class__.__name__.lower()
         zarf = hedef.zarf_arayuzu()
         zarf.neden = ad
+        zarf.tasiyici = ci
         zarf.sahip = self
         # (namlu ve yon yukarida, isin taramasindan once hesaplandi)
         # MERMI ORGANIN BAKIS YONUNDE UCAR - hedefin merkezine "nisanlanmaz".
@@ -2580,7 +2587,7 @@ class Organism(Entity):
         self.energy += cek * g.EMME_VERIM - g.STYLET_EMME_GIDER * dt
         if hedef.emilen >= 1.0 - 1e-9:
             hedef.energy = 0.0
-            hedef.die('stylet')
+            hedef.die('stylet', 'Stilet ile emildi')
             killed.append(hedef)
             self.release_binding()
 
@@ -2607,6 +2614,7 @@ class Organism(Entity):
         # 'molekul' diye kaydediliyordu; toksin mi lizin mi belli degildi
         # ve silah sayacina hic yazilmiyordu.
         zarf.neden = 'lizin' if getattr(lg, 'KEY', '') == 'LYSIN' else 'toksin'
+        zarf.tasiyici = ci
         zarf.sahip = self
         birikim = getattr(lg, '_mol_birikim', 0.0) + dt * (4.0 + 3.0 * ci)
         n = int(birikim)
@@ -2651,6 +2659,7 @@ class Organism(Entity):
             else:
                 _z = _kime.zarf_arayuzu()
                 _z.neden = zarf.neden
+                _z.tasiyici = ci
                 _z.sahip = self
             m = _lab.Molecule(_z, pygame.math.Vector2(cikis), _yon * hiz, pi)
             m.allel = _allel
@@ -2987,10 +2996,15 @@ class Organism(Entity):
         ref = max(1.0, game_settings.DIVISION_COST_REF_AREA)
         return base * (total / ref)
 
-    def die(self, cause):
+    #: Olumun okunur ayrintisi ("Zipkin ile Norotoksin enjeksiyonu").
+    #  None ise neden kendi basina yeterlidir (aclik, yikandi...).
+    olum_ayrinti = None
+
+    def die(self, cause, ayrinti=None):
         """Hücreyi ölü işaretle. simulation.py listeden düşürür ve leş bırakır."""
         self.dead = True
         self.death_cause = cause
+        self.olum_ayrinti = ayrinti
         self.release_binding()
 
     def biyokutle_besin(self):
